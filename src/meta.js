@@ -1,6 +1,6 @@
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON } from './content.js';
 import { aggregate } from './stats.js';
 import { MAX_ITEMS } from './save.js';
 
@@ -119,5 +119,16 @@ export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   profile.stats.runs++; profile.stats.kills += kills;
   return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
+
+// ---- 專屬武器：擁有 ≠ 生效。只有「已裝備、而且確實擁有」的專屬武器會成為開局武器，其餘一律用預設起始武器 ----
+export function startWeaponOf(profile) {
+  const eq = profile.weapons?.equipped;
+  return eq && profile.weapons.owned.includes(eq) && WEAPONS[eq]?.exclusive ? eq : START_WEAPON;
+}
+export function equipWeapon(profile, id) {
+  if (!profile.weapons.owned.includes(id)) return { ok: false, reason: 'not-owned' };
+  profile.weapons.equipped = id; return { ok: true };
+}
+export function unequipWeapon(profile) { profile.weapons.equipped = null; return { ok: true }; }
 
 export const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);

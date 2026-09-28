@@ -6,10 +6,10 @@
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 
@@ -21,9 +21,11 @@ export function defaultProfile() {
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
     stardust: 0, tickets: 0,
-    gacha: { pity: 0, total: 0 },          // pity：距離上次抽到最高稀有度的抽數（0 ~ GACHA.pity-1）
+    gacha: { pity: 0, total: 0, wpity: 0 }, // pity／wpity：裝備祈燈／武器祈燈距離上次抽到最高獎項的抽數
     shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
+    // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
+    weapons: { owned: [], equipped: null },
   };
 }
 
@@ -46,6 +48,8 @@ export const MIGRATIONS = {
   0: (d) => ({ ...defaultProfile(), oil: d.oil, talents: d.talents, v: 1 }),
   // v1 → v2：加入商城欄位（星砂、祈燈券、保底計數、購買紀錄、每日補給），原有進度原樣保留
   1: (d) => ({ ...d, stardust: 0, tickets: 0, gacha: { pity: 0, total: 0 }, shop: { bought: {}, history: [] }, daily: { last: null }, v: 2 }),
+  // v2 → v3：加入專屬武器（擁有清單、已裝備）與武器祈燈的保底計數，原有進度原樣保留
+  2: (d) => ({ ...d, weapons: { owned: [], equipped: null }, gacha: { ...(d.gacha || {}), wpity: 0 }, v: 3 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -160,6 +164,10 @@ export function sanitize(d) {
     else if (pity > GACHA.pity - 1) { fix(`保底計數 ${pity} 超過上限，改為 ${GACHA.pity - 1}`); out.gacha.pity = GACHA.pity - 1; }
     else out.gacha.pity = pity;
     out.gacha.total = nonNegInt(d.gacha.total) ?? 0;
+    const wp = nonNegInt(d.gacha.wpity);
+    if (wp === null) { if (d.gacha.wpity !== undefined) fix(`武器保底計數不合法（${JSON.stringify(d.gacha.wpity)}），歸零`); }
+    else if (wp > WEAPON_GACHA.pity - 1) { fix(`武器保底計數 ${wp} 超過上限，改為 ${WEAPON_GACHA.pity - 1}`); out.gacha.wpity = WEAPON_GACHA.pity - 1; }
+    else out.gacha.wpity = wp;
   } else if (d.gacha !== undefined) fix('gacha 型別不對，重設');
   if (isObj(d.shop)) {
     if (isObj(d.shop.bought)) for (const [id, n] of Object.entries(d.shop.bought)) {
@@ -171,6 +179,16 @@ export function sanitize(d) {
   } else if (d.shop !== undefined) fix('shop 型別不對，重設');
   if (isObj(d.daily) && typeof d.daily.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.daily.last)) out.daily.last = d.daily.last;
   else if (d.daily !== undefined && d.daily?.last != null) fix('每日補給日期不合法，重設');
+  // ---- v3 專屬武器 ----
+  if (isObj(d.weapons)) {
+    if (Array.isArray(d.weapons.owned)) for (const id of d.weapons.owned) {
+      if (typeof id !== 'string' || !WEAPONS[id]?.exclusive) { fix(`擁有清單裡的武器 ${JSON.stringify(id)} 不存在或不是專屬武器，移除`); continue; }
+      if (out.weapons.owned.includes(id)) { fix(`擁有清單裡的 ${id} 重複，移除`); continue; }
+      out.weapons.owned.push(id);
+    } else if (d.weapons.owned !== undefined) fix('武器擁有清單型別不對，重設');
+    const eq = d.weapons.equipped;
+    if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
+  } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
   return { profile: out, notes };
 }
 const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));

@@ -18,36 +18,127 @@ export const WEAPONS = {
     name: '環燈', color: '#8fe8ff',
     desc: ['光球環繞身邊，撞到敵人造成傷害', '光球 +1', '傷害 +50%、半徑變大', '光球 +1、轉速加快', '光球 +1、傷害 +30%'],
     lv: [
-      { dmg: 12, count: 2, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 12, count: 3, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 18, count: 3, radius: 56, spin: 3.0, size: 9 },
-      { dmg: 18, count: 4, radius: 56, spin: 3.8, size: 9 },
-      { dmg: 24, count: 5, radius: 60, spin: 3.8, size: 10 },
+      { dmg: 15, count: 2, radius: 46, spin: 3.0, size: 8 },
+      { dmg: 15, count: 3, radius: 46, spin: 3.0, size: 8 },
+      { dmg: 22, count: 3, radius: 56, spin: 3.0, size: 9 },
+      { dmg: 22, count: 4, radius: 56, spin: 3.8, size: 9 },
+      { dmg: 30, count: 5, radius: 60, spin: 3.8, size: 10 },
     ],
   },
   aura: {
     name: '燈暈', color: '#ffb35a',
     desc: ['身邊的暖光持續灼燒敵人', '範圍變大', '傷害 +50%', '範圍變大、灼燒更頻繁', '傷害 +50%、敵人減速'],
     lv: [
-      { dmg: 6, radius: 58, tick: 0.5, slow: 0 },
-      { dmg: 6, radius: 70, tick: 0.5, slow: 0 },
-      { dmg: 9, radius: 70, tick: 0.5, slow: 0 },
-      { dmg: 9, radius: 82, tick: 0.4, slow: 0 },
-      { dmg: 14, radius: 86, tick: 0.4, slow: 0.35 },
+      { dmg: 8, radius: 58, tick: 0.5, slow: 0 },
+      { dmg: 8, radius: 70, tick: 0.5, slow: 0 },
+      { dmg: 12, radius: 70, tick: 0.5, slow: 0 },
+      { dmg: 12, radius: 82, tick: 0.4, slow: 0 },
+      { dmg: 18, radius: 86, tick: 0.4, slow: 0.35 },
     ],
   },
   chain: {
     name: '雷蕊', color: '#c6a8ff',
     desc: ['電弧擊中敵人後跳向附近目標', '跳躍 +2', '傷害 +50%', '跳躍 +2、充能加快', '同時放出兩道電弧'],
     lv: [
-      { dmg: 16, cd: 1.4, jumps: 2, range: 110, arcs: 1 },
-      { dmg: 16, cd: 1.4, jumps: 4, range: 110, arcs: 1 },
-      { dmg: 24, cd: 1.4, jumps: 4, range: 120, arcs: 1 },
-      { dmg: 24, cd: 1.1, jumps: 6, range: 130, arcs: 1 },
-      { dmg: 28, cd: 1.1, jumps: 6, range: 130, arcs: 2 },
+      { dmg: 19, cd: 1.4, jumps: 2, range: 110, arcs: 1 },
+      { dmg: 19, cd: 1.4, jumps: 4, range: 110, arcs: 1 },
+      { dmg: 29, cd: 1.4, jumps: 4, range: 120, arcs: 1 },
+      { dmg: 29, cd: 1.1, jumps: 6, range: 130, arcs: 1 },
+      { dmg: 34, cd: 1.1, jumps: 6, range: 130, arcs: 2 },
+    ],
+  },
+  // ---- M4 新增：每把的打法不同（彈道、節奏、範圍、觸發條件） ----
+  boomerang: { // 飛出去再折返；去程、回程各能打同一隻一次
+    name: '迴光刃', color: '#9ff0d0', kind: 'boomerang',
+    desc: ['擲出光刃，飛到盡頭後折返，來回都能命中', '光刃 +1', '傷害 +40%、飛得更遠', '光刃 +1、擲得更快', '光刃 +1、傷害 +30%'],
+    lv: [
+      { dmg: 16, cd: 1.5, count: 1, range: 170, speed: 340, size: 11 },
+      { dmg: 16, cd: 1.5, count: 2, range: 170, speed: 340, size: 11 },
+      { dmg: 22, cd: 1.5, count: 2, range: 210, speed: 360, size: 12 },
+      { dmg: 22, cd: 1.2, count: 3, range: 210, speed: 380, size: 12 },
+      { dmg: 29, cd: 1.2, count: 4, range: 230, speed: 400, size: 14 },
+    ],
+  },
+  mortar: { // 延遲落下的範圍轟炸，自動挑怪多的地方
+    name: '落星', color: '#ffb0f0', kind: 'mortar',
+    desc: ['0.6 秒後在怪群中央落下一顆星，範圍傷害', '一次落兩顆', '範圍變大、傷害 +40%', '一次落三顆、間隔縮短', '一次落四顆、傷害 +30%'],
+    lv: [
+      { dmg: 38, cd: 1.9, count: 1, radius: 52, delay: 0.6 },
+      { dmg: 38, cd: 1.9, count: 2, radius: 52, delay: 0.6 },
+      { dmg: 53, cd: 1.9, count: 2, radius: 62, delay: 0.55 },
+      { dmg: 53, cd: 1.5, count: 3, radius: 62, delay: 0.5 },
+      { dmg: 68, cd: 1.5, count: 4, radius: 68, delay: 0.5 },
+    ],
+  },
+  flame: { // 朝移動方向噴出的錐形持續傷害：要面對怪才有用
+    name: '燈焰吐息', color: '#ff9a4a', kind: 'flame',
+    desc: ['火口會轉向最近的敵人，噴出短程火焰持續灼燒', '射程變長', '傷害 +50%', '噴口變寬、轉得更快', '射程與傷害大幅提升'],
+    lv: [
+      { dmg: 6, tick: 0.15, range: 80, half: 0.5, turn: 4 },
+      { dmg: 6, tick: 0.15, range: 100, half: 0.5, turn: 4 },
+      { dmg: 9, tick: 0.15, range: 100, half: 0.55, turn: 4 },
+      { dmg: 9, tick: 0.12, range: 110, half: 0.7, turn: 6 },
+      { dmg: 14, tick: 0.12, range: 130, half: 0.75, turn: 6 },
+    ],
+  },
+  wisps: { // 自己追怪的召喚物
+    name: '螢蜂', color: '#e6ff7a', kind: 'wisps',
+    desc: ['放出會自己追擊敵人的螢蜂', '螢蜂 +1', '傷害 +50%、飛得更快', '螢蜂 +1', '螢蜂 +1、傷害 +30%'],
+    lv: [
+      { dmg: 13, count: 2, speed: 260, hitCd: 0.35, seek: 280 },
+      { dmg: 13, count: 3, speed: 260, hitCd: 0.35, seek: 280 },
+      { dmg: 19, count: 3, speed: 300, hitCd: 0.3, seek: 300 },
+      { dmg: 19, count: 4, speed: 300, hitCd: 0.3, seek: 320 },
+      { dmg: 25, count: 5, speed: 320, hitCd: 0.25, seek: 320 },
+    ],
+  },
+  mines: { // 放在腳下、怪踩到才爆：邊跑邊佈陣
+    name: '燈籠雷', color: '#ffd84a', kind: 'mines',
+    desc: ['每隔一段時間在腳下放燈籠，敵人踩到就爆炸', '可同時存在的燈籠 +2', '爆炸更大、傷害 +40%', '放得更快', '爆炸大幅強化'],
+    lv: [
+      { dmg: 38, cd: 1.3, max: 4, trigger: 24, radius: 58, arm: 0.5 },
+      { dmg: 38, cd: 1.3, max: 6, trigger: 24, radius: 58, arm: 0.5 },
+      { dmg: 53, cd: 1.3, max: 6, trigger: 26, radius: 70, arm: 0.5 },
+      { dmg: 53, cd: 0.9, max: 7, trigger: 26, radius: 70, arm: 0.4 },
+      { dmg: 75, cd: 0.9, max: 8, trigger: 28, radius: 84, arm: 0.4 },
+    ],
+  },
+  // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
+  starfall: {
+    name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
+    desc: ['一開始就一次落三顆星的強化落星', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
+    lv: [
+      { dmg: 42, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 56, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 56, cd: 1.35, count: 3, radius: 68, delay: 0.45 },
+      { dmg: 56, cd: 1.35, count: 4, radius: 68, delay: 0.45 },
+      { dmg: 72, cd: 1.25, count: 5, radius: 74, delay: 0.4 },
+    ],
+  },
+  twinblade: {
+    name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
+    desc: ['一開始就同時擲出兩把大光刃', '傷害 +35%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
+    lv: [
+      { dmg: 16, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 22, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 22, cd: 1.1, count: 3, range: 240, speed: 400, size: 16 },
+      { dmg: 22, cd: 0.85, count: 3, range: 240, speed: 420, size: 16 },
+      { dmg: 29, cd: 0.85, count: 4, range: 250, speed: 440, size: 18 },
+    ],
+  },
+  emberbow: {
+    name: '燼羽弓', color: '#ff6a3a', kind: 'bolt', exclusive: true,
+    desc: ['三支穿透火箭，命中會讓敵人持續燃燒', '燃燒更久、傷害 +30%', '箭 +1、穿透 +1', '射速加快', '箭 +1、燃燒大幅強化'],
+    lv: [
+      { dmg: 14, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 6, burnT: 2 },
+      { dmg: 18, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 8, burnT: 2.5 },
+      { dmg: 18, cd: 0.55, shots: 4, pierce: 3, speed: 480, burn: 8, burnT: 2.5 },
+      { dmg: 18, cd: 0.42, shots: 4, pierce: 3, speed: 500, burn: 8, burnT: 2.5 },
+      { dmg: 22, cd: 0.42, shots: 5, pierce: 3, speed: 520, burn: 14, burnT: 3 },
     ],
   },
 };
+export const START_WEAPON = 'bolt'; // 沒有裝備專屬武器時的起始武器
 
 // ---- 被動（每項 5 級；mods 是「每一級」給的加成，疊加規則見 stats.js） ----
 export const PASSIVES = {
@@ -237,5 +328,22 @@ export const SHOP = [
 export const GACHA = {
   rates: [45, 33, 16, 5, 1],
   pity: 40,
+  cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
+};
+
+// ---- 武器祈燈（第二個抽獎池）：專屬起始武器只能從這裡抽到 ----
+// outcomes 與 rates 一一對應，最後一項（專屬武器）是最高獎項，保底也是它。
+// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就改給 dupRefund。
+// 抽獎用的星砂與祈燈券都能靠遊玩取得（通關、每日補給），不涉及任何真實付款。
+export const WEAPON_GACHA = {
+  outcomes: [
+    { id: 'oil', name: '燈油 ×200', gives: { oil: 200 } },
+    { id: 'dust', name: '星砂 ×15', gives: { stardust: 15 } },
+    { id: 'ticket', name: '祈燈券 ×1', gives: { tickets: 1 } },
+    { id: 'weapon', name: '專屬武器' },
+  ],
+  rates: [58, 27, 13, 2],
+  pity: 50,
+  dupRefund: { stardust: 150 },
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };

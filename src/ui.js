@@ -1,10 +1,10 @@
 // HTML 介面層：主選單、章節、天賦、裝備、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
-import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, DAILY, gearUpgradeCost } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, gearUpgradeCost } from './content.js';
 import { makeIcon } from './art.js';
 import { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods } from './meta.js';
 import { aggregate } from './stats.js';
-import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily } from './shop.js';
+import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } from './shop.js';
 
 const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
@@ -98,6 +98,16 @@ export function createUI(actions) {
     },
     gear(profile, openUid = null) {
       $('#gear .oil-slot').innerHTML = oilTag(profile);
+      { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
+        const eq = profile.weapons.equipped, owned = profile.weapons.owned;
+        const cur = eq ?? START_WEAPON;
+        $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
+          <div class="wslot"><img src="${iconUrl(cur, WEAPONS[cur].color)}" alt=""><div><b style="color:${WEAPONS[cur].color}">${esc(WEAPONS[cur].name)}</b>${eq ? '<span class="lim">專屬</span>' : '<span class="lim">預設</span>'}<div class="d">${esc(WEAPONS[cur].desc[0])}</div></div>
+          ${eq ? '<button class="buy" data-act="weaponUnequip">卸下</button>' : ''}</div>
+          ${EXCLUSIVES.map((id) => { const own = owned.includes(id), on = eq === id;
+            return `<div class="wslot ${own ? '' : 'locked'}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
+            ${own && !on ? `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>` : on ? '<span class="max">裝備中</span>' : ''}</div>`; }).join('')}`;
+      }
       const eq = profile.gear.equipped, items = profile.gear.items;
       $('#gear .equipped').innerHTML = Object.keys(GEAR_SLOTS).map((slot) => {
         const it = items.find((i) => i.uid === eq[slot]);
@@ -147,6 +157,21 @@ export function createUI(actions) {
         <div class="pity">保底：第 <b>${o.pity}</b> 抽必得「${top}」。目前已累積 <b>${profile.gacha.pity}</b> 抽，再 <b>${left}</b> 抽必得。抽到「${top}」後重新計算。</div>
         <div class="d small">機率由遊戲內的機率表直接計算；「綜合機率」是把保底算進去後，長期每一抽的實際機率。</div>
         <div class="gacha-btns">${btn(1)}${btn(10)}</div>`;
+      { // 武器祈燈：機率一樣由 gachaOdds(WEAPON_GACHA) 算出，不准手寫
+        const w = gachaOdds(WEAPON_GACHA), left = w.pity - profile.gacha.wpity;
+        const wbtn = (n) => {
+          const pay = gachaPay(profile, n, WEAPON_GACHA), c = gachaCost(n, WEAPON_GACHA);
+          const label = pay === 'tickets' ? `用 ${c.tickets} 張祈燈券` : `花 ${num(c.stardust)} 星砂`;
+          return `<button class="btn small" data-act="wgachaAsk" data-n="${n}" ${pay ? '' : 'disabled'}>模擬抽獎 ×${n}<br><small>${pay ? label : `需要 ${num(c.stardust)} 星砂或 ${c.tickets} 張券`}</small></button>`;
+        };
+        const owned = profile.weapons.owned.length;
+        $('#shop .wgacha').innerHTML = `<div class="sec-title">武器祈燈（專屬起始武器）</div>
+          <table class="odds"><tr><th>獎項</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
+          ${WEAPON_GACHA.outcomes.map((o, i) => `<tr data-rarity="${i}"><td${i === w.top ? ' style="color:#ffc85a"' : ''}>${esc(o.name)}</td><td class="odds-base">${fmtPct(w.base[i])}</td><td class="odds-comp">${fmtPct(w.composite[i])}</td></tr>`).join('')}</table>
+          <div class="pity">保底：第 <b>${w.pity}</b> 抽必得專屬武器。目前已累積 <b>${profile.gacha.wpity}</b> 抽，再 <b>${left}</b> 抽必得。</div>
+          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就改給 ${num(WEAPON_GACHA.dupRefund.stardust)} 星砂。抽到後要到「裝備」畫面裝上才會生效。抽獎用的星砂與祈燈券都能靠遊玩取得。</div>
+          <div class="gacha-btns">${wbtn(1)}${wbtn(10)}</div>`;
+      }
       const packRow = (it) => {
         const chk = canBuy(profile, it.id), bought = profile.shop.bought[it.id] || 0;
         const tag = it.kind === 'sim' ? `模擬 ${num(it.simPoints)} 點` : priceText(it.price);
@@ -175,6 +200,13 @@ export function createUI(actions) {
         html = `<h3>祈燈結果</h3><div class="gacha-grid">${m.results.map((r) => `<div class="gcard r${r.rarity}" style="--c:${RARITIES[r.rarity].color}">
           <span class="rn">${RARITIES[r.rarity].name}${r.pity ? '・保底' : ''}</span><b>${esc(gearName(r.item))}</b><span>${esc(fmtMod(gearMods(r.item)[0]))}</span>${r.salvaged ? `<span class="sv">背包滿，分解 +${num(r.salvaged)} 燈油</span>` : ''}</div>`).join('')}</div>
           ${pityHit ? `<p>觸發保底，已重新計算。</p>` : ''}
+          <p class="sim-note">這是模擬交易，沒有實際付款（使用的是遊戲內的星砂或祈燈券）。</p>
+          <div class="acts"><button class="btn small" data-act="shopClose">收下</button></div>`;
+      } else if (m.type === 'wgacha') {
+        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
+        const got = m.results.filter((r) => r.weapon);
+        html = `<h3>武器祈燈結果</h3><div class="gacha-grid">${m.results.map((r) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`).join('')}</div>
+          ${got.length ? `<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>` : ''}
           <p class="sim-note">這是模擬交易，沒有實際付款（使用的是遊戲內的星砂或祈燈券）。</p>
           <div class="acts"><button class="btn small" data-act="shopClose">收下</button></div>`;
       } else if (m.type === 'history') html = `<h3>交易紀錄</h3><p class="sim-note">所有交易皆為模擬，沒有實際付款。</p>

@@ -131,6 +131,10 @@
   @keyframes pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   .hist { list-style: none; padding: 0; margin: 6px 0; text-align: left; font-size: 12px; } .hist li { padding: 5px 0; border-bottom: 1px solid rgba(160, 170, 255, 0.12); display: flex; gap: 8px; flex-wrap: wrap; }
   .hist span { color: var(--dim); } .hist i { color: #bfeaff; font-style: normal; }
+  .wslot { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(160, 170, 255, 0.18); }
+  .wslot > div { flex: 1; } .wslot img { width: 40px; height: 40px; } .wslot.locked { opacity: 0.55; }
+  .wslot .buy { min-width: 60px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--edge); background: #2a1e0c; color: var(--gold); font-weight: 700; }
+  .wslot .max { color: #ffe27a; font-size: 12px; }
   #toast { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%); max-width: 86%; z-index: 10;
     padding: 10px 14px; border-radius: 12px; background: rgba(20, 16, 44, 0.95); border: 1px solid var(--edge); font-size: 13px; line-height: 1.5;
     opacity: 0; pointer-events: none; transition: opacity .3s; text-align: center; }
@@ -168,6 +172,7 @@
 
   <div id="gear" class="overlay scroll">
     <div class="topbar"><h2>裝備</h2><div class="oil-slot"></div></div>
+    <div class="shop-sec weapon-slot"></div>
     <div class="equipped"></div>
     <div class="summary"></div>
     <div class="bag-title"></div>
@@ -183,6 +188,7 @@
     <div class="sim-banner">本遊戲所有購買皆為模擬，不會產生任何費用。</div>
     <div class="shop-sec daily"></div>
     <div class="shop-sec gacha"></div>
+    <div class="shop-sec wgacha"></div>
     <div class="shop-sec packs"></div>
     <div class="shop-sec simbuy"></div>
     <button class="linkish" data-act="shopHistory">交易紀錄</button>
@@ -311,36 +317,127 @@ const WEAPONS = {
     name: '環燈', color: '#8fe8ff',
     desc: ['光球環繞身邊，撞到敵人造成傷害', '光球 +1', '傷害 +50%、半徑變大', '光球 +1、轉速加快', '光球 +1、傷害 +30%'],
     lv: [
-      { dmg: 12, count: 2, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 12, count: 3, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 18, count: 3, radius: 56, spin: 3.0, size: 9 },
-      { dmg: 18, count: 4, radius: 56, spin: 3.8, size: 9 },
-      { dmg: 24, count: 5, radius: 60, spin: 3.8, size: 10 },
+      { dmg: 15, count: 2, radius: 46, spin: 3.0, size: 8 },
+      { dmg: 15, count: 3, radius: 46, spin: 3.0, size: 8 },
+      { dmg: 22, count: 3, radius: 56, spin: 3.0, size: 9 },
+      { dmg: 22, count: 4, radius: 56, spin: 3.8, size: 9 },
+      { dmg: 30, count: 5, radius: 60, spin: 3.8, size: 10 },
     ],
   },
   aura: {
     name: '燈暈', color: '#ffb35a',
     desc: ['身邊的暖光持續灼燒敵人', '範圍變大', '傷害 +50%', '範圍變大、灼燒更頻繁', '傷害 +50%、敵人減速'],
     lv: [
-      { dmg: 6, radius: 58, tick: 0.5, slow: 0 },
-      { dmg: 6, radius: 70, tick: 0.5, slow: 0 },
-      { dmg: 9, radius: 70, tick: 0.5, slow: 0 },
-      { dmg: 9, radius: 82, tick: 0.4, slow: 0 },
-      { dmg: 14, radius: 86, tick: 0.4, slow: 0.35 },
+      { dmg: 8, radius: 58, tick: 0.5, slow: 0 },
+      { dmg: 8, radius: 70, tick: 0.5, slow: 0 },
+      { dmg: 12, radius: 70, tick: 0.5, slow: 0 },
+      { dmg: 12, radius: 82, tick: 0.4, slow: 0 },
+      { dmg: 18, radius: 86, tick: 0.4, slow: 0.35 },
     ],
   },
   chain: {
     name: '雷蕊', color: '#c6a8ff',
     desc: ['電弧擊中敵人後跳向附近目標', '跳躍 +2', '傷害 +50%', '跳躍 +2、充能加快', '同時放出兩道電弧'],
     lv: [
-      { dmg: 16, cd: 1.4, jumps: 2, range: 110, arcs: 1 },
-      { dmg: 16, cd: 1.4, jumps: 4, range: 110, arcs: 1 },
-      { dmg: 24, cd: 1.4, jumps: 4, range: 120, arcs: 1 },
-      { dmg: 24, cd: 1.1, jumps: 6, range: 130, arcs: 1 },
-      { dmg: 28, cd: 1.1, jumps: 6, range: 130, arcs: 2 },
+      { dmg: 19, cd: 1.4, jumps: 2, range: 110, arcs: 1 },
+      { dmg: 19, cd: 1.4, jumps: 4, range: 110, arcs: 1 },
+      { dmg: 29, cd: 1.4, jumps: 4, range: 120, arcs: 1 },
+      { dmg: 29, cd: 1.1, jumps: 6, range: 130, arcs: 1 },
+      { dmg: 34, cd: 1.1, jumps: 6, range: 130, arcs: 2 },
+    ],
+  },
+  // ---- M4 新增：每把的打法不同（彈道、節奏、範圍、觸發條件） ----
+  boomerang: { // 飛出去再折返；去程、回程各能打同一隻一次
+    name: '迴光刃', color: '#9ff0d0', kind: 'boomerang',
+    desc: ['擲出光刃，飛到盡頭後折返，來回都能命中', '光刃 +1', '傷害 +40%、飛得更遠', '光刃 +1、擲得更快', '光刃 +1、傷害 +30%'],
+    lv: [
+      { dmg: 16, cd: 1.5, count: 1, range: 170, speed: 340, size: 11 },
+      { dmg: 16, cd: 1.5, count: 2, range: 170, speed: 340, size: 11 },
+      { dmg: 22, cd: 1.5, count: 2, range: 210, speed: 360, size: 12 },
+      { dmg: 22, cd: 1.2, count: 3, range: 210, speed: 380, size: 12 },
+      { dmg: 29, cd: 1.2, count: 4, range: 230, speed: 400, size: 14 },
+    ],
+  },
+  mortar: { // 延遲落下的範圍轟炸，自動挑怪多的地方
+    name: '落星', color: '#ffb0f0', kind: 'mortar',
+    desc: ['0.6 秒後在怪群中央落下一顆星，範圍傷害', '一次落兩顆', '範圍變大、傷害 +40%', '一次落三顆、間隔縮短', '一次落四顆、傷害 +30%'],
+    lv: [
+      { dmg: 38, cd: 1.9, count: 1, radius: 52, delay: 0.6 },
+      { dmg: 38, cd: 1.9, count: 2, radius: 52, delay: 0.6 },
+      { dmg: 53, cd: 1.9, count: 2, radius: 62, delay: 0.55 },
+      { dmg: 53, cd: 1.5, count: 3, radius: 62, delay: 0.5 },
+      { dmg: 68, cd: 1.5, count: 4, radius: 68, delay: 0.5 },
+    ],
+  },
+  flame: { // 朝移動方向噴出的錐形持續傷害：要面對怪才有用
+    name: '燈焰吐息', color: '#ff9a4a', kind: 'flame',
+    desc: ['火口會轉向最近的敵人，噴出短程火焰持續灼燒', '射程變長', '傷害 +50%', '噴口變寬、轉得更快', '射程與傷害大幅提升'],
+    lv: [
+      { dmg: 6, tick: 0.15, range: 80, half: 0.5, turn: 4 },
+      { dmg: 6, tick: 0.15, range: 100, half: 0.5, turn: 4 },
+      { dmg: 9, tick: 0.15, range: 100, half: 0.55, turn: 4 },
+      { dmg: 9, tick: 0.12, range: 110, half: 0.7, turn: 6 },
+      { dmg: 14, tick: 0.12, range: 130, half: 0.75, turn: 6 },
+    ],
+  },
+  wisps: { // 自己追怪的召喚物
+    name: '螢蜂', color: '#e6ff7a', kind: 'wisps',
+    desc: ['放出會自己追擊敵人的螢蜂', '螢蜂 +1', '傷害 +50%、飛得更快', '螢蜂 +1', '螢蜂 +1、傷害 +30%'],
+    lv: [
+      { dmg: 13, count: 2, speed: 260, hitCd: 0.35, seek: 280 },
+      { dmg: 13, count: 3, speed: 260, hitCd: 0.35, seek: 280 },
+      { dmg: 19, count: 3, speed: 300, hitCd: 0.3, seek: 300 },
+      { dmg: 19, count: 4, speed: 300, hitCd: 0.3, seek: 320 },
+      { dmg: 25, count: 5, speed: 320, hitCd: 0.25, seek: 320 },
+    ],
+  },
+  mines: { // 放在腳下、怪踩到才爆：邊跑邊佈陣
+    name: '燈籠雷', color: '#ffd84a', kind: 'mines',
+    desc: ['每隔一段時間在腳下放燈籠，敵人踩到就爆炸', '可同時存在的燈籠 +2', '爆炸更大、傷害 +40%', '放得更快', '爆炸大幅強化'],
+    lv: [
+      { dmg: 38, cd: 1.3, max: 4, trigger: 24, radius: 58, arm: 0.5 },
+      { dmg: 38, cd: 1.3, max: 6, trigger: 24, radius: 58, arm: 0.5 },
+      { dmg: 53, cd: 1.3, max: 6, trigger: 26, radius: 70, arm: 0.5 },
+      { dmg: 53, cd: 0.9, max: 7, trigger: 26, radius: 70, arm: 0.4 },
+      { dmg: 75, cd: 0.9, max: 8, trigger: 28, radius: 84, arm: 0.4 },
+    ],
+  },
+  // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
+  starfall: {
+    name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
+    desc: ['一開始就一次落三顆星的強化落星', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
+    lv: [
+      { dmg: 42, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 56, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 56, cd: 1.35, count: 3, radius: 68, delay: 0.45 },
+      { dmg: 56, cd: 1.35, count: 4, radius: 68, delay: 0.45 },
+      { dmg: 72, cd: 1.25, count: 5, radius: 74, delay: 0.4 },
+    ],
+  },
+  twinblade: {
+    name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
+    desc: ['一開始就同時擲出兩把大光刃', '傷害 +35%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
+    lv: [
+      { dmg: 16, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 22, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 22, cd: 1.1, count: 3, range: 240, speed: 400, size: 16 },
+      { dmg: 22, cd: 0.85, count: 3, range: 240, speed: 420, size: 16 },
+      { dmg: 29, cd: 0.85, count: 4, range: 250, speed: 440, size: 18 },
+    ],
+  },
+  emberbow: {
+    name: '燼羽弓', color: '#ff6a3a', kind: 'bolt', exclusive: true,
+    desc: ['三支穿透火箭，命中會讓敵人持續燃燒', '燃燒更久、傷害 +30%', '箭 +1、穿透 +1', '射速加快', '箭 +1、燃燒大幅強化'],
+    lv: [
+      { dmg: 14, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 6, burnT: 2 },
+      { dmg: 18, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 8, burnT: 2.5 },
+      { dmg: 18, cd: 0.55, shots: 4, pierce: 3, speed: 480, burn: 8, burnT: 2.5 },
+      { dmg: 18, cd: 0.42, shots: 4, pierce: 3, speed: 500, burn: 8, burnT: 2.5 },
+      { dmg: 22, cd: 0.42, shots: 5, pierce: 3, speed: 520, burn: 14, burnT: 3 },
     ],
   },
 };
+const START_WEAPON = 'bolt'; // 沒有裝備專屬武器時的起始武器
 
 // ---- 被動（每項 5 級；mods 是「每一級」給的加成，疊加規則見 stats.js） ----
 const PASSIVES = {
@@ -533,7 +630,24 @@ const GACHA = {
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA };
+// ---- 武器祈燈（第二個抽獎池）：專屬起始武器只能從這裡抽到 ----
+// outcomes 與 rates 一一對應，最後一項（專屬武器）是最高獎項，保底也是它。
+// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就改給 dupRefund。
+// 抽獎用的星砂與祈燈券都能靠遊玩取得（通關、每日補給），不涉及任何真實付款。
+const WEAPON_GACHA = {
+  outcomes: [
+    { id: 'oil', name: '燈油 ×200', gives: { oil: 200 } },
+    { id: 'dust', name: '星砂 ×15', gives: { stardust: 15 } },
+    { id: 'ticket', name: '祈燈券 ×1', gives: { tickets: 1 } },
+    { id: 'weapon', name: '專屬武器' },
+  ],
+  rates: [58, 27, 13, 2],
+  pity: 50,
+  dupRefund: { stardust: 150 },
+  cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
+};
+
+return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -574,7 +688,7 @@ const __m_sim_js = (() => {
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON } = __m_content_js;
 const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -615,16 +729,17 @@ function terrainIn(kind, seed, x0, y0, x1, y1) {
   return out;
 }
 
-function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
+// startWeapon：開局武器（預設螢火連弩；裝備了專屬武器就換成它——由 main.js 依存檔的「已裝備」決定，不是「已擁有」）
+function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWeapon = START_WEAPON } = {}) {
   const rand = makeRng(seed);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
   const s = {
     t: 0, phase: 'play', kills: 0, vh, chapter, terrainSeed: seed % 100000,
     player: {
       x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1, armorMul: 1,
-      revives: 0, facing: 1, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
+      revives: 0, facing: 1, aimX: 1, aimY: 0, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
     },
-    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [],
+    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [],
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -650,14 +765,15 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
     return a;
   }
   function weaponStats(w) { return w.evo ? RESONANCES[w.id].stats : WEAPONS[w.id].lv[w.lv - 1]; }
-  function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0 }; p.weapons.push(w); return w; }
+  function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0, wisps: [] }; p.weapons.push(w); return w; }
   function canEvolve(w) { const r = RESONANCES[w.id]; return r && !w.evo && w.lv >= MAX_LV && (p.passives[r.needs] || 0) > 0; }
 
   function options() {
     const out = [];
     const ownW = new Set(p.weapons.map((w) => w.id));
     for (const w of p.weapons) if (!w.evo && w.lv < MAX_LV) out.push({ kind: 'wup', id: w.id, from: w.lv });
-    if (p.weapons.length < SLOTS.weapon) for (const id of Object.keys(WEAPONS)) if (!ownW.has(id)) out.push({ kind: 'wnew', id, from: 0 });
+    // 專屬武器只能當起始武器，不會出現在「新武器」選項
+    if (p.weapons.length < SLOTS.weapon) for (const id of Object.keys(WEAPONS)) if (!ownW.has(id) && !WEAPONS[id].exclusive) out.push({ kind: 'wnew', id, from: 0 });
     const ownP = Object.keys(p.passives);
     for (const id of ownP) if (p.passives[id] < MAX_LV) out.push({ kind: 'pup', id, from: p.passives[id] });
     if (ownP.length < SLOTS.passive) for (const id of Object.keys(PASSIVES)) if (!p.passives[id]) out.push({ kind: 'pnew', id, from: 0 });
@@ -769,7 +885,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
       if (!inside) s.events.push({ type: 'fade', x: e.x, y: e.y });
       return inside;
     });
-    s.ebullets.length = 0; s.hazards.length = 0;
+    s.ebullets.length = 0; s.hazards.length = 0; s.mines = s.mines.filter((m) => Math.hypot(m.x - s.arena.x, m.y - s.arena.y) < s.arena.r);
     s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7 });
     s.events.push({ type: 'announce', text: `燈塔守衛：${ENEMIES[kind].name}`, big: true });
   }
@@ -828,6 +944,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
     if (!isBoss(e.kind)) { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
     s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 });
   }
+  function ignite(e, dps, dur) { if (dps > (e.burnDps || 0) || (e.burnT || 0) < dur) { e.burnDps = Math.max(dps, e.burnT > 0 ? e.burnDps : 0); e.burnT = dur; } }
   function hurtPlayer(raw, src) {
     if (p.hurtT > 0 || s.god || s.phase !== 'play') return;
     const dmg = Math.max(1, Math.round(raw * p.armorMul));
@@ -854,7 +971,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
     const base = Math.atan2(target.y - p.y, target.x - p.x);
     for (let i = 0; i < st.shots; i++) {
       const a = base + (i - (st.shots - 1) / 2) * 0.14;
-      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: !!w.evo, src: 'bolt' });
+      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: !!w.evo, src: w.id, burn: st.burn, burnT: st.burnT });
     }
   }
   function orbitWeapon(w, st, dt) {
@@ -911,7 +1028,104 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
       s.events.push({ type: 'arc', pts });
     }
   }
-  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon };
+  // 迴光刃：朝最近的敵人擲出，飛到 range 後折返回到玩家；折返時清空已命中名單，所以來回都能打到
+  function boomerangWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.count; i++) {
+      const a = base + (i - (st.count - 1) / 2) * 0.45;
+      s.bullets.push({ boom: true, out: true, x: p.x, y: p.y, dx: Math.cos(a), dy: Math.sin(a), vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, speed: st.speed, range: st.range, traveled: 0, life: 6, dmg: st.dmg, pierce: 1e9, hit: new Set(), size: st.size, src: w.id });
+    }
+  }
+  // 落星：挑怪最密集的點（在附近隨機取樣幾隻，數各自周圍的怪），延遲 delay 秒後範圍爆炸
+  function mortarWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const cands = s.enemies.filter((e) => (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 320 * 320);
+    if (!cands.length) return;
+    w.cd = st.cd * p.cdMul;
+    const scored = [];
+    for (let k = 0; k < Math.min(12, cands.length); k++) {
+      const e = cands[Math.floor(rand() * cands.length)];
+      let n = 0; near(e.x, e.y, (o) => { if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 < st.radius * st.radius) n++; });
+      scored.push({ e, n });
+    }
+    scored.sort((a, b) => b.n - a.n);
+    for (let i = 0; i < st.count; i++) {
+      const t = scored[i % scored.length].e, j = i >= scored.length ? 30 : 0;
+      s.strikes.push({ x: t.x + (rand() - 0.5) * j, y: t.y + (rand() - 0.5) * j, r: st.radius, t: st.delay + i * 0.08, delay: st.delay, dmg: st.dmg, src: w.id });
+    }
+  }
+  function updateStrikes(dt) {
+    for (const k of s.strikes) {
+      k.t -= dt;
+      if (k.t > 0) continue;
+      near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
+      s.events.push({ type: 'strike', x: k.x, y: k.y, r: k.r, src: k.src });
+    }
+    s.strikes = s.strikes.filter((k) => k.t > 0);
+  }
+  // 燈焰吐息：火口朝最近的敵人「轉過去」（每秒最多轉 turn 弧度，所以是掃過去的），錐形範圍內每 tick 灼燒一次
+  // （最初版本朝移動方向噴——但被追時玩家是在逃，火焰一直朝空氣噴，單武器測試每分鐘只擊倒 14 隻，所以改掉）
+  function flameWeapon(w, st, dt) {
+    w.ang ??= Math.atan2(p.aimY, p.aimX);
+    const t = nearest(p.x, p.y, st.range * 1.6);
+    if (t) {
+      let diff = Math.atan2(t.y - p.y, t.x - p.x) - w.ang;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      w.ang += Math.max(-st.turn * dt, Math.min(st.turn * dt, diff));
+    }
+    const ax = Math.cos(w.ang), ay = Math.sin(w.ang);
+    w.flame = { range: st.range, half: st.half, ax, ay };
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    w.cd = st.tick * p.cdMul;
+    const cosH = Math.cos(st.half);
+    near(p.x, p.y, (e) => {
+      const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+      if (d - e.r < st.range && (dx * ax + dy * ay) / d >= cosH) damage(e, st.dmg, 0, 0);
+    }, Math.ceil(st.range / CELL) + 1);
+  }
+  // 螢蜂：各自追最近的敵人，碰到就傷害並短暫冷卻；沒目標時繞著玩家飛
+  function wispsWeapon(w, st, dt) {
+    while (w.wisps.length < st.count) w.wisps.push({ x: p.x, y: p.y, cd: 0, target: null, ang: rand() * TAU });
+    for (const q of w.wisps) {
+      q.cd -= dt;
+      if (!q.target || q.target.hp <= 0 || (q.target.x - p.x) ** 2 + (q.target.y - p.y) ** 2 > st.seek * st.seek * 1.5) q.target = nearest(q.x, q.y, st.seek);
+      let tx, ty;
+      if (q.target && q.cd <= 0) { tx = q.target.x; ty = q.target.y; }
+      else { q.ang += dt * 3; tx = p.x + Math.cos(q.ang) * 34; ty = p.y + Math.sin(q.ang) * 34; }
+      const dx = tx - q.x, dy = ty - q.y, d = Math.hypot(dx, dy) || 1, v = Math.min(d, st.speed * dt);
+      q.x += dx / d * v; q.y += dy / d * v;
+      if (q.target && q.cd <= 0 && (q.target.x - q.x) ** 2 + (q.target.y - q.y) ** 2 < (q.target.r + 6) ** 2) {
+        damage(q.target, st.dmg, dx / d, dy / d); q.cd = st.hitCd; q.target = null;
+      }
+    }
+  }
+  // 燈籠雷：定時在腳下放一顆（最多 max 顆），佈好（arm）後有敵人踩進 trigger 範圍就爆
+  function minesWeapon(w, st, dt) {
+    w.cd -= dt;
+    const mine = s.mines.filter((m) => m.src === w);
+    if (w.cd <= 0 && mine.length < st.max) { w.cd = st.cd * p.cdMul; s.mines.push({ x: p.x, y: p.y, arm: st.arm, trigger: st.trigger, r: st.radius, dmg: st.dmg, src: w }); }
+  }
+  function updateMines(dt) {
+    for (const m of s.mines) {
+      m.arm -= dt;
+      if (m.arm > 0) continue;
+      let hit = false;
+      near(m.x, m.y, (e) => { if (!hit && e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.trigger + e.r) ** 2) hit = true; });
+      if (!hit) continue;
+      near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
+      s.events.push({ type: 'mineBoom', x: m.x, y: m.y, r: m.r });
+      m.done = true;
+    }
+    s.mines = s.mines.filter((m) => !m.done);
+  }
+  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon };
 
   // ---------- 敵人行為 ----------
   function shoot(e, ux, uy, speed, dmg, r, spread = [0]) {
@@ -1074,6 +1288,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
     const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1);
     p.x += move.x * spd * dt; p.y += move.y * spd * dt;
     if (move.x) p.facing = move.x > 0 ? 1 : -1;
+    { const ml = Math.hypot(move.x, move.y); if (ml > 0.1) { p.aimX = move.x / ml; p.aimY = move.y / ml; } } // 燈焰吐息的方向
     pushOutOfPillars(p, 12);
     if (s.arena) clampArena(p, 14);
     p.hurtT = Math.max(0, p.hurtT - dt);
@@ -1103,26 +1318,36 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
       if (s.arena) clampArena(e, e.r);
       e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
+      if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
+        e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;
+        if (e.burnAcc >= 0.5) { e.burnAcc -= 0.5; damage(e, e.burnDps * 0.5, 0, 0); }
+      }
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
       if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
     }
     updateHazards(dt);
 
     // 武器
-    for (const w of p.weapons) WEAPON_FN[w.id](w, weaponStats(w), dt);
+    for (const w of p.weapons) WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt);
+    updateStrikes(dt); updateMines(dt);
 
     // 玩家子彈
     for (const b of s.bullets) {
+      if (b.boom) { // 迴光刃：去程直線，到頂後轉向追回玩家
+        if (b.out) { b.traveled += b.speed * dt; if (b.traveled >= b.range) { b.out = false; b.hit = new Set(); } }
+        else { const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1; b.vx = dx / d * b.speed * 1.1; b.vy = dy / d * b.speed * 1.1; if (d < 16) b.life = 0; }
+      }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
-      if (pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
+      if (!b.boom && pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {
         if (b.life <= 0 || e.hp <= 0 || b.hit.has(e)) return;
-        const rr = e.r + (b.big ? 9 : 4);
+        const rr = e.r + (b.size ?? (b.big ? 9 : 4));
         if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < rr * rr) {
           b.hit.add(e);
           const sp = Math.hypot(b.vx, b.vy);
           damage(e, b.dmg, b.vx / sp, b.vy / sp);
+          if (b.burn) ignite(e, b.burn, b.burnT);
           if (e.hp <= 0 && b.shard) for (let i = 0; i < b.shard; i++) { const a = rand() * TAU; s.bullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, life: 0.45, dmg: b.dmg * 0.5, pierce: 1, hit: new Set([e]), shard: 0, src: 'shard' }); }
           if (--b.pierce <= 0) b.life = 0;
         }
@@ -1229,7 +1454,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
   const agg0 = recalc();
   p.hp = p.maxHp;
   p.revives = Math.floor(scaled(0, agg0.revive));
-  addWeapon('bolt');
+  addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options };
 }
 
@@ -1483,6 +1708,30 @@ function makeIcon(id, color, size = 64) {
     case 'ember': // 心形燈芯
       g.beginPath(); g.moveTo(0, 16); g.bezierCurveTo(-22, 0, -12, -20, 0, -8); g.bezierCurveTo(12, -20, 22, 0, 0, 16); g.fill();
       break;
+    case 'boomerang': case 'twinblade': // 新月光刃
+      for (const k of id === 'twinblade' ? [-5, 5] : [0]) { g.save(); g.translate(k, k * -0.6); g.rotate(-0.6);
+        g.beginPath(); g.arc(0, 0, 15, Math.PI * 0.15, Math.PI * 1.15); g.arc(4, -3, 11, Math.PI * 1.15, Math.PI * 0.15, true); g.closePath(); g.fill(); g.restore(); }
+      break;
+    case 'mortar': case 'starfall': // 落下的星＋拖尾
+      g.lineWidth = 3; g.globalAlpha = 0.6; P([[-16, -16], [2, 2]]); g.stroke(); if (id === 'starfall') { P([[-4, -20], [10, -4]]); g.stroke(); P([[-20, -4], [-6, 10]]); g.stroke(); } g.globalAlpha = 1;
+      g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 4 : 10; g.lineTo(6 + Math.cos(a) * r, 6 + Math.sin(a) * r); } g.closePath(); g.fill();
+      break;
+    case 'flame': // 錐形火舌
+      g.beginPath(); g.moveTo(-16, 0); g.lineTo(16, -12); g.quadraticCurveTo(10, 0, 16, 12); g.closePath(); g.fill();
+      g.fillStyle = '#fff3c0'; g.beginPath(); g.moveTo(-12, 0); g.lineTo(8, -5); g.quadraticCurveTo(5, 0, 8, 5); g.closePath(); g.fill();
+      break;
+    case 'wisps': // 三隻小光點
+      for (const [x, y, r] of [[-9, 6, 5], [8, 8, 4], [0, -9, 6]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      break;
+    case 'mines': // 小燈籠
+      g.fillRect(-2, -18, 4, 5); g.beginPath(); g.ellipse(0, 0, 11, 13, 0, 0, 7); g.fill();
+      g.fillStyle = '#fff6d0'; g.beginPath(); g.ellipse(0, 1, 5, 7, 0, 0, 7); g.fill();
+      break;
+    case 'emberbow': // 火羽箭
+      g.lineWidth = 3; P([[-15, 15], [13, -13]]); g.stroke();
+      P([[16, -16], [6, -13], [13, -6]]); g.fill();
+      g.fillStyle = '#fff3c0'; for (const k of [0, 6]) { P([[-15 + k, 15 - k], [-19 + k, 7 - k], [-11 + k, 11 - k]]); g.fill(); }
+      break;
     case 'heal':
       g.fillRect(-4, -18, 8, 8);
       g.beginPath(); g.moveTo(-5, -10); g.lineTo(5, -10); g.lineTo(14, 8); g.quadraticCurveTo(14, 16, 6, 16); g.lineTo(-6, 16); g.quadraticCurveTo(-14, 16, -14, 8); g.closePath(); g.fill();
@@ -1546,6 +1795,7 @@ function createRenderer(chapter = CHAPTER1) {
     gold: glow('rgba(255,210,90,1)', 30), heal: glow('rgba(255,140,170,1)', 18), magnet: glow('rgba(120,200,255,1)', 18),
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
+    blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
@@ -1605,6 +1855,8 @@ function createRenderer(chapter = CHAPTER1) {
         case 'blast': fx.shake = Math.max(fx.shake, 6); fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 26, G.blast, 240, 0.6, 14); break;
         case 'blink': burst(e.x, e.y, 14, G.crystal, 150, 0.4, 10); break;
         case 'spark': burst(e.x, e.y, 3, G.crystal, 90, 0.25, 8); break;
+        case 'strike': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'strike' }); burst(e.x, e.y, 16, G.star2, 200, 0.45, 12); fx.shake = Math.max(fx.shake, 3); break;
+        case 'mineBoom': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 18, G.lantern, 220, 0.5, 12); break;
         case 'revive': fx.whiteFlash = 1; banner('燈芯復燃！', true); burst(e.x, e.y, 80, G.gold, 320, 1, 14); break;
         case 'bossdown': fx.whiteFlash = 1; fx.shake = 16; burst(e.x, e.y, 120, G.gold, 380, 1.4, 16); burst(e.x, e.y, 80, G.spore, 300, 1.2, 14); break;
       }
@@ -1732,6 +1984,17 @@ function createRenderer(chapter = CHAPTER1) {
     }
 
     prof?.lap('光屑與道具');
+    // 玩家的落星預警（粉紅虛線圈，越接近落下越實）與地上的燈籠雷
+    for (const k of s.strikes) {
+      const q = Math.max(0, 1 - k.t / k.delay);
+      g.fillStyle = `rgba(255,150,240,${0.08 + q * 0.18})`; g.beginPath(); g.arc(k.x, k.y, k.r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,190,245,0.8)'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.arc(k.x, k.y, k.r * (1.4 - q * 0.4), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+    }
+    for (const m of s.mines) {
+      const armed = m.arm <= 0, pulse = armed ? 0.7 + Math.sin(T * 6 + m.x) * 0.3 : 0.35;
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.fillStyle = armed ? '#ffd84a' : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
+    }
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -1782,6 +2045,7 @@ function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.flash > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.8; g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.elite) { // 精英血條
         const w = e.r * 2;
@@ -1796,11 +2060,28 @@ function createRenderer(chapter = CHAPTER1) {
     g.lineCap = 'round';
     for (const b of s.bullets) {
       if (!onScreen(b.x, b.y)) continue;
+      if (b.boom) { // 旋轉的新月光刃
+        const k = b.size / 11;
+        g.drawImage(G.blade, b.x - 18 * k, b.y - 18 * k, 36 * k, 36 * k);
+        g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = 'rgba(220,255,240,0.95)';
+        g.beginPath(); g.arc(0, 0, b.size, 0, Math.PI); g.arc(0, -b.size * 0.3, b.size * 0.75, Math.PI, 0, true); g.closePath(); g.fill(); g.restore();
+        continue;
+      }
+      if (b.burn) { g.drawImage(G.ember, b.x - 14, b.y - 14, 28, 28); g.strokeStyle = 'rgba(255,200,140,0.95)'; g.lineWidth = 3; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.03, b.y - b.vy * 0.03); g.stroke(); continue; }
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
       if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
       g.strokeStyle = b.big ? 'rgba(255,250,220,0.95)' : 'rgba(255,240,200,0.9)'; g.lineWidth = 3 * k;
       g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.025 * k, b.y - b.vy * 0.025 * k); g.stroke();
+    }
+    for (const w of p.weapons) {
+      for (const q of w.wisps) { g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill(); }
+      if (w.flame) { // 火焰錐：從玩家往火口方向，半透明漸層＋閃爍
+        const f = w.flame, a = Math.atan2(f.ay, f.ax), flick = 0.85 + Math.random() * 0.25;
+        const gr = g.createRadialGradient(p.x, p.y, 4, p.x, p.y, f.range * flick);
+        gr.addColorStop(0, 'rgba(255,240,180,0.55)'); gr.addColorStop(0.5, 'rgba(255,150,60,0.35)'); gr.addColorStop(1, 'rgba(255,80,30,0)');
+        g.fillStyle = gr; g.beginPath(); g.moveTo(p.x, p.y); g.arc(p.x, p.y, f.range * flick, a - f.half, a + f.half); g.closePath(); g.fill();
+      }
     }
     for (const w of p.weapons) if (w.orbs) for (const o of w.orbs) {
       const r = w.evo ? 26 : 20;
@@ -1829,7 +2110,7 @@ function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
@@ -1975,9 +2256,9 @@ const __m_save_js = (() => {
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 
@@ -1989,9 +2270,11 @@ function defaultProfile() {
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
     stardust: 0, tickets: 0,
-    gacha: { pity: 0, total: 0 },          // pity：距離上次抽到最高稀有度的抽數（0 ~ GACHA.pity-1）
+    gacha: { pity: 0, total: 0, wpity: 0 }, // pity／wpity：裝備祈燈／武器祈燈距離上次抽到最高獎項的抽數
     shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
+    // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
+    weapons: { owned: [], equipped: null },
   };
 }
 
@@ -2014,6 +2297,8 @@ const MIGRATIONS = {
   0: (d) => ({ ...defaultProfile(), oil: d.oil, talents: d.talents, v: 1 }),
   // v1 → v2：加入商城欄位（星砂、祈燈券、保底計數、購買紀錄、每日補給），原有進度原樣保留
   1: (d) => ({ ...d, stardust: 0, tickets: 0, gacha: { pity: 0, total: 0 }, shop: { bought: {}, history: [] }, daily: { last: null }, v: 2 }),
+  // v2 → v3：加入專屬武器（擁有清單、已裝備）與武器祈燈的保底計數，原有進度原樣保留
+  2: (d) => ({ ...d, weapons: { owned: [], equipped: null }, gacha: { ...(d.gacha || {}), wpity: 0 }, v: 3 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -2128,6 +2413,10 @@ function sanitize(d) {
     else if (pity > GACHA.pity - 1) { fix(`保底計數 ${pity} 超過上限，改為 ${GACHA.pity - 1}`); out.gacha.pity = GACHA.pity - 1; }
     else out.gacha.pity = pity;
     out.gacha.total = nonNegInt(d.gacha.total) ?? 0;
+    const wp = nonNegInt(d.gacha.wpity);
+    if (wp === null) { if (d.gacha.wpity !== undefined) fix(`武器保底計數不合法（${JSON.stringify(d.gacha.wpity)}），歸零`); }
+    else if (wp > WEAPON_GACHA.pity - 1) { fix(`武器保底計數 ${wp} 超過上限，改為 ${WEAPON_GACHA.pity - 1}`); out.gacha.wpity = WEAPON_GACHA.pity - 1; }
+    else out.gacha.wpity = wp;
   } else if (d.gacha !== undefined) fix('gacha 型別不對，重設');
   if (isObj(d.shop)) {
     if (isObj(d.shop.bought)) for (const [id, n] of Object.entries(d.shop.bought)) {
@@ -2139,6 +2428,16 @@ function sanitize(d) {
   } else if (d.shop !== undefined) fix('shop 型別不對，重設');
   if (isObj(d.daily) && typeof d.daily.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.daily.last)) out.daily.last = d.daily.last;
   else if (d.daily !== undefined && d.daily?.last != null) fix('每日補給日期不合法，重設');
+  // ---- v3 專屬武器 ----
+  if (isObj(d.weapons)) {
+    if (Array.isArray(d.weapons.owned)) for (const id of d.weapons.owned) {
+      if (typeof id !== 'string' || !WEAPONS[id]?.exclusive) { fix(`擁有清單裡的武器 ${JSON.stringify(id)} 不存在或不是專屬武器，移除`); continue; }
+      if (out.weapons.owned.includes(id)) { fix(`擁有清單裡的 ${id} 重複，移除`); continue; }
+      out.weapons.owned.push(id);
+    } else if (d.weapons.owned !== undefined) fix('武器擁有清單型別不對，重設');
+    const eq = d.weapons.equipped;
+    if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
+  } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
   return { profile: out, notes };
 }
 const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));
@@ -2157,7 +2456,7 @@ return { SAVE_KEY, SAVE_VERSION, MAX_HISTORY, MAX_ITEMS, defaultProfile, createS
 const __m_meta_js = (() => {
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON } = __m_content_js;
 const { aggregate } = __m_stats_js;
 const { MAX_ITEMS } = __m_save_js;
 // ---- 加成：天賦＋已裝備的裝備 → modifier 陣列（交給 createSim 的 meta） ----
@@ -2276,9 +2575,20 @@ function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
 
+// ---- 專屬武器：擁有 ≠ 生效。只有「已裝備、而且確實擁有」的專屬武器會成為開局武器，其餘一律用預設起始武器 ----
+function startWeaponOf(profile) {
+  const eq = profile.weapons?.equipped;
+  return eq && profile.weapons.owned.includes(eq) && WEAPONS[eq]?.exclusive ? eq : START_WEAPON;
+}
+function equipWeapon(profile, id) {
+  if (!profile.weapons.owned.includes(id)) return { ok: false, reason: 'not-owned' };
+  profile.weapons.equipped = id; return { ok: true };
+}
+function unequipWeapon(profile) { profile.weapons.equipped = null; return { ok: true }; }
+
 const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
 
-return { talentMods, gearMods, equippedItems, profileMods, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, salvageValue, salvage, computeOil, settleRun, chapterUnlocked };
+return { talentMods, gearMods, equippedItems, profileMods, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, salvageValue, salvage, computeOil, settleRun, startWeaponOf, equipWeapon, unequipWeapon, chapterUnlocked };
 })();
 
 // ---- shop.js
@@ -2287,7 +2597,7 @@ const __m_shop_js = (() => {
 // 🔴 全部是模擬：不接任何付款、不收任何資料、不連外。「模擬購買」的項目只走流程，不扣任何東西。
 // 機率只有一份來源：content.js 的 GACHA。抽獎（rollRarity）與商城畫面（gachaOdds → ui.js）都從它算；
 // tools/shop-test.mjs 會把「畫面上的百分比」和「實際抽 N 次量到的分布」這兩個獨立來源拿來比對。
-const { SHOP, GACHA, DAILY, RARITIES } = __m_content_js;
+const { SHOP, GACHA, WEAPON_GACHA, WEAPONS, DAILY, RARITIES } = __m_content_js;
 const { rollGear, salvageValue } = __m_meta_js;
 const { MAX_ITEMS, MAX_HISTORY } = __m_save_js;
 // ---- 機率（給畫面顯示）----
@@ -2307,10 +2617,10 @@ function gachaOdds(table = GACHA) {
 }
 const fmtPct = (x) => `${(x * 100).toFixed(2)}%`;
 
-// ---- 抽一次的稀有度（保底在這裡）----
-function rollRarity(profile, rand, table = GACHA) {
+// ---- 抽一次的結果編號（保底在這裡）；兩個抽獎池共用，key 指定用哪一個保底計數 ----
+function rollRarity(profile, rand, table = GACHA, key = 'pity') {
   const rates = table.rates;
-  const top = rates.length - 1, n = profile.gacha.pity + 1; // n：這是距離上次最高稀有度的第幾抽
+  const top = rates.length - 1, n = profile.gacha[key] + 1; // n：這是距離上次最高獎項的第幾抽
   let rarity = top, pity = false;
   if (n >= table.pity) pity = true;
   else {
@@ -2318,15 +2628,15 @@ function rollRarity(profile, rand, table = GACHA) {
     let x = rand() * total;
     for (let i = 0; i < rates.length; i++) { x -= rates[i]; if (x < 0) { rarity = i; break; } }
   }
-  profile.gacha.pity = rarity === top ? 0 : n;
+  profile.gacha[key] = rarity === top ? 0 : n;
   profile.gacha.total++;
   return { rarity, pity };
 }
 
-function gachaCost(count) { return GACHA.cost[count === 10 ? 'ten' : 'single']; }
+function gachaCost(count, table = GACHA) { return table.cost[count === 10 ? 'ten' : 'single']; }
 // 付款方式：祈燈券夠就用券，不夠用星砂；都不夠回 null
-function gachaPay(profile, count) {
-  const c = gachaCost(count);
+function gachaPay(profile, count, table = GACHA) {
+  const c = gachaCost(count, table);
   if (profile.tickets >= c.tickets) return 'tickets';
   if (profile.stardust >= c.stardust) return 'stardust';
   return null;
@@ -2352,6 +2662,29 @@ function drawGacha(profile, rand, count, pay) {
   }
   profile.oil += autoSalvage;
   return { ok: true, results, cost: { [pay]: cost }, autoSalvage };
+}
+
+// ---- 武器祈燈：專屬起始武器只能從這裡抽到 ----
+// 抽到的專屬武器只進「擁有清單」（profile.weapons.owned），不會自動裝備；要玩家自己到裝備畫面裝上才會成為開局武器。
+const EXCLUSIVES = Object.keys(WEAPONS).filter((id) => WEAPONS[id].exclusive);
+function drawWeaponGacha(profile, rand, count, pay) {
+  if (count !== 1 && count !== 10) return { ok: false, reason: 'count' };
+  const cost = gachaCost(count, WEAPON_GACHA)[pay];
+  if (cost === undefined) return { ok: false, reason: 'pay' };
+  if (profile[pay] < cost) return { ok: false, reason: pay };
+  profile[pay] -= cost;
+  const results = [];
+  for (let i = 0; i < count; i++) {
+    const { rarity: idx, pity } = rollRarity(profile, rand, WEAPON_GACHA, 'wpity');
+    const o = WEAPON_GACHA.outcomes[idx], r = { idx, pity, id: o.id };
+    if (o.id === 'weapon') {
+      const left = EXCLUSIVES.filter((w) => !profile.weapons.owned.includes(w));
+      if (left.length) { r.weapon = left[Math.floor(rand() * left.length)]; profile.weapons.owned.push(r.weapon); }
+      else { r.refund = { ...WEAPON_GACHA.dupRefund }; for (const [k, v] of Object.entries(r.refund)) profile[k] += v; }
+    } else { r.gives = { ...o.gives }; for (const [k, v] of Object.entries(o.gives)) profile[k] += v; }
+    results.push(r);
+  }
+  return { ok: true, results, cost: { [pay]: cost } };
 }
 
 // ---- 每日補給（本地日期，一天一次）----
@@ -2396,18 +2729,18 @@ function buyItem(profile, id, rand, now) {
   return { ok: true, simulated: item.kind === 'sim', item, gear };
 }
 
-return { gachaOdds, fmtPct, rollRarity, gachaCost, gachaPay, drawGacha, localDate, canClaimDaily, claimDaily, shopItem, canBuy, buyItem };
+return { gachaOdds, fmtPct, rollRarity, gachaCost, gachaPay, drawGacha, EXCLUSIVES, drawWeaponGacha, localDate, canClaimDaily, claimDaily, shopItem, canBuy, buyItem };
 })();
 
 // ---- ui.js
 const __m_ui_js = (() => {
 // HTML 介面層：主選單、章節、天賦、裝備、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
-const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, DAILY, gearUpgradeCost } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
 const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods } = __m_meta_js;
 const { aggregate } = __m_stats_js;
-const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily } = __m_shop_js;
+const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } = __m_shop_js;
 const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2500,6 +2833,16 @@ function createUI(actions) {
     },
     gear(profile, openUid = null) {
       $('#gear .oil-slot').innerHTML = oilTag(profile);
+      { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
+        const eq = profile.weapons.equipped, owned = profile.weapons.owned;
+        const cur = eq ?? START_WEAPON;
+        $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
+          <div class="wslot"><img src="${iconUrl(cur, WEAPONS[cur].color)}" alt=""><div><b style="color:${WEAPONS[cur].color}">${esc(WEAPONS[cur].name)}</b>${eq ? '<span class="lim">專屬</span>' : '<span class="lim">預設</span>'}<div class="d">${esc(WEAPONS[cur].desc[0])}</div></div>
+          ${eq ? '<button class="buy" data-act="weaponUnequip">卸下</button>' : ''}</div>
+          ${EXCLUSIVES.map((id) => { const own = owned.includes(id), on = eq === id;
+            return `<div class="wslot ${own ? '' : 'locked'}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
+            ${own && !on ? `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>` : on ? '<span class="max">裝備中</span>' : ''}</div>`; }).join('')}`;
+      }
       const eq = profile.gear.equipped, items = profile.gear.items;
       $('#gear .equipped').innerHTML = Object.keys(GEAR_SLOTS).map((slot) => {
         const it = items.find((i) => i.uid === eq[slot]);
@@ -2549,6 +2892,21 @@ function createUI(actions) {
         <div class="pity">保底：第 <b>${o.pity}</b> 抽必得「${top}」。目前已累積 <b>${profile.gacha.pity}</b> 抽，再 <b>${left}</b> 抽必得。抽到「${top}」後重新計算。</div>
         <div class="d small">機率由遊戲內的機率表直接計算；「綜合機率」是把保底算進去後，長期每一抽的實際機率。</div>
         <div class="gacha-btns">${btn(1)}${btn(10)}</div>`;
+      { // 武器祈燈：機率一樣由 gachaOdds(WEAPON_GACHA) 算出，不准手寫
+        const w = gachaOdds(WEAPON_GACHA), left = w.pity - profile.gacha.wpity;
+        const wbtn = (n) => {
+          const pay = gachaPay(profile, n, WEAPON_GACHA), c = gachaCost(n, WEAPON_GACHA);
+          const label = pay === 'tickets' ? `用 ${c.tickets} 張祈燈券` : `花 ${num(c.stardust)} 星砂`;
+          return `<button class="btn small" data-act="wgachaAsk" data-n="${n}" ${pay ? '' : 'disabled'}>模擬抽獎 ×${n}<br><small>${pay ? label : `需要 ${num(c.stardust)} 星砂或 ${c.tickets} 張券`}</small></button>`;
+        };
+        const owned = profile.weapons.owned.length;
+        $('#shop .wgacha').innerHTML = `<div class="sec-title">武器祈燈（專屬起始武器）</div>
+          <table class="odds"><tr><th>獎項</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
+          ${WEAPON_GACHA.outcomes.map((o, i) => `<tr data-rarity="${i}"><td${i === w.top ? ' style="color:#ffc85a"' : ''}>${esc(o.name)}</td><td class="odds-base">${fmtPct(w.base[i])}</td><td class="odds-comp">${fmtPct(w.composite[i])}</td></tr>`).join('')}</table>
+          <div class="pity">保底：第 <b>${w.pity}</b> 抽必得專屬武器。目前已累積 <b>${profile.gacha.wpity}</b> 抽，再 <b>${left}</b> 抽必得。</div>
+          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就改給 ${num(WEAPON_GACHA.dupRefund.stardust)} 星砂。抽到後要到「裝備」畫面裝上才會生效。抽獎用的星砂與祈燈券都能靠遊玩取得。</div>
+          <div class="gacha-btns">${wbtn(1)}${wbtn(10)}</div>`;
+      }
       const packRow = (it) => {
         const chk = canBuy(profile, it.id), bought = profile.shop.bought[it.id] || 0;
         const tag = it.kind === 'sim' ? `模擬 ${num(it.simPoints)} 點` : priceText(it.price);
@@ -2577,6 +2935,13 @@ function createUI(actions) {
         html = `<h3>祈燈結果</h3><div class="gacha-grid">${m.results.map((r) => `<div class="gcard r${r.rarity}" style="--c:${RARITIES[r.rarity].color}">
           <span class="rn">${RARITIES[r.rarity].name}${r.pity ? '・保底' : ''}</span><b>${esc(gearName(r.item))}</b><span>${esc(fmtMod(gearMods(r.item)[0]))}</span>${r.salvaged ? `<span class="sv">背包滿，分解 +${num(r.salvaged)} 燈油</span>` : ''}</div>`).join('')}</div>
           ${pityHit ? `<p>觸發保底，已重新計算。</p>` : ''}
+          <p class="sim-note">這是模擬交易，沒有實際付款（使用的是遊戲內的星砂或祈燈券）。</p>
+          <div class="acts"><button class="btn small" data-act="shopClose">收下</button></div>`;
+      } else if (m.type === 'wgacha') {
+        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
+        const got = m.results.filter((r) => r.weapon);
+        html = `<h3>武器祈燈結果</h3><div class="gacha-grid">${m.results.map((r) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`).join('')}</div>
+          ${got.length ? `<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>` : ''}
           <p class="sim-note">這是模擬交易，沒有實際付款（使用的是遊戲內的星砂或祈燈券）。</p>
           <div class="acts"><button class="btn small" data-act="shopClose">收下</button></div>`;
       } else if (m.type === 'history') html = `<h3>交易紀錄</h3><p class="sim-note">所有交易皆為模擬，沒有實際付款。</p>
@@ -2701,11 +3066,11 @@ const { createInput } = __m_input_js;
 const { createSim, makeRng, VW } = __m_sim_js;
 const { createRenderer } = __m_render_js;
 const { createUI, gearName } = __m_ui_js;
-const { CHAPTERS, CHAPTER1 } = __m_content_js;
+const { CHAPTERS, CHAPTER1, WEAPON_GACHA } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
-const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } = __m_meta_js;
+const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
 const { createPerf } = __m_perf_js;
-const { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
+const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
@@ -2776,6 +3141,20 @@ const ui = createUI({
     if (!r?.ok) { ui.shopModal(null); return; }
     persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results });
   },
+  wgachaAsk: (d) => {
+    const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
+    if (!pay) return;
+    ui.shopModal({ type: 'confirm', title: `武器祈燈：模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n, WEAPON_GACHA)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'wgachaGo', data: { n }, ok: '確認（模擬）' });
+  },
+  wgachaGo: (d) => {
+    if (shopBusy) return;
+    const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
+    const r = pay && drawWeaponGacha(profile, shopRand, n, pay);
+    if (!r?.ok) { ui.shopModal(null); return; }
+    persist(); refreshShop(); ui.shopModal({ type: 'wgacha', results: r.results });
+  },
+  weaponEquip: (d) => { if (equipWeapon(profile, d.id).ok) persist(); refreshGear(null); },
+  weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear(null); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
     if (!it || !chk.ok) return;
@@ -2856,7 +3235,7 @@ function newRun(id) {
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
-  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile) });
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile) }); // 只有「已裝備」的專屬武器會生效
   renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
 }

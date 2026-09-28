@@ -33,6 +33,7 @@ export function createRenderer(chapter = CHAPTER1) {
     gold: glow('rgba(255,210,90,1)', 30), heal: glow('rgba(255,140,170,1)', 18), magnet: glow('rgba(120,200,255,1)', 18),
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
+    blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
@@ -92,6 +93,8 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'blast': fx.shake = Math.max(fx.shake, 6); fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 26, G.blast, 240, 0.6, 14); break;
         case 'blink': burst(e.x, e.y, 14, G.crystal, 150, 0.4, 10); break;
         case 'spark': burst(e.x, e.y, 3, G.crystal, 90, 0.25, 8); break;
+        case 'strike': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'strike' }); burst(e.x, e.y, 16, G.star2, 200, 0.45, 12); fx.shake = Math.max(fx.shake, 3); break;
+        case 'mineBoom': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 18, G.lantern, 220, 0.5, 12); break;
         case 'revive': fx.whiteFlash = 1; banner('燈芯復燃！', true); burst(e.x, e.y, 80, G.gold, 320, 1, 14); break;
         case 'bossdown': fx.whiteFlash = 1; fx.shake = 16; burst(e.x, e.y, 120, G.gold, 380, 1.4, 16); burst(e.x, e.y, 80, G.spore, 300, 1.2, 14); break;
       }
@@ -219,6 +222,17 @@ export function createRenderer(chapter = CHAPTER1) {
     }
 
     prof?.lap('光屑與道具');
+    // 玩家的落星預警（粉紅虛線圈，越接近落下越實）與地上的燈籠雷
+    for (const k of s.strikes) {
+      const q = Math.max(0, 1 - k.t / k.delay);
+      g.fillStyle = `rgba(255,150,240,${0.08 + q * 0.18})`; g.beginPath(); g.arc(k.x, k.y, k.r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,190,245,0.8)'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.arc(k.x, k.y, k.r * (1.4 - q * 0.4), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+    }
+    for (const m of s.mines) {
+      const armed = m.arm <= 0, pulse = armed ? 0.7 + Math.sin(T * 6 + m.x) * 0.3 : 0.35;
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.fillStyle = armed ? '#ffd84a' : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
+    }
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -269,6 +283,7 @@ export function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.flash > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.8; g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.elite) { // 精英血條
         const w = e.r * 2;
@@ -283,11 +298,28 @@ export function createRenderer(chapter = CHAPTER1) {
     g.lineCap = 'round';
     for (const b of s.bullets) {
       if (!onScreen(b.x, b.y)) continue;
+      if (b.boom) { // 旋轉的新月光刃
+        const k = b.size / 11;
+        g.drawImage(G.blade, b.x - 18 * k, b.y - 18 * k, 36 * k, 36 * k);
+        g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = 'rgba(220,255,240,0.95)';
+        g.beginPath(); g.arc(0, 0, b.size, 0, Math.PI); g.arc(0, -b.size * 0.3, b.size * 0.75, Math.PI, 0, true); g.closePath(); g.fill(); g.restore();
+        continue;
+      }
+      if (b.burn) { g.drawImage(G.ember, b.x - 14, b.y - 14, 28, 28); g.strokeStyle = 'rgba(255,200,140,0.95)'; g.lineWidth = 3; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.03, b.y - b.vy * 0.03); g.stroke(); continue; }
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
       if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
       g.strokeStyle = b.big ? 'rgba(255,250,220,0.95)' : 'rgba(255,240,200,0.9)'; g.lineWidth = 3 * k;
       g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.025 * k, b.y - b.vy * 0.025 * k); g.stroke();
+    }
+    for (const w of p.weapons) {
+      for (const q of w.wisps) { g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill(); }
+      if (w.flame) { // 火焰錐：從玩家往火口方向，半透明漸層＋閃爍
+        const f = w.flame, a = Math.atan2(f.ay, f.ax), flick = 0.85 + Math.random() * 0.25;
+        const gr = g.createRadialGradient(p.x, p.y, 4, p.x, p.y, f.range * flick);
+        gr.addColorStop(0, 'rgba(255,240,180,0.55)'); gr.addColorStop(0.5, 'rgba(255,150,60,0.35)'); gr.addColorStop(1, 'rgba(255,80,30,0)');
+        g.fillStyle = gr; g.beginPath(); g.moveTo(p.x, p.y); g.arc(p.x, p.y, f.range * flick, a - f.half, a + f.half); g.closePath(); g.fill();
+      }
     }
     for (const w of p.weapons) if (w.orbs) for (const o of w.orbs) {
       const r = w.evo ? 26 : 20;
@@ -316,7 +348,7 @@ export function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }

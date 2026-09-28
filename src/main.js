@@ -4,11 +4,11 @@ import { createInput } from './input.js';
 import { createSim, makeRng, VW } from './sim.js';
 import { createRenderer } from './render.js';
 import { createUI, gearName } from './ui.js';
-import { CHAPTERS, CHAPTER1 } from './content.js';
+import { CHAPTERS, CHAPTER1, WEAPON_GACHA } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
-import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } from './meta.js';
+import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
-import { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
+import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
@@ -80,6 +80,20 @@ const ui = createUI({
     if (!r?.ok) { ui.shopModal(null); return; }
     persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results });
   },
+  wgachaAsk: (d) => {
+    const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
+    if (!pay) return;
+    ui.shopModal({ type: 'confirm', title: `武器祈燈：模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n, WEAPON_GACHA)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'wgachaGo', data: { n }, ok: '確認（模擬）' });
+  },
+  wgachaGo: (d) => {
+    if (shopBusy) return;
+    const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
+    const r = pay && drawWeaponGacha(profile, shopRand, n, pay);
+    if (!r?.ok) { ui.shopModal(null); return; }
+    persist(); refreshShop(); ui.shopModal({ type: 'wgacha', results: r.results });
+  },
+  weaponEquip: (d) => { if (equipWeapon(profile, d.id).ok) persist(); refreshGear(null); },
+  weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear(null); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
     if (!it || !chk.ok) return;
@@ -160,7 +174,7 @@ function newRun(id) {
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
-  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile) });
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile) }); // 只有「已裝備」的專屬武器會生效
   renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
 }

@@ -2,7 +2,7 @@
 // 🔴 全部是模擬：不接任何付款、不收任何資料、不連外。「模擬購買」的項目只走流程，不扣任何東西。
 // 機率只有一份來源：content.js 的 GACHA。抽獎（rollRarity）與商城畫面（gachaOdds → ui.js）都從它算；
 // tools/shop-test.mjs 會把「畫面上的百分比」和「實際抽 N 次量到的分布」這兩個獨立來源拿來比對。
-import { SHOP, GACHA, DAILY, RARITIES } from './content.js';
+import { SHOP, GACHA, WEAPON_GACHA, WEAPONS, DAILY, RARITIES } from './content.js';
 import { rollGear, salvageValue } from './meta.js';
 import { MAX_ITEMS, MAX_HISTORY } from './save.js';
 
@@ -23,10 +23,10 @@ export function gachaOdds(table = GACHA) {
 }
 export const fmtPct = (x) => `${(x * 100).toFixed(2)}%`;
 
-// ---- 抽一次的稀有度（保底在這裡）----
-export function rollRarity(profile, rand, table = GACHA) {
+// ---- 抽一次的結果編號（保底在這裡）；兩個抽獎池共用，key 指定用哪一個保底計數 ----
+export function rollRarity(profile, rand, table = GACHA, key = 'pity') {
   const rates = table.rates;
-  const top = rates.length - 1, n = profile.gacha.pity + 1; // n：這是距離上次最高稀有度的第幾抽
+  const top = rates.length - 1, n = profile.gacha[key] + 1; // n：這是距離上次最高獎項的第幾抽
   let rarity = top, pity = false;
   if (n >= table.pity) pity = true;
   else {
@@ -34,15 +34,15 @@ export function rollRarity(profile, rand, table = GACHA) {
     let x = rand() * total;
     for (let i = 0; i < rates.length; i++) { x -= rates[i]; if (x < 0) { rarity = i; break; } }
   }
-  profile.gacha.pity = rarity === top ? 0 : n;
+  profile.gacha[key] = rarity === top ? 0 : n;
   profile.gacha.total++;
   return { rarity, pity };
 }
 
-export function gachaCost(count) { return GACHA.cost[count === 10 ? 'ten' : 'single']; }
+export function gachaCost(count, table = GACHA) { return table.cost[count === 10 ? 'ten' : 'single']; }
 // 付款方式：祈燈券夠就用券，不夠用星砂；都不夠回 null
-export function gachaPay(profile, count) {
-  const c = gachaCost(count);
+export function gachaPay(profile, count, table = GACHA) {
+  const c = gachaCost(count, table);
   if (profile.tickets >= c.tickets) return 'tickets';
   if (profile.stardust >= c.stardust) return 'stardust';
   return null;
@@ -68,6 +68,29 @@ export function drawGacha(profile, rand, count, pay) {
   }
   profile.oil += autoSalvage;
   return { ok: true, results, cost: { [pay]: cost }, autoSalvage };
+}
+
+// ---- 武器祈燈：專屬起始武器只能從這裡抽到 ----
+// 抽到的專屬武器只進「擁有清單」（profile.weapons.owned），不會自動裝備；要玩家自己到裝備畫面裝上才會成為開局武器。
+export const EXCLUSIVES = Object.keys(WEAPONS).filter((id) => WEAPONS[id].exclusive);
+export function drawWeaponGacha(profile, rand, count, pay) {
+  if (count !== 1 && count !== 10) return { ok: false, reason: 'count' };
+  const cost = gachaCost(count, WEAPON_GACHA)[pay];
+  if (cost === undefined) return { ok: false, reason: 'pay' };
+  if (profile[pay] < cost) return { ok: false, reason: pay };
+  profile[pay] -= cost;
+  const results = [];
+  for (let i = 0; i < count; i++) {
+    const { rarity: idx, pity } = rollRarity(profile, rand, WEAPON_GACHA, 'wpity');
+    const o = WEAPON_GACHA.outcomes[idx], r = { idx, pity, id: o.id };
+    if (o.id === 'weapon') {
+      const left = EXCLUSIVES.filter((w) => !profile.weapons.owned.includes(w));
+      if (left.length) { r.weapon = left[Math.floor(rand() * left.length)]; profile.weapons.owned.push(r.weapon); }
+      else { r.refund = { ...WEAPON_GACHA.dupRefund }; for (const [k, v] of Object.entries(r.refund)) profile[k] += v; }
+    } else { r.gives = { ...o.gives }; for (const [k, v] of Object.entries(o.gives)) profile[k] += v; }
+    results.push(r);
+  }
+  return { ok: true, results, cost: { [pay]: cost } };
 }
 
 // ---- 每日補給（本地日期，一天一次）----
