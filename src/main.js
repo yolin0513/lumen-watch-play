@@ -7,12 +7,15 @@ import { createUI, gearName } from './ui.js';
 import { CHAPTERS, CHAPTER1 } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
 import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } from './meta.js';
+import { createPerf } from './perf.js';
 import { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
-const DEBUG = new URLSearchParams(location.search).has('debug');
+const params = new URLSearchParams(location.search);
+const DEBUG = params.has('debug');
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
@@ -200,6 +203,7 @@ function frame(now) {
   const raw = (now - last) / 1000; last = now;
   const dt = Math.min(raw, 1 / 30); // 分頁切回來時不要一次跳太多
   const t0 = performance.now();
+  if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
   else if (!paused) { sim.update(dt, input.move); sync(); }
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
@@ -214,6 +218,21 @@ function frame(now) {
     g.fillText(`fps ${fps.value.toFixed(0)}  worst ${fps.cur.toFixed(1)}ms  enemies ${s.enemies.length}  bullets ${s.bullets.length}  gems ${s.gems.length}`, 8, H - 10);
   }
   requestAnimationFrame(frame);
+}
+
+// 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
+function perfFrame(now, dt) {
+  const s = sim.state;
+  const auto = () => { if (s.phase === 'choice') sim.choose(0); if (s.phase === 'chest') sim.closeChest(); };
+  if (perf.needsSkip(s)) { for (let i = 0; i < 600 && s.t < perf.skipTo(perf.stage); i++) { auto(); sim.update(1 / 60, perf.move(s)); s.events.length = 0; } }
+  auto();
+  const t0 = performance.now(); sim.update(dt, perf.move(s)); const t1 = performance.now();
+  renderer.render(g, s, dt, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
+  const t2 = performance.now();
+  perf.record(now, t1 - t0, t2 - t1, s);
+  const box = document.getElementById('perfBox');
+  box.style.display = 'block';
+  box.textContent = perf.done ? perf.report.text : `效能量測中…（${perf.stage + 1}/2）第 ${Math.floor(s.t)} 秒`;
 }
 
 // 浮動搖桿
@@ -231,8 +250,11 @@ function drawStick() {
   g.fillStyle = 'rgba(255,230,180,0.55)'; g.beginPath(); g.arc(ox + dx, oy + dy, R * 0.42, 0, Math.PI * 2); g.fill();
 }
 
-toMenu();
-if (LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
+if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
+  mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true;
+  renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
+} else toMenu();
+if (!perf && LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
 // 升級或修復成功就立刻寫回：否則在玩家做任何動作前，每次開遊戲都會重新升級、重跳提示
-if (loaded.writable && ['migrated', 'repaired', 'corrupt'].includes(loaded.status)) persist();
+if (!perf && loaded.writable && ['migrated', 'repaired', 'corrupt'].includes(loaded.status)) persist();
 requestAnimationFrame(frame);

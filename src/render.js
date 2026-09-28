@@ -79,8 +79,11 @@ export function createRenderer(chapter = CHAPTER1) {
     fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0);
   }
 
-  function render(g, s, dt, W, H, scale, safeTop = 0, hud = true) {
+  // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
+  function render(g, s, dt, W, H, scale, safeTop = 0, hud = true, prof = null) {
+    prof?.start();
     consume(s, dt);
+    prof?.lap('特效更新');
     const vh = H / scale, p = s.player, T = s.t;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
@@ -90,6 +93,7 @@ export function createRenderer(chapter = CHAPTER1) {
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
     g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+    prof?.lap('地面');
 
     // 泥沼：深色水窪＋一圈反光
     const ter = s.chapter.terrain;
@@ -142,6 +146,7 @@ export function createRenderer(chapter = CHAPTER1) {
       g.globalCompositeOperation = 'source-over';
     }
 
+    prof?.lap('地形與危險');
     // 燈暈（在怪物底下）
     const aura = p.weapons.find((w) => w.id === 'aura');
     if (aura?.radius) {
@@ -174,6 +179,7 @@ export function createRenderer(chapter = CHAPTER1) {
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
+    prof?.lap('光屑與道具');
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -196,6 +202,7 @@ export function createRenderer(chapter = CHAPTER1) {
       }
     }
 
+    prof?.lap('預警');
     // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
     const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
     if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
@@ -231,6 +238,7 @@ export function createRenderer(chapter = CHAPTER1) {
       }
     }
 
+    prof?.lap('怪物與角色');
     // 子彈、光球、電弧、粒子（加亮疊加）
     g.globalCompositeOperation = 'lighter';
     g.lineCap = 'round';
@@ -275,6 +283,7 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 
+    prof?.lap('子彈與特效');
     // 傷害數字
     g.textAlign = 'center';
     for (const q of fx.texts) {
@@ -284,6 +293,7 @@ export function createRenderer(chapter = CHAPTER1) {
     }
     g.globalAlpha = 1;
 
+    prof?.lap('飄字');
     // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (s.chapter.fog) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
@@ -300,6 +310,7 @@ export function createRenderer(chapter = CHAPTER1) {
       }
       g.globalAlpha = 1;
     }
+    prof?.lap('霧');
     const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
@@ -312,7 +323,9 @@ export function createRenderer(chapter = CHAPTER1) {
     }
     if (fx.whiteFlash > 0) { g.fillStyle = `rgba(255,245,220,${fx.whiteFlash * 0.6})`; g.fillRect(0, 0, W, H); }
 
+    prof?.lap('暗角與閃光');
     if (hud) renderHud(g, s, W, H, scale, camX, camY, vh, safeTop); // 主選單背景的展示局不畫 HUD，免得疊到標題
+    prof?.lap('HUD');
   }
 
   function renderHud(g, s, W, H, k, camX, camY, vh, safeTop) {

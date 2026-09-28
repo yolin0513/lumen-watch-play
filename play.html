@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>燈芯守望</title>
+
+
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <style>
   :root { --gold: #ffd27a; --ink: #e9ecff; --dim: #9aa3d6; --panel: rgba(16, 13, 38, 0.92); --edge: rgba(255, 210, 122, 0.35); }
@@ -209,31 +211,66 @@
   </div>
 
   <div id="toast"></div>
+  <pre id="perfBox" style="display:none;position:absolute;left:6px;right:6px;top:calc(env(safe-area-inset-top) + 40px);margin:0;padding:8px;background:rgba(0,0,0,0.78);color:#9f9;font:11px/1.45 monospace;white-space:pre-wrap;z-index:20;pointer-events:none;border-radius:8px"></pre>
 </div>
 <script>
 "use strict";
+// ---- stick.js
+const __m_stick_js = (() => {
+// 浮動搖桿的純邏輯（不碰 DOM），input.js 用它，tools/input-latency.mjs 用同一份模擬手指軌跡量反應時間。
+// cfg：
+//   dead   死區（CSS px）：手指移動小於這個距離不動
+//   full   拖多遠才全速（CSS px）：dead～full 之間速度線性增加
+//   ring   搖桿外圈半徑（CSS px）：畫面上畫的圈
+//   follow 手指拖出外圈時，原點跟著手指走（永遠保持在 ring 以內），反向時不必先把手指拖回原點
+//   rampFrom 速度從哪個距離開始算起（預設＝dead；M1～M3 的舊版是從 0 算，所以一過死區就有 dead/full 的速度）
+const STICK_LEGACY = { dead: 6, full: 56, ring: 56, follow: false, rampFrom: 0 }; // M1～M3 的設定（量測對照用）
+
+function stickDown(s, id, x, y) { s.active = true; s.id = id; s.ox = x; s.oy = y; s.x = x; s.y = y; }
+function stickMove(s, id, x, y, cfg) {
+  if (!s.active || s.id !== id) return;
+  s.x = x; s.y = y;
+  if (cfg.follow) {
+    const dx = x - s.ox, dy = y - s.oy, d = Math.hypot(dx, dy);
+    if (d > cfg.ring) { s.ox = x - dx / d * cfg.ring; s.oy = y - dy / d * cfg.ring; }
+  }
+}
+function stickUp(s, id) { if (s.id === id) { s.active = false; s.id = null; } }
+// 回傳移動向量（長度 0～1）
+function stickVector(s, cfg) {
+  if (!s.active) return { x: 0, y: 0 };
+  const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
+  if (d <= cfg.dead) return { x: 0, y: 0 };
+  const from = cfg.rampFrom ?? cfg.dead;
+  const k = Math.min(1, (d - from) / Math.max(1e-6, cfg.full - from)) / d;
+  return { x: dx * k, y: dy * k };
+}
+
+return { STICK_LEGACY, stickDown, stickMove, stickUp, stickVector };
+})();
+
 // ---- input.js
 const __m_input_js = (() => {
 // 輸入：浮動虛擬搖桿（觸控/滑鼠按住拖曳）＋鍵盤。輸出統一為 move 向量（長度 0~1）。
+// 搖桿的計算在 stick.js（純邏輯，tools/input-latency.mjs 用同一份量反應時間）。
+const { stickDown, stickMove, stickUp, stickVector } = __m_stick_js;
+// M4 起：拖 22px 就全速；原點跟隨手指、保持在 30px 內（反向時手指只要往回拉一小段）。量測見 tools/input-latency.mjs
+const STICK = { dead: 6, full: 22, ring: 30, follow: true };
+
 function createInput(el) {
   const keys = new Set();
   const stick = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0 };
-  const RADIUS = 56; // CSS px，搖桿最大半徑
 
-  const down = (id, x, y) => { Object.assign(stick, { active: true, id, ox: x, oy: y, x, y }); };
-  const move = (id, x, y) => { if (stick.active && stick.id === id) { stick.x = x; stick.y = y; } };
-  const up = (id) => { if (stick.id === id) { stick.active = false; stick.id = null; } };
-
-  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); down(e.pointerId, e.clientX, e.clientY); e.preventDefault(); });
-  el.addEventListener('pointermove', (e) => move(e.pointerId, e.clientX, e.clientY));
-  el.addEventListener('pointerup', (e) => up(e.pointerId));
-  el.addEventListener('pointercancel', (e) => up(e.pointerId));
+  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); stickDown(stick, e.pointerId, e.clientX, e.clientY); e.preventDefault(); });
+  el.addEventListener('pointermove', (e) => stickMove(stick, e.pointerId, e.clientX, e.clientY, STICK));
+  el.addEventListener('pointerup', (e) => stickUp(stick, e.pointerId));
+  el.addEventListener('pointercancel', (e) => stickUp(stick, e.pointerId));
   addEventListener('keydown', (e) => keys.add(e.code));
   addEventListener('keyup', (e) => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); stick.active = false; });
 
   return {
-    stick, RADIUS,
+    stick, RADIUS: STICK.ring,
     reset() { keys.clear(); stick.active = false; stick.id = null; },
     get move() {
       let x = 0, y = 0;
@@ -241,18 +278,15 @@ function createInput(el) {
       if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
       if (keys.has('KeyW') || keys.has('ArrowUp')) y -= 1;
       if (keys.has('KeyS') || keys.has('ArrowDown')) y += 1;
-      if (stick.active) {
-        const dx = stick.x - stick.ox, dy = stick.y - stick.oy;
-        const d = Math.hypot(dx, dy);
-        if (d > 6) { const k = Math.min(d, RADIUS) / RADIUS / d; x += dx * k; y += dy * k; }
-      }
+      const v = stickVector(stick, STICK);
+      x += v.x; y += v.y;
       const len = Math.hypot(x, y);
       return len > 1 ? { x: x / len, y: y / len } : { x, y };
     },
   };
 }
 
-return { createInput };
+return { STICK, createInput };
 })();
 
 // ---- content.js
@@ -1558,8 +1592,11 @@ function createRenderer(chapter = CHAPTER1) {
     fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0);
   }
 
-  function render(g, s, dt, W, H, scale, safeTop = 0, hud = true) {
+  // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
+  function render(g, s, dt, W, H, scale, safeTop = 0, hud = true, prof = null) {
+    prof?.start();
     consume(s, dt);
+    prof?.lap('特效更新');
     const vh = H / scale, p = s.player, T = s.t;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
@@ -1569,6 +1606,7 @@ function createRenderer(chapter = CHAPTER1) {
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
     g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+    prof?.lap('地面');
 
     // 泥沼：深色水窪＋一圈反光
     const ter = s.chapter.terrain;
@@ -1621,6 +1659,7 @@ function createRenderer(chapter = CHAPTER1) {
       g.globalCompositeOperation = 'source-over';
     }
 
+    prof?.lap('地形與危險');
     // 燈暈（在怪物底下）
     const aura = p.weapons.find((w) => w.id === 'aura');
     if (aura?.radius) {
@@ -1653,6 +1692,7 @@ function createRenderer(chapter = CHAPTER1) {
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
+    prof?.lap('光屑與道具');
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -1675,6 +1715,7 @@ function createRenderer(chapter = CHAPTER1) {
       }
     }
 
+    prof?.lap('預警');
     // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
     const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
     if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
@@ -1710,6 +1751,7 @@ function createRenderer(chapter = CHAPTER1) {
       }
     }
 
+    prof?.lap('怪物與角色');
     // 子彈、光球、電弧、粒子（加亮疊加）
     g.globalCompositeOperation = 'lighter';
     g.lineCap = 'round';
@@ -1754,6 +1796,7 @@ function createRenderer(chapter = CHAPTER1) {
     for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 
+    prof?.lap('子彈與特效');
     // 傷害數字
     g.textAlign = 'center';
     for (const q of fx.texts) {
@@ -1763,6 +1806,7 @@ function createRenderer(chapter = CHAPTER1) {
     }
     g.globalAlpha = 1;
 
+    prof?.lap('飄字');
     // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (s.chapter.fog) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
@@ -1779,6 +1823,7 @@ function createRenderer(chapter = CHAPTER1) {
       }
       g.globalAlpha = 1;
     }
+    prof?.lap('霧');
     const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
@@ -1791,7 +1836,9 @@ function createRenderer(chapter = CHAPTER1) {
     }
     if (fx.whiteFlash > 0) { g.fillStyle = `rgba(255,245,220,${fx.whiteFlash * 0.6})`; g.fillRect(0, 0, W, H); }
 
+    prof?.lap('暗角與閃光');
     if (hud) renderHud(g, s, W, H, scale, camX, camY, vh, safeTop); // 主選單背景的展示局不畫 HUD，免得疊到標題
+    prof?.lap('HUD');
   }
 
   function renderHud(g, s, W, H, k, camX, camY, vh, safeTop) {
@@ -2531,6 +2578,75 @@ function createUI(actions) {
 return { fmtMod, gearName, createUI };
 })();
 
+// ---- perf.js
+const __m_perf_js = (() => {
+// 效能量測模式：遊戲網址加 ?perf=章節（1～3），例如 …/lumen-watch-play/?perf=2
+// 自動進行一局（無敵、固定 seed、自動繞圈移動、自動選升級），分兩段量每一幀：
+//   輕場面：開局前 300 幀
+//   重場面：快轉到第 360 秒（大量怪物、共鳴武器）後再量 600 幀
+// 每一幀記錄：瀏覽器給的幀間隔、邏輯耗時、繪製耗時（再細分各繪製步驟）。量完在畫面上顯示報表，也放在 window.__perf。
+// 手機實機要量就用手機開這個網址；桌面瀏覽器量到的數字不能代表手機。
+const { CHAPTERS } = __m_content_js;
+const pct = (a, p) => (a.length ? a[Math.min(a.length - 1, Math.floor(a.length * p))] : 0);
+const f1 = (x) => x.toFixed(1);
+
+function createPerf(chapterId) {
+  const chapter = CHAPTERS.find((c) => c.id === chapterId) ?? CHAPTERS[0];
+  const stages = [{ name: '輕場面（開局）', frames: 300, skipTo: 0 }, { name: '重場面（第 360 秒）', frames: 600, skipTo: 360 }];
+  let stage = 0, rec = [], lastNow = null, done = false, report = null, curPhases = null;
+  const results = [];
+  const prof = { // render.js 每畫完一個步驟呼叫 lap(名稱)
+    start() { curPhases = {}; this.t = performance.now(); },
+    lap(name) { const t = performance.now(); curPhases[name] = (curPhases[name] || 0) + (t - this.t); this.t = t; },
+  };
+  function summarize(st, rows, s) {
+    const iv = rows.map((r) => r.interval).sort((a, b) => a - b);
+    const up = rows.map((r) => r.update).sort((a, b) => a - b);
+    const rd = rows.map((r) => r.render).sort((a, b) => a - b);
+    const phases = {};
+    for (const r of rows) for (const [k, v] of Object.entries(r.phases)) (phases[k] ||= []).push(v);
+    const ph = Object.entries(phases).map(([k, v]) => { v.sort((a, b) => a - b); return { k, avg: v.reduce((a, b) => a + b, 0) / v.length, p95: pct(v, 0.95) }; }).sort((a, b) => b.avg - a.avg);
+    const elapsed = iv.reduce((a, b) => a + b, 0) / 1000;
+    return { name: st.name, fps: rows.length / elapsed, iv: { p50: pct(iv, 0.5), p95: pct(iv, 0.95), p99: pct(iv, 0.99), max: iv.at(-1), over20: iv.filter((x) => x > 20).length, over34: iv.filter((x) => x > 34).length },
+      update: { p50: pct(up, 0.5), p99: pct(up, 0.99), max: up.at(-1) }, render: { p50: pct(rd, 0.5), p95: pct(rd, 0.95), p99: pct(rd, 0.99), max: rd.at(-1) }, phases: ph,
+      scene: { enemies: s.enemies.length, bullets: s.bullets.length, gems: s.gems.length } };
+  }
+  function text() {
+    const lines = [`效能量測 第${chapter.id}章 ${chapter.name}｜螢幕 ${innerWidth}×${innerHeight}、DPR ${devicePixelRatio}`];
+    for (const r of results) {
+      lines.push('', `【${r.name}】平均 ${f1(r.fps)} fps｜場面：怪 ${r.scene.enemies}、子彈 ${r.scene.bullets}、光屑 ${r.scene.gems}`,
+        `幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
+        `邏輯 p50 ${r.update.p50.toFixed(2)}／p99 ${r.update.p99.toFixed(2)}／最慢 ${r.update.max.toFixed(2)} ms`,
+        `繪製 p50 ${f1(r.render.p50)}／p95 ${f1(r.render.p95)}／p99 ${f1(r.render.p99)}／最慢 ${f1(r.render.max)} ms`,
+        `繪製細項（平均／p95 ms）：${r.phases.map((p) => `${p.k} ${p.avg.toFixed(2)}/${p.p95.toFixed(2)}`).join('、')}`);
+    }
+    return lines.join('\n');
+  }
+  return {
+    chapter, prof,
+    get done() { return done; }, get report() { return report; },
+    skipTo(stageIdx) { return stages[stageIdx]?.skipTo ?? 0; },
+    get stage() { return stage; },
+    // 自動移動：繞大圈，讓鏡頭與場面持續變化
+    move(s) { const a = s.t * 0.5; return { x: Math.cos(a), y: Math.sin(a) }; },
+    // 每幀呼叫：now＝rAF 時間；update／render 為量好的毫秒
+    record(now, update, render, s) {
+      if (done) return;
+      if (lastNow !== null) rec.push({ interval: now - lastNow, update, render, phases: curPhases || {} });
+      lastNow = now;
+      if (rec.length >= stages[stage].frames) {
+        results.push(summarize(stages[stage], rec, s));
+        rec = []; lastNow = null; stage++;
+        if (stage >= stages.length) { done = true; report = { results, text: text() }; window.__perf = report; }
+      }
+    },
+    needsSkip(s) { return !done && stages[stage].skipTo > s.t + 1; },
+  };
+}
+
+return { createPerf };
+})();
+
 // ---- main.js
 const __m_main_js = (() => {
 // 進入點：畫布尺寸、主迴圈、畫面狀態切換（主選單／章節／天賦／裝備／遊戲中／暫停／結算）、存檔。
@@ -2542,11 +2658,14 @@ const { createUI, gearName } = __m_ui_js;
 const { CHAPTERS, CHAPTER1 } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
 const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } = __m_meta_js;
+const { createPerf } = __m_perf_js;
 const { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
-const DEBUG = new URLSearchParams(location.search).has('debug');
+const params = new URLSearchParams(location.search);
+const DEBUG = params.has('debug');
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
@@ -2734,6 +2853,7 @@ function frame(now) {
   const raw = (now - last) / 1000; last = now;
   const dt = Math.min(raw, 1 / 30); // 分頁切回來時不要一次跳太多
   const t0 = performance.now();
+  if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
   else if (!paused) { sim.update(dt, input.move); sync(); }
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
@@ -2748,6 +2868,21 @@ function frame(now) {
     g.fillText(`fps ${fps.value.toFixed(0)}  worst ${fps.cur.toFixed(1)}ms  enemies ${s.enemies.length}  bullets ${s.bullets.length}  gems ${s.gems.length}`, 8, H - 10);
   }
   requestAnimationFrame(frame);
+}
+
+// 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
+function perfFrame(now, dt) {
+  const s = sim.state;
+  const auto = () => { if (s.phase === 'choice') sim.choose(0); if (s.phase === 'chest') sim.closeChest(); };
+  if (perf.needsSkip(s)) { for (let i = 0; i < 600 && s.t < perf.skipTo(perf.stage); i++) { auto(); sim.update(1 / 60, perf.move(s)); s.events.length = 0; } }
+  auto();
+  const t0 = performance.now(); sim.update(dt, perf.move(s)); const t1 = performance.now();
+  renderer.render(g, s, dt, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
+  const t2 = performance.now();
+  perf.record(now, t1 - t0, t2 - t1, s);
+  const box = document.getElementById('perfBox');
+  box.style.display = 'block';
+  box.textContent = perf.done ? perf.report.text : `效能量測中…（${perf.stage + 1}/2）第 ${Math.floor(s.t)} 秒`;
 }
 
 // 浮動搖桿
@@ -2765,10 +2900,13 @@ function drawStick() {
   g.fillStyle = 'rgba(255,230,180,0.55)'; g.beginPath(); g.arc(ox + dx, oy + dy, R * 0.42, 0, Math.PI * 2); g.fill();
 }
 
-toMenu();
-if (LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
+if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
+  mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true;
+  renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
+} else toMenu();
+if (!perf && LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
 // 升級或修復成功就立刻寫回：否則在玩家做任何動作前，每次開遊戲都會重新升級、重跳提示
-if (loaded.writable && ['migrated', 'repaired', 'corrupt'].includes(loaded.status)) persist();
+if (!perf && loaded.writable && ['migrated', 'repaired', 'corrupt'].includes(loaded.status)) persist();
 requestAnimationFrame(frame);
 
 return {  };
