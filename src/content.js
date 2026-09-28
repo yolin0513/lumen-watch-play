@@ -154,6 +154,29 @@ export const RESONANCES = {
            stats: { dmg: 24, cd: 0.32, shots: 5, pierce: 99, speed: 520, shard: 3 } },
   orbit: { needs: 'lens', name: '星環',   desc: '光環擴張，並不斷向外拋射星光',
            stats: { dmg: 32, count: 6, radius: 68, spin: 4.4, size: 12, flingCd: 0.6 } },
+  // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
+  // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
+  // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
+  aura:      { needs: 'ember', name: '暖陽',     desc: '燈暈擴大成一輪暖陽，灼燒更快、敵人大幅減速',
+               stats: { dmg: 26, radius: 104, tick: 0.35, slow: 0.45 } },
+  chain:     { needs: 'stone', name: '雷網',     desc: '三道電弧同時竄出，在怪群之間跳得更遠更多次',
+               stats: { dmg: 44, cd: 0.9, jumps: 9, range: 150, arcs: 3 } },
+  boomerang: { needs: 'stone', name: '月輪',     desc: '五把大光刃同時擲出，飛得更遠更快',
+               stats: { dmg: 38, cd: 1.0, count: 5, range: 250, speed: 440, size: 16 } },
+  mortar:    { needs: 'lens',  name: '流星雨',   desc: '一次落下六顆星，間隔更短、範圍更大',
+               stats: { dmg: 84, cd: 1.2, count: 6, radius: 76, delay: 0.45 } },
+  flame:     { needs: 'wick',  name: '龍焰',     desc: '火舌變長變寬，轉向極快，幾乎沒有死角',
+               stats: { dmg: 20, tick: 0.1, range: 160, half: 0.9, turn: 8 } },
+  wisps:     { needs: 'ember', name: '螢群',     desc: '七隻螢蜂成群追擊，飛得更快、咬得更頻繁',
+               stats: { dmg: 32, count: 7, speed: 360, hitCd: 0.2, seek: 360 } },
+  mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
+               stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
+  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下七顆星，幾乎不停歇',
+               stats: { dmg: 90, cd: 1.1, count: 7, radius: 82, delay: 0.35 } },
+  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '五把巨大光刃高速來回，範圍與速度都再提升',
+               stats: { dmg: 32, cd: 0.75, count: 5, range: 270, speed: 480, size: 20 } },
+  emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
+               stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
 };
 
 // ---- 怪物 ----
@@ -317,6 +340,11 @@ export const DAILY = { oil: 150, stardust: 15, tickets: 1 };
 export const SHOP = [
   // 價格一律是遊戲內貨幣（燈油／星砂／祈燈券），全部靠遊玩取得。M5 起拿掉「模擬購買」品項（它的標價不是遊戲內貨幣）。
   // 兌換比例要保證來回換一定虧（燈油→星砂→燈油 < 1），否則會變成無限刷貨幣；shop-test 會檢查。
+  // 星砂補給（M6 依擁有者指示放回）：free＝免費領取。沒有任何標價、沒有確認或結帳步驟，按「領取」就入帳——
+  // 刻意不做成「一排價位」的樣子（那是儲值商店的長相）。shop-test 檢查：free 的品項不可以有 price，畫面上只寫「免費」。
+  { id: 'dust_s', free: true, name: '一小袋星砂', desc: '星砂 ×60', gives: { stardust: 60 } },
+  { id: 'dust_m', free: true, name: '一瓶星砂',   desc: '星砂 ×330', gives: { stardust: 330 } },
+  { id: 'dust_l', free: true, name: '一箱星砂',   desc: '星砂 ×1400', gives: { stardust: 1400 } },
   { id: 'starter', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
   { id: 'oilbox',  name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
   { id: 'dustex',  name: '星砂兌換', desc: '星砂 ×60（用燈油換）', price: { oil: 1500 }, gives: { stardust: 60 } },

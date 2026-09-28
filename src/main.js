@@ -112,7 +112,7 @@ const ui = createUI({
   weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear({ open: null, fx: { kind: 'weapon' } }); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
-    if (!it || !chk.ok) return;
+    if (!it || it.free || !chk.ok) return;
     const lines = [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}。`];
     if (it.gives.gear !== undefined) lines.push(...spaceLines(1));
     ui.shopModal({ type: 'confirm', title: '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: '購買' });
@@ -124,6 +124,11 @@ const ui = createUI({
     if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
     persist(); refreshShop(it.id);
     ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
+  },
+  claimFree: (d) => { // 星砂補給：免費，直接入帳，不經過確認框（不做成結帳流程）
+    const it = shopItem(d.id);
+    if (!it?.free || !buyItem(profile, it.id, shopRand, Date.now()).ok) return;
+    persist(); refreshShop(it.id); ui.toast(`已領取：${it.desc}`);
   },
   shopClose: () => ui.shopModal(null),
   shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),

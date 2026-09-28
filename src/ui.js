@@ -73,18 +73,18 @@ export function createUI(actions) {
   const givesText = (g) => [g.oil && `燈油 ×${num(g.oil)}`, g.stardust && `星砂 ×${num(g.stardust)}`, g.tickets && `祈燈券 ×${g.tickets}`].filter(Boolean).join('、');
   function gearLine(it) {
     const w = whereText(it);
-    return `<div class="drop" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${w ? `（${esc(w)}）` : ''}</span></div>`;
+    return `<div class="drop" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${w ? `（${esc(w)}）` : ''}</span></div>`;
   }
   // 裝備格子。sel：批量分解模式（null＝一般模式；Set＝已勾選的 uid）
   function gearTile(it, equipped, sel = null, fx = false) {
     const c = RARITIES[it.rarity].color;
     if (sel) {
-      if (equipped) return `<button class="gear locked" disabled style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
+      if (equipped) return `<button class="gear locked" disabled data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
       const on = sel.has(it.uid);
-      return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
+      return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
     }
-    return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" style="--c:${c}">
+    return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}">
       <span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
   }
@@ -97,13 +97,15 @@ export function createUI(actions) {
     if (r) r.classList.add('skip');
     $('#shop .modal').classList.add('revealed');
   }
+  // cards：已經組好的卡片 HTML，翻卡順序（--i）要由呼叫端寫進卡片自己唯一的 style 裡。
+  // ⚠ 不可以事後再往卡片塞第二個 style 屬性：瀏覽器只認第一個，後面的 --c（稀有度顏色）會整個消失——M5 的祈燈邊框回歸就是這樣來的。
   function reveal(cards, tier, color, skip) {
     const t0 = tier >= 4 ? 1.1 : tier >= 3 ? 0.8 : 0.6; // 越稀有，開燈越久
     const total = t0 + cards.length * 0.12 + 0.35;
     clearTimeout(revealTimer);
     if (!skip) revealTimer = setTimeout(revealDone, total * 1000);
     return { html: `<div class="reveal tier${tier}${skip ? ' skip' : ''}" style="--t0:${t0}s;--oc:${color}"><div class="orb"></div>
-      <div class="gacha-grid">${cards.map((c, i) => c.replace('<div class="gcard', `<div style="--i:${i}" class="gcard`)).join('')}</div></div>`, skip };
+      <div class="gacha-grid">${cards.join('')}</div></div>`, skip };
   }
 
   let toastT = 0;
@@ -210,7 +212,7 @@ export function createUI(actions) {
         sheet.classList.add('show');
       } else if (bagIt) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
-        sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" style="--c:${RARITIES[it.rarity].color}">
+        sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
           <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
@@ -221,7 +223,7 @@ export function createUI(actions) {
         sheet.classList.add('show');
       } else if (penIt) {
         const it = penIt;
-        sheet.innerHTML = `<div class="sheet-card" style="--c:${RARITIES[it.rarity].color}">
+        sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
           <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
@@ -282,7 +284,11 @@ export function createUI(actions) {
         return `<div class="shop-row${fxId === it.id ? ' fx-flash' : ''}"><div><b>${esc(it.name)}</b>${it.limit ? `<span class="lim">限購 ${it.limit}（已買 ${bought}）</span>` : ''}<div class="d">${esc(it.desc)}${chk.reason === 'space' ? '（背包與暫存區已滿，先整理再買）' : ''}</div></div>
           ${soldOut ? '<span class="max">已購買</span>' : `<button class="buy" data-act="buyAsk" data-id="${it.id}" ${chk.ok ? '' : 'disabled'}>購買<br><small>${esc(priceText(it.price))}</small></button>`}</div>`;
       };
-      $('#shop .packs').innerHTML = `<div class="sec-title">禮包與兌換</div>${SHOP.map(packRow).join('')}`;
+      // 星砂補給：免費、沒有標價、按了直接入帳（沒有確認或結帳步驟）——刻意不做成「一排價位」的儲值商店樣子
+      const freeRow = (it) => `<div class="shop-row free${fxId === it.id ? ' fx-flash' : ''}"><div><b>${esc(it.name)}</b><div class="d">${esc(it.desc)}</div></div>
+          <button class="buy" data-act="claimFree" data-id="${it.id}">領取<br><small>免費</small></button></div>`;
+      $('#shop .packs').innerHTML = `<div class="sec-title">星砂補給</div><div class="d small">隨時可以領，不需要任何東西。</div>${SHOP.filter((x) => x.free).map(freeRow).join('')}
+        <div class="sec-title">禮包與兌換</div>${SHOP.filter((x) => !x.free).map(packRow).join('')}`;
       $('#shop .shop-foot').textContent = PAY_NOTE; // 全商城唯一一處說明（擁有者指示：標語拿掉，只留一處不擋路的小字）
       if (!$('#shop').classList.contains('show')) show('shop');
     },
@@ -301,8 +307,8 @@ export function createUI(actions) {
       else if (m.type === 'gacha') {
         const pityHit = m.results.some((r) => r.pity), tier = Math.max(0, ...m.results.map((r) => r.rarity));
         const toPending = m.results.filter((r) => r.where === 'pending').length, auto = m.results.filter((r) => r.where === 'auto');
-        const cards = m.results.map((r) => { const w = whereText({ ...r.item, where: r.where, salvaged: r.salvaged });
-          return `<div class="gcard r${r.rarity}" style="--c:${RARITIES[r.rarity].color}">
+        const cards = m.results.map((r, i) => { const w = whereText({ ...r.item, where: r.where, salvaged: r.salvaged });
+          return `<div class="gcard r${r.rarity}" data-rar="${r.rarity}" style="--c:${RARITIES[r.rarity].color};--i:${i}">
           <span class="rn">${RARITIES[r.rarity].name}${r.pity ? '・保底' : ''}</span><b>${esc(gearName(r.item))}</b><span>${esc(fmtMod(gearMods(r.item)[0]))}</span>${w ? `<span class="sv${r.where === 'pending' ? ' pend' : ''}">${esc(w)}</span>` : ''}</div>`; });
         const rv = reveal(cards, tier, RARITIES[tier].color, m.skip);
         html = `<h3>祈燈結果</h3>${rv.html}
@@ -313,7 +319,7 @@ export function createUI(actions) {
       } else if (m.type === 'wgacha') {
         const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
         const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.refund);
-        const cards = m.results.map((r) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
+        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
         const rv = reveal(cards, hit ? 4 : 0, hit ? (hit.weapon ? WEAPONS[hit.weapon].color : '#ffc85a') : '#c9cfe6', m.skip);
         html = `<h3>武器祈燈結果</h3>${rv.html}
           ${got.length ? '<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>' : ''}

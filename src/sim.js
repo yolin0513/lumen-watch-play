@@ -101,7 +101,10 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const desc = isW ? def.desc[o.from] : def.desc;
     let hint = '';
     if (isW && RESONANCES[o.id]) hint = `滿級＋${PASSIVES[RESONANCES[o.id].needs].name} → 共鳴「${RESONANCES[o.id].name}」`;
-    if (!isW) for (const [wid, r] of Object.entries(RESONANCES)) if (r.needs === o.id) hint = `與 ${WEAPONS[wid].name} 共鳴`;
+    if (!isW) { // 一個被動可以對應好幾把武器：先列玩家身上有的，沒有才列全部
+      const ws = Object.keys(RESONANCES).filter((wid) => RESONANCES[wid].needs === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
+      if (ws.length) hint = `與 ${(held.length ? held : ws).map((wid) => WEAPONS[wid].name).join('、')} 共鳴`;
+    }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint };
   }
   function rollChoices() {

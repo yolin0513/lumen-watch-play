@@ -107,13 +107,13 @@ export function claimDaily(profile, now) {
 }
 
 // ---- 商城購買 ----
-// 價格一律是遊戲內貨幣（燈油／星砂／祈燈券）。
+// 價格一律是遊戲內貨幣（燈油／星砂／祈燈券）；free 的品項（星砂補給）沒有價格，直接領。
 export function shopItem(id) { return SHOP.find((x) => x.id === id); }
 export function canBuy(profile, id) {
   const item = shopItem(id);
   if (!item) return { ok: false, reason: 'missing' };
   if (item.limit && (profile.shop.bought[id] || 0) >= item.limit) return { ok: false, reason: 'limit' };
-  for (const [cur, n] of Object.entries(item.price)) if (profile[cur] < n) return { ok: false, reason: cur };
+  for (const [cur, n] of Object.entries(item.price ?? {})) if (profile[cur] < n) return { ok: false, reason: cur };
   if (item.gives.gear !== undefined && gearSpace(profile).total < 1) return { ok: false, reason: 'space' }; // 附裝備的禮包：沒地方放就不賣
   return { ok: true, item };
 }
@@ -121,7 +121,7 @@ export function buyItem(profile, id, rand, now) {
   const chk = canBuy(profile, id);
   if (!chk.ok) return chk;
   const item = chk.item;
-  for (const [cur, n] of Object.entries(item.price)) profile[cur] -= n;
+  for (const [cur, n] of Object.entries(item.price ?? {})) profile[cur] -= n;
   const g = item.gives, gear = [];
   profile.oil += g.oil || 0; profile.stardust += g.stardust || 0; profile.tickets += g.tickets || 0;
   if (g.gear !== undefined) {

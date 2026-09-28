@@ -501,6 +501,29 @@ const RESONANCES = {
            stats: { dmg: 24, cd: 0.32, shots: 5, pierce: 99, speed: 520, shard: 3 } },
   orbit: { needs: 'lens', name: '星環',   desc: '光環擴張，並不斷向外拋射星光',
            stats: { dmg: 32, count: 6, radius: 68, spin: 4.4, size: 12, flingCd: 0.6 } },
+  // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
+  // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
+  // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
+  aura:      { needs: 'ember', name: '暖陽',     desc: '燈暈擴大成一輪暖陽，灼燒更快、敵人大幅減速',
+               stats: { dmg: 26, radius: 104, tick: 0.35, slow: 0.45 } },
+  chain:     { needs: 'stone', name: '雷網',     desc: '三道電弧同時竄出，在怪群之間跳得更遠更多次',
+               stats: { dmg: 44, cd: 0.9, jumps: 9, range: 150, arcs: 3 } },
+  boomerang: { needs: 'stone', name: '月輪',     desc: '五把大光刃同時擲出，飛得更遠更快',
+               stats: { dmg: 38, cd: 1.0, count: 5, range: 250, speed: 440, size: 16 } },
+  mortar:    { needs: 'lens',  name: '流星雨',   desc: '一次落下六顆星，間隔更短、範圍更大',
+               stats: { dmg: 84, cd: 1.2, count: 6, radius: 76, delay: 0.45 } },
+  flame:     { needs: 'wick',  name: '龍焰',     desc: '火舌變長變寬，轉向極快，幾乎沒有死角',
+               stats: { dmg: 20, tick: 0.1, range: 160, half: 0.9, turn: 8 } },
+  wisps:     { needs: 'ember', name: '螢群',     desc: '七隻螢蜂成群追擊，飛得更快、咬得更頻繁',
+               stats: { dmg: 32, count: 7, speed: 360, hitCd: 0.2, seek: 360 } },
+  mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
+               stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
+  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下七顆星，幾乎不停歇',
+               stats: { dmg: 90, cd: 1.1, count: 7, radius: 82, delay: 0.35 } },
+  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '五把巨大光刃高速來回，範圍與速度都再提升',
+               stats: { dmg: 32, cd: 0.75, count: 5, range: 270, speed: 480, size: 20 } },
+  emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
+               stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
 };
 
 // ---- 怪物 ----
@@ -664,6 +687,11 @@ const DAILY = { oil: 150, stardust: 15, tickets: 1 };
 const SHOP = [
   // 價格一律是遊戲內貨幣（燈油／星砂／祈燈券），全部靠遊玩取得。M5 起拿掉「模擬購買」品項（它的標價不是遊戲內貨幣）。
   // 兌換比例要保證來回換一定虧（燈油→星砂→燈油 < 1），否則會變成無限刷貨幣；shop-test 會檢查。
+  // 星砂補給（M6 依擁有者指示放回）：free＝免費領取。沒有任何標價、沒有確認或結帳步驟，按「領取」就入帳——
+  // 刻意不做成「一排價位」的樣子（那是儲值商店的長相）。shop-test 檢查：free 的品項不可以有 price，畫面上只寫「免費」。
+  { id: 'dust_s', free: true, name: '一小袋星砂', desc: '星砂 ×60', gives: { stardust: 60 } },
+  { id: 'dust_m', free: true, name: '一瓶星砂',   desc: '星砂 ×330', gives: { stardust: 330 } },
+  { id: 'dust_l', free: true, name: '一箱星砂',   desc: '星砂 ×1400', gives: { stardust: 1400 } },
   { id: 'starter', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
   { id: 'oilbox',  name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
   { id: 'dustex',  name: '星砂兌換', desc: '星砂 ×60（用燈油換）', price: { oil: 1500 }, gives: { stardust: 60 } },
@@ -834,7 +862,10 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const desc = isW ? def.desc[o.from] : def.desc;
     let hint = '';
     if (isW && RESONANCES[o.id]) hint = `滿級＋${PASSIVES[RESONANCES[o.id].needs].name} → 共鳴「${RESONANCES[o.id].name}」`;
-    if (!isW) for (const [wid, r] of Object.entries(RESONANCES)) if (r.needs === o.id) hint = `與 ${WEAPONS[wid].name} 共鳴`;
+    if (!isW) { // 一個被動可以對應好幾把武器：先列玩家身上有的，沒有才列全部
+      const ws = Object.keys(RESONANCES).filter((wid) => RESONANCES[wid].needs === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
+      if (ws.length) hint = `與 ${(held.length ? held : ws).map((wid) => WEAPONS[wid].name).join('、')} 共鳴`;
+    }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint };
   }
   function rollChoices() {
@@ -2821,13 +2852,13 @@ function claimDaily(profile, now) {
 }
 
 // ---- 商城購買 ----
-// 價格一律是遊戲內貨幣（燈油／星砂／祈燈券）。
+// 價格一律是遊戲內貨幣（燈油／星砂／祈燈券）；free 的品項（星砂補給）沒有價格，直接領。
 function shopItem(id) { return SHOP.find((x) => x.id === id); }
 function canBuy(profile, id) {
   const item = shopItem(id);
   if (!item) return { ok: false, reason: 'missing' };
   if (item.limit && (profile.shop.bought[id] || 0) >= item.limit) return { ok: false, reason: 'limit' };
-  for (const [cur, n] of Object.entries(item.price)) if (profile[cur] < n) return { ok: false, reason: cur };
+  for (const [cur, n] of Object.entries(item.price ?? {})) if (profile[cur] < n) return { ok: false, reason: cur };
   if (item.gives.gear !== undefined && gearSpace(profile).total < 1) return { ok: false, reason: 'space' }; // 附裝備的禮包：沒地方放就不賣
   return { ok: true, item };
 }
@@ -2835,7 +2866,7 @@ function buyItem(profile, id, rand, now) {
   const chk = canBuy(profile, id);
   if (!chk.ok) return chk;
   const item = chk.item;
-  for (const [cur, n] of Object.entries(item.price)) profile[cur] -= n;
+  for (const [cur, n] of Object.entries(item.price ?? {})) profile[cur] -= n;
   const g = item.gives, gear = [];
   profile.oil += g.oil || 0; profile.stardust += g.stardust || 0; profile.tickets += g.tickets || 0;
   if (g.gear !== undefined) {
@@ -2928,18 +2959,18 @@ function createUI(actions) {
   const givesText = (g) => [g.oil && `燈油 ×${num(g.oil)}`, g.stardust && `星砂 ×${num(g.stardust)}`, g.tickets && `祈燈券 ×${g.tickets}`].filter(Boolean).join('、');
   function gearLine(it) {
     const w = whereText(it);
-    return `<div class="drop" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${w ? `（${esc(w)}）` : ''}</span></div>`;
+    return `<div class="drop" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${w ? `（${esc(w)}）` : ''}</span></div>`;
   }
   // 裝備格子。sel：批量分解模式（null＝一般模式；Set＝已勾選的 uid）
   function gearTile(it, equipped, sel = null, fx = false) {
     const c = RARITIES[it.rarity].color;
     if (sel) {
-      if (equipped) return `<button class="gear locked" disabled style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
+      if (equipped) return `<button class="gear locked" disabled data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
       const on = sel.has(it.uid);
-      return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
+      return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
     }
-    return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" style="--c:${c}">
+    return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}">
       <span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
   }
@@ -2952,13 +2983,15 @@ function createUI(actions) {
     if (r) r.classList.add('skip');
     $('#shop .modal').classList.add('revealed');
   }
+  // cards：已經組好的卡片 HTML，翻卡順序（--i）要由呼叫端寫進卡片自己唯一的 style 裡。
+  // ⚠ 不可以事後再往卡片塞第二個 style 屬性：瀏覽器只認第一個，後面的 --c（稀有度顏色）會整個消失——M5 的祈燈邊框回歸就是這樣來的。
   function reveal(cards, tier, color, skip) {
     const t0 = tier >= 4 ? 1.1 : tier >= 3 ? 0.8 : 0.6; // 越稀有，開燈越久
     const total = t0 + cards.length * 0.12 + 0.35;
     clearTimeout(revealTimer);
     if (!skip) revealTimer = setTimeout(revealDone, total * 1000);
     return { html: `<div class="reveal tier${tier}${skip ? ' skip' : ''}" style="--t0:${t0}s;--oc:${color}"><div class="orb"></div>
-      <div class="gacha-grid">${cards.map((c, i) => c.replace('<div class="gcard', `<div style="--i:${i}" class="gcard`)).join('')}</div></div>`, skip };
+      <div class="gacha-grid">${cards.join('')}</div></div>`, skip };
   }
 
   let toastT = 0;
@@ -3065,7 +3098,7 @@ function createUI(actions) {
         sheet.classList.add('show');
       } else if (bagIt) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
-        sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" style="--c:${RARITIES[it.rarity].color}">
+        sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
           <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
@@ -3076,7 +3109,7 @@ function createUI(actions) {
         sheet.classList.add('show');
       } else if (penIt) {
         const it = penIt;
-        sheet.innerHTML = `<div class="sheet-card" style="--c:${RARITIES[it.rarity].color}">
+        sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
           <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
@@ -3137,7 +3170,11 @@ function createUI(actions) {
         return `<div class="shop-row${fxId === it.id ? ' fx-flash' : ''}"><div><b>${esc(it.name)}</b>${it.limit ? `<span class="lim">限購 ${it.limit}（已買 ${bought}）</span>` : ''}<div class="d">${esc(it.desc)}${chk.reason === 'space' ? '（背包與暫存區已滿，先整理再買）' : ''}</div></div>
           ${soldOut ? '<span class="max">已購買</span>' : `<button class="buy" data-act="buyAsk" data-id="${it.id}" ${chk.ok ? '' : 'disabled'}>購買<br><small>${esc(priceText(it.price))}</small></button>`}</div>`;
       };
-      $('#shop .packs').innerHTML = `<div class="sec-title">禮包與兌換</div>${SHOP.map(packRow).join('')}`;
+      // 星砂補給：免費、沒有標價、按了直接入帳（沒有確認或結帳步驟）——刻意不做成「一排價位」的儲值商店樣子
+      const freeRow = (it) => `<div class="shop-row free${fxId === it.id ? ' fx-flash' : ''}"><div><b>${esc(it.name)}</b><div class="d">${esc(it.desc)}</div></div>
+          <button class="buy" data-act="claimFree" data-id="${it.id}">領取<br><small>免費</small></button></div>`;
+      $('#shop .packs').innerHTML = `<div class="sec-title">星砂補給</div><div class="d small">隨時可以領，不需要任何東西。</div>${SHOP.filter((x) => x.free).map(freeRow).join('')}
+        <div class="sec-title">禮包與兌換</div>${SHOP.filter((x) => !x.free).map(packRow).join('')}`;
       $('#shop .shop-foot').textContent = PAY_NOTE; // 全商城唯一一處說明（擁有者指示：標語拿掉，只留一處不擋路的小字）
       if (!$('#shop').classList.contains('show')) show('shop');
     },
@@ -3156,8 +3193,8 @@ function createUI(actions) {
       else if (m.type === 'gacha') {
         const pityHit = m.results.some((r) => r.pity), tier = Math.max(0, ...m.results.map((r) => r.rarity));
         const toPending = m.results.filter((r) => r.where === 'pending').length, auto = m.results.filter((r) => r.where === 'auto');
-        const cards = m.results.map((r) => { const w = whereText({ ...r.item, where: r.where, salvaged: r.salvaged });
-          return `<div class="gcard r${r.rarity}" style="--c:${RARITIES[r.rarity].color}">
+        const cards = m.results.map((r, i) => { const w = whereText({ ...r.item, where: r.where, salvaged: r.salvaged });
+          return `<div class="gcard r${r.rarity}" data-rar="${r.rarity}" style="--c:${RARITIES[r.rarity].color};--i:${i}">
           <span class="rn">${RARITIES[r.rarity].name}${r.pity ? '・保底' : ''}</span><b>${esc(gearName(r.item))}</b><span>${esc(fmtMod(gearMods(r.item)[0]))}</span>${w ? `<span class="sv${r.where === 'pending' ? ' pend' : ''}">${esc(w)}</span>` : ''}</div>`; });
         const rv = reveal(cards, tier, RARITIES[tier].color, m.skip);
         html = `<h3>祈燈結果</h3>${rv.html}
@@ -3168,7 +3205,7 @@ function createUI(actions) {
       } else if (m.type === 'wgacha') {
         const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
         const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.refund);
-        const cards = m.results.map((r) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
+        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
         const rv = reveal(cards, hit ? 4 : 0, hit ? (hit.weapon ? WEAPONS[hit.weapon].color : '#ffc85a') : '#c9cfe6', m.skip);
         html = `<h3>武器祈燈結果</h3>${rv.html}
           ${got.length ? '<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>' : ''}
@@ -3405,7 +3442,7 @@ const ui = createUI({
   weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear({ open: null, fx: { kind: 'weapon' } }); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
-    if (!it || !chk.ok) return;
+    if (!it || it.free || !chk.ok) return;
     const lines = [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}。`];
     if (it.gives.gear !== undefined) lines.push(...spaceLines(1));
     ui.shopModal({ type: 'confirm', title: '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: '購買' });
@@ -3417,6 +3454,11 @@ const ui = createUI({
     if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
     persist(); refreshShop(it.id);
     ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
+  },
+  claimFree: (d) => { // 星砂補給：免費，直接入帳，不經過確認框（不做成結帳流程）
+    const it = shopItem(d.id);
+    if (!it?.free || !buyItem(profile, it.id, shopRand, Date.now()).ok) return;
+    persist(); refreshShop(it.id); ui.toast(`已領取：${it.desc}`);
   },
   shopClose: () => ui.shopModal(null),
   shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
