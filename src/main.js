@@ -254,6 +254,8 @@ function drawStick() {
   g.fillStyle = 'rgba(255,230,180,0.55)'; g.beginPath(); g.arc(ox + dx, oy + dy, R * 0.42, 0, Math.PI * 2); g.fill();
 }
 
+// 同步量測入口：頁面被判定為隱藏時 rAF 會完全停止，改由外部直接呼叫 window.__perfRun() 一次跑完整段量測
+if (perf?.sync) window.__perfRun = () => { let n = 0; while (!perf.done && n++ < 100000) perfFrame(performance.now(), 1 / 60); return perf.report?.text; };
 if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
   mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true;
   renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
