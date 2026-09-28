@@ -6,17 +6,18 @@
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
+export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
 
 export function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
-    gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null } },
+    gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null }, pending: [] },
     chapters: { cleared: [], best: {} },
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
@@ -26,6 +27,8 @@ export function defaultProfile() {
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
     // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
     weapons: { owned: [], equipped: null },
+    // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
+    settings: { autoSalvage: -1, skipAnim: false },
   };
 }
 
@@ -50,6 +53,14 @@ export const MIGRATIONS = {
   1: (d) => ({ ...d, stardust: 0, tickets: 0, gacha: { pity: 0, total: 0 }, shop: { bought: {}, history: [] }, daily: { last: null }, v: 2 }),
   // v2 → v3：加入專屬武器（擁有清單、已裝備）與武器祈燈的保底計數，原有進度原樣保留
   2: (d) => ({ ...d, weapons: { owned: [], equipped: null }, gacha: { ...(d.gacha || {}), wpity: 0 }, v: 3 }),
+  // v3 → v4：加入暫存區與設定（自動分解預設關閉）；拿掉已下架的「模擬購買」品項紀錄（不算存檔錯誤，所以在這裡清，不交給修復）
+  3: (d) => {
+    const gone = (id) => !SHOP.some((x) => x.id === id);
+    const shop = isObj(d.shop) ? { ...d.shop } : d.shop;
+    if (isObj(shop?.bought)) shop.bought = Object.fromEntries(Object.entries(shop.bought).filter(([id]) => !gone(id)));
+    if (Array.isArray(shop?.history)) shop.history = shop.history.filter((h) => !isObj(h) || !gone(h.id));
+    return { ...d, shop, gear: isObj(d.gear) ? { ...d.gear, pending: [] } : d.gear, settings: { autoSalvage: -1, skipAnim: false }, v: 4 };
+  },
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -130,6 +141,12 @@ export function sanitize(d) {
       if (out.gear.items.length >= MAX_ITEMS) { fix('裝備超過上限，多的移除'); break; }
       uids.add(item.uid); out.gear.items.push(item);
     }
+    if (Array.isArray(d.gear.pending)) for (const it of d.gear.pending) {
+      const item = sanitizeItem(it);
+      if (!item || uids.has(item.uid)) { fix('移除暫存區一件不合法或重複的裝備'); continue; }
+      if (out.gear.pending.length >= PENDING_MAX) { fix('暫存區超過上限，多的移除'); break; }
+      uids.add(item.uid); out.gear.pending.push(item);
+    } else if (d.gear.pending !== undefined) fix('暫存區型別不對，重設');
     if (isObj(d.gear.equipped)) {
       for (const slot of Object.keys(out.gear.equipped)) {
         const uid = d.gear.equipped[slot];
@@ -189,6 +206,13 @@ export function sanitize(d) {
     const eq = d.weapons.equipped;
     if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
   } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
+  // ---- v4 設定 ----
+  if (isObj(d.settings)) {
+    const a = d.settings.autoSalvage;
+    if (Number.isInteger(a) && a >= -1 && a <= AUTO_SALVAGE_MAX) out.settings.autoSalvage = a;
+    else if (a !== undefined) fix(`自動分解門檻不合法（${JSON.stringify(a)}），改為關閉`);
+    out.settings.skipAnim = d.settings.skipAnim === true;
+  } else if (d.settings !== undefined) fix('settings 型別不對，重設');
   return { profile: out, notes };
 }
 const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));

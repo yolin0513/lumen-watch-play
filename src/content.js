@@ -108,33 +108,33 @@ export const WEAPONS = {
     name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
     desc: ['一開始就一次落三顆星的強化落星', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
     lv: [
-      { dmg: 42, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 56, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 56, cd: 1.35, count: 3, radius: 68, delay: 0.45 },
-      { dmg: 56, cd: 1.35, count: 4, radius: 68, delay: 0.45 },
-      { dmg: 72, cd: 1.25, count: 5, radius: 74, delay: 0.4 },
+      { dmg: 40, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 54, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 54, cd: 1.35, count: 3, radius: 68, delay: 0.45 },
+      { dmg: 54, cd: 1.35, count: 4, radius: 68, delay: 0.45 },
+      { dmg: 70, cd: 1.25, count: 5, radius: 74, delay: 0.4 },
     ],
   },
   twinblade: {
     name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
-    desc: ['一開始就同時擲出兩把大光刃', '傷害 +35%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
+    desc: ['一開始就同時擲出兩把大光刃', '傷害 +30%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
     lv: [
-      { dmg: 16, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
-      { dmg: 22, cd: 1.1, count: 2, range: 200, speed: 380, size: 15 },
-      { dmg: 22, cd: 1.1, count: 3, range: 240, speed: 400, size: 16 },
-      { dmg: 22, cd: 0.85, count: 3, range: 240, speed: 420, size: 16 },
-      { dmg: 29, cd: 0.85, count: 4, range: 250, speed: 440, size: 18 },
+      { dmg: 15, cd: 1.15, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 20, cd: 1.15, count: 2, range: 200, speed: 380, size: 15 },
+      { dmg: 20, cd: 1.15, count: 3, range: 240, speed: 400, size: 16 },
+      { dmg: 20, cd: 0.85, count: 3, range: 240, speed: 420, size: 16 },
+      { dmg: 27, cd: 0.85, count: 4, range: 250, speed: 440, size: 18 },
     ],
   },
   emberbow: {
     name: '燼羽弓', color: '#ff6a3a', kind: 'bolt', exclusive: true,
-    desc: ['三支穿透火箭，命中會讓敵人持續燃燒', '燃燒更久、傷害 +30%', '箭 +1、穿透 +1', '射速加快', '箭 +1、燃燒大幅強化'],
+    desc: ['三支穿透火箭，命中會讓敵人持續燃燒', '燃燒更久、傷害 +25%', '箭 +1、穿透 +1', '射速加快', '箭 +1、燃燒大幅強化'],
     lv: [
-      { dmg: 14, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 6, burnT: 2 },
-      { dmg: 18, cd: 0.55, shots: 3, pierce: 2, speed: 460, burn: 8, burnT: 2.5 },
-      { dmg: 18, cd: 0.55, shots: 4, pierce: 3, speed: 480, burn: 8, burnT: 2.5 },
-      { dmg: 18, cd: 0.42, shots: 4, pierce: 3, speed: 500, burn: 8, burnT: 2.5 },
-      { dmg: 22, cd: 0.42, shots: 5, pierce: 3, speed: 520, burn: 14, burnT: 3 },
+      { dmg: 11, cd: 0.6, shots: 3, pierce: 2, speed: 460, burn: 4, burnT: 2 },
+      { dmg: 14, cd: 0.6, shots: 3, pierce: 2, speed: 460, burn: 6, burnT: 2.5 },
+      { dmg: 14, cd: 0.6, shots: 4, pierce: 3, speed: 480, burn: 6, burnT: 2.5 },
+      { dmg: 14, cd: 0.48, shots: 4, pierce: 3, speed: 500, burn: 6, burnT: 2.5 },
+      { dmg: 17, cd: 0.48, shots: 5, pierce: 3, speed: 520, burn: 11, burnT: 3 },
     ],
   },
 };
@@ -284,6 +284,8 @@ export const RARITIES = [
   { name: '史詩', color: '#c68cff', affixes: 3, salvage: 500 },
   { name: '傳說', color: '#ffc85a', affixes: 4, salvage: 1200 },
 ];
+// 自動分解門檻最高只能設到「稀有」（索引 2）：史詩、傳說永遠不會被自動分解，一定要玩家親手處理
+export const AUTO_SALVAGE_MAX = 2;
 export const GEAR_SLOTS = {
   lamp:  { name: '提燈', main: { stat: 'dmg',   pct:  [0.05, 0.08, 0.12, 0.17, 0.24] } },
   cloak: { name: '披風', main: { stat: 'maxHp', flat: [10, 18, 28, 42, 60] } },
@@ -308,18 +310,16 @@ export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 export const SLOTS = { weapon: 4, passive: 4 };
 export const MAX_LV = 5;
 
-// ---- 商城（全部模擬，不接任何付款） ----
-// 貨幣：燈油（局內賺）、星砂（通關與每日補給賺，也可「模擬購買」取得）、祈燈券（每日補給、禮包）。
+// ---- 商城（不接任何付款；所有價格都是遊戲內貨幣） ----
+// 貨幣：燈油（局內賺）、星砂（通關、每日補給、用燈油兌換）、祈燈券（每日補給、禮包）。
 // 商城賣的每一樣東西，玩遊戲都拿得到：星砂靠通關＋每日補給，祈燈券靠每日補給，裝備靠通關掉落。
-// 價格標示：模擬購買的項目寫「模擬 N 點」（虛構單位，不對應任何真實幣值）；其他項目用遊戲內貨幣標價。
 export const DAILY = { oil: 150, stardust: 15, tickets: 1 };
 export const SHOP = [
-  // kind: sim＝模擬購買（不花任何遊戲內貨幣，按下只走模擬流程）；game＝用遊戲內貨幣買
-  { id: 'dust_s', kind: 'sim', name: '一小袋星砂', desc: '星砂 ×60', simPoints: 30, gives: { stardust: 60 } },
-  { id: 'dust_m', kind: 'sim', name: '一瓶星砂',   desc: '星砂 ×330', simPoints: 150, gives: { stardust: 330 } },
-  { id: 'dust_l', kind: 'sim', name: '一箱星砂',   desc: '星砂 ×1400', simPoints: 600, gives: { stardust: 1400 } },
-  { id: 'starter', kind: 'game', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
-  { id: 'oilbox',  kind: 'game', name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
+  // 價格一律是遊戲內貨幣（燈油／星砂／祈燈券），全部靠遊玩取得。M5 起拿掉「模擬購買」品項（它的標價不是遊戲內貨幣）。
+  // 兌換比例要保證來回換一定虧（燈油→星砂→燈油 < 1），否則會變成無限刷貨幣；shop-test 會檢查。
+  { id: 'starter', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
+  { id: 'oilbox',  name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
+  { id: 'dustex',  name: '星砂兌換', desc: '星砂 ×60（用燈油換）', price: { oil: 1500 }, gives: { stardust: 60 } },
 ];
 
 // ---- 祈燈（抽獎）----

@@ -3,10 +3,10 @@
 import { createInput } from './input.js';
 import { createSim, makeRng, VW } from './sim.js';
 import { createRenderer } from './render.js';
-import { createUI, gearName } from './ui.js';
+import { createUI, gearName, autoSalvageText } from './ui.js';
 import { CHAPTERS, CHAPTER1, WEAPON_GACHA } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
-import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
+import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
 import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
@@ -56,81 +56,118 @@ function persist() {
 }
 
 // ---------- 介面動作 ----------
-const refreshGear = (uid) => ui.gear(profile, uid);
-// 商城：抽獎與購買用獨立亂數（不影響關卡的 seed）；busy 期間忽略重複點擊，避免連點買兩次
+// 裝備畫面的狀態：打開的詳細頁、批量分解的勾選、目前的底部面板、剛成功的動作（給按鈕回饋用）
+let gearView = { open: null, sel: null, sheet: null, fx: null };
+const refreshGear = (patch = {}) => { gearView = { ...gearView, fx: null, ...patch }; ui.gear(profile, gearView); };
+const allGear = () => [...profile.gear.items, ...profile.gear.pending];
+// 商城：抽獎與購買用獨立亂數（不影響關卡的 seed）
 const shopRand = makeRng((Date.now() ^ 0x5bd1e995) >>> 0);
-let shopBusy = false;
-const refreshShop = () => ui.shop(profile, Date.now());
+const refreshShop = (fx = null) => ui.shop(profile, Date.now(), fx);
 const CUR = { stardust: '星砂', tickets: '祈燈券', oil: '燈油' };
+// 手機的返回手勢／返回鍵：進子頁面時推一筆瀏覽紀錄，按返回就回主選單，而不是直接離開遊戲
+let subPushed = false;
+function enterSub() { if (subPushed) return; try { history.pushState({ sub: 1 }, ''); subPushed = true; } catch { /* 沒有 history（測試環境）就算了 */ } }
+addEventListener('popstate', () => { subPushed = false; if (mode === 'menu' && ['chapters', 'talents', 'gear', 'shop'].some((id) => document.getElementById(id)?.classList.contains('show'))) toMenu(); });
+// 抽之前就把空間講清楚：背包放不下的去暫存區（不分解）；自動分解是玩家自己開的才會發生
+function spaceLines(n) {
+  const sp = gearSpace(profile), auto = autoSalvageLevel(profile), out = [];
+  if (sp.bag >= n) out.push(`背包剩 ${sp.bag} 格，放得下。`);
+  else out.push({ warn: true, text: `背包只剩 ${sp.bag} 格：多出來的最多 ${n - sp.bag} 件會先放進「暫存區」，不會被分解。之後到「裝備」畫面收進背包或分解。` });
+  if (auto >= 0) out.push({ warn: true, text: `你開了自動分解（${autoSalvageText(auto)}）：抽到這些稀有度會直接變成燈油。史詩與傳說不會被自動分解。` });
+  return out;
+}
 const ui = createUI({
-  openChapters: () => ui.chapters(profile),
-  openTalents: () => ui.talents(profile),
-  openGear: () => ui.gear(profile),
-  openShop: () => refreshShop(),
-  claimDaily: () => { if (claimDaily(profile, Date.now()).ok) { persist(); ui.toast('已領取今日補給'); } refreshShop(); },
+  openChapters: () => { enterSub(); ui.chapters(profile); },
+  openTalents: () => { enterSub(); ui.talents(profile); },
+  openGear: () => { enterSub(); gearView = { open: null, sel: null, sheet: null, fx: null }; ui.gear(profile, gearView); },
+  openShop: () => { enterSub(); refreshShop(); },
+  claimDaily: () => { const ok = claimDaily(profile, Date.now()).ok; if (ok) { persist(); ui.toast('已領取今日補給'); } refreshShop(ok ? 'daily' : null); },
   gachaAsk: (d) => {
     const n = Number(d.n), pay = gachaPay(profile, n);
     if (!pay) return;
-    ui.shopModal({ type: 'confirm', title: `模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'gachaGo', data: { n }, ok: '確認（模擬）' });
+    if (gearSpace(profile).total < n) { ui.toast('背包與暫存區都不夠放，先到「裝備」畫面整理。'); return; }
+    ui.shopModal({ type: 'confirm', title: n === 1 ? '祈燈 ×1' : '十連祈燈', lines: [`使用 ${gachaCost(n)[pay]} ${CUR[pay]}抽 ${n} 次。`, ...spaceLines(n)], act: 'gachaGo', data: { n }, ok: '祈燈' });
   },
   gachaGo: (d) => {
-    if (shopBusy) return;
     const n = Number(d.n), pay = gachaPay(profile, n);
     const r = pay && drawGacha(profile, shopRand, n, pay);
-    if (!r?.ok) { ui.shopModal(null); return; }
-    persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results });
+    if (!r?.ok) { ui.shopModal(null); if (r?.reason === 'space') ui.toast('背包與暫存區都不夠放，先到「裝備」畫面整理。'); return; }
+    persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results, skip: profile.settings.skipAnim });
   },
   wgachaAsk: (d) => {
     const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
     if (!pay) return;
-    ui.shopModal({ type: 'confirm', title: `武器祈燈：模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n, WEAPON_GACHA)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'wgachaGo', data: { n }, ok: '確認（模擬）' });
+    ui.shopModal({ type: 'confirm', title: n === 1 ? '武器祈燈 ×1' : '十連武器祈燈', lines: [`使用 ${gachaCost(n, WEAPON_GACHA)[pay]} ${CUR[pay]}抽 ${n} 次。`], act: 'wgachaGo', data: { n }, ok: '祈燈' });
   },
   wgachaGo: (d) => {
-    if (shopBusy) return;
     const n = Number(d.n), pay = gachaPay(profile, n, WEAPON_GACHA);
     const r = pay && drawWeaponGacha(profile, shopRand, n, pay);
     if (!r?.ok) { ui.shopModal(null); return; }
-    persist(); refreshShop(); ui.shopModal({ type: 'wgacha', results: r.results });
+    persist(); refreshShop(); ui.shopModal({ type: 'wgacha', results: r.results, skip: profile.settings.skipAnim });
   },
-  weaponEquip: (d) => { if (equipWeapon(profile, d.id).ok) persist(); refreshGear(null); },
-  weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear(null); },
+  revealSkip: () => ui.revealDone(),
+  toggleSkipAnim: () => { profile.settings.skipAnim = !profile.settings.skipAnim; persist(); refreshShop(); },
+  gotoGear: () => { ui.shopModal(null); gearView = { open: null, sel: null, sheet: null, fx: null }; ui.gear(profile, gearView); },
+  weaponEquip: (d) => { const ok = equipWeapon(profile, d.id).ok; if (ok) persist(); refreshGear({ open: null, fx: ok ? { kind: 'weapon' } : null }); },
+  weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear({ open: null, fx: { kind: 'weapon' } }); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
     if (!it || !chk.ok) return;
-    const lines = it.kind === 'sim'
-      ? [`「${it.name}」：${it.desc}`, `標示「模擬 ${it.simPoints} 點」為虛構單位。`, '這是模擬交易，不會扣款，也不需要填寫任何資料。']
-      : [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}（遊戲內貨幣）。`];
-    ui.shopModal({ type: 'confirm', title: it.kind === 'sim' ? '確認模擬購買？' : '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: it.kind === 'sim' ? '確認（模擬）' : '購買' });
+    const lines = [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}。`];
+    if (it.gives.gear !== undefined) lines.push(...spaceLines(1));
+    ui.shopModal({ type: 'confirm', title: '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: '購買' });
   },
   buyGo: (d) => {
-    if (shopBusy) return;
     const it = shopItem(d.id);
     if (!it) return;
-    const finish = () => {
-      const r = buyItem(profile, it.id, shopRand, Date.now());
-      shopBusy = false;
-      if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
-      persist(); refreshShop();
-      ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
-    };
-    if (it.kind === 'sim') { shopBusy = true; ui.shopModal({ type: 'processing' }); setTimeout(finish, 900); } // 模擬流程的「處理中」畫面
-    else finish();
+    const r = buyItem(profile, it.id, shopRand, Date.now());
+    if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
+    persist(); refreshShop(it.id);
+    ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
   },
-  shopClose: () => { if (!shopBusy) ui.shopModal(null); },
+  shopClose: () => ui.shopModal(null),
   shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
-  menu: () => toMenu(),
-  startChapter: (d) => { const id = Number(d.id); if (chapterUnlocked(profile, id)) newRun(id); },
+  menu: () => { if (subPushed) { subPushed = false; try { history.back(); } catch { /* 無 */ } } toMenu(); },
+  startChapter: (d) => {
+    const id = Number(d.id);
+    if (!chapterUnlocked(profile, id)) return;
+    // 一局最多掉 3 件；背包與暫存區都放不下時，放不下的只能分解——先問玩家，不在他不知情時發生
+    const sp = gearSpace(profile);
+    if (sp.total < 3 && !confirm(`背包和暫存區只剩 ${sp.total} 格。\n這局掉落的裝備放不下時，會直接分解成燈油（包括稀有度高的）。\n\n仍要出發嗎？（取消後可以先到「裝備」畫面整理）`)) return;
+    newRun(id);
+  },
   retry: () => newRun(chapterId),
-  buyTalent: (d) => { if (buyTalent(profile, d.id).ok) persist(); ui.talents(profile); },
-  gearOpen: (d) => refreshGear(Number(d.uid)),
-  gearClose: () => refreshGear(null),
-  gearEquip: (d) => { equip(profile, Number(d.uid)); persist(); refreshGear(Number(d.uid)); },
-  gearUnequip: (d) => { const it = profile.gear.items.find((i) => i.uid === Number(d.uid)); if (it) unequip(profile, it.slot); persist(); refreshGear(Number(d.uid)); },
-  gearUpgrade: (d) => { if (upgradeGear(profile, Number(d.uid)).ok) persist(); refreshGear(Number(d.uid)); },
+  buyTalent: (d) => { const ok = buyTalent(profile, d.id).ok; if (ok) persist(); ui.talents(profile, ok ? d.id : null); },
+  gearOpen: (d) => refreshGear({ open: Number(d.uid), sheet: null }),
+  gearClose: () => refreshGear({ open: null, sheet: null }),
+  gearEquip: (d) => { const uid = Number(d.uid); equip(profile, uid); persist(); refreshGear({ open: uid, fx: { uid, kind: 'equip' } }); },
+  gearUnequip: (d) => { const uid = Number(d.uid), it = profile.gear.items.find((i) => i.uid === uid); if (it) unequip(profile, it.slot); persist(); refreshGear({ open: uid }); },
+  gearUpgrade: (d) => { const uid = Number(d.uid), ok = upgradeGear(profile, uid).ok; if (ok) persist(); refreshGear({ open: uid, fx: ok ? { uid, kind: 'up' } : null }); },
   gearSalvage: (d) => {
-    const it = profile.gear.items.find((i) => i.uid === Number(d.uid));
+    const it = allGear().find((i) => i.uid === Number(d.uid));
     if (!it || (it.rarity >= 2 && !confirm(`確定分解「${gearName(it)}」？`))) return;
-    salvage(profile, it.uid); persist(); refreshGear(null);
+    salvage(profile, it.uid); persist(); refreshGear({ open: null });
+  },
+  // 暫存區
+  pendingClaim: (d) => { const uid = Number(d.uid); if (claimPending(profile, uid).ok) { persist(); refreshGear({ open: null, fx: { uid, kind: 'claim' } }); } },
+  pendingClaimAll: () => { let n = 0; for (const it of [...profile.gear.pending].sort((a, b) => b.rarity - a.rarity)) if (claimPending(profile, it.uid).ok) n++; if (n) persist(); refreshGear({ open: null }); if (n) ui.toast(`收進背包 ${n} 件`); },
+  // 自動分解門檻（預設關閉；要玩家自己打開）
+  autoSalvOpen: () => refreshGear({ open: null, sheet: 'auto' }),
+  autoSalvSet: (d) => { if (setAutoSalvage(profile, Number(d.r)).ok) persist(); refreshGear({ sheet: null, fx: { kind: 'auto' } }); },
+  // 批量分解：勾選 → 確認（列出各稀有度件數與燈油）→ 分解；已裝備的不能勾，也會被 salvageMany 擋下
+  gearBatch: () => refreshGear({ open: null, sheet: null, sel: new Set() }),
+  gearBatchCancel: () => refreshGear({ sel: null, sheet: null }),
+  gearPick: (d) => { const s = new Set(gearView.sel), uid = Number(d.uid); if (s.has(uid)) s.delete(uid); else s.add(uid); refreshGear({ sel: s }); },
+  gearPickTier: (d) => {
+    const r = Number(d.r), eq = profile.gear.equipped;
+    refreshGear({ sel: new Set(r < 0 ? [] : allGear().filter((it) => it.rarity <= r && eq[it.slot] !== it.uid).map((it) => it.uid)) });
+  },
+  gearBatchAsk: () => { if (gearView.sel?.size) refreshGear({ sheet: 'batch' }); },
+  gearBatchBack: () => refreshGear({ sheet: null }),
+  gearBatchGo: () => {
+    const r = salvageMany(profile, [...(gearView.sel || [])]);
+    persist(); refreshGear({ sel: null, sheet: null });
+    ui.toast(`分解 ${r.count} 件，燈油 +${r.oil.toLocaleString('zh-Hant')}${r.skipped.length ? `（${r.skipped.length} 件裝備中，已略過）` : ''}`);
   },
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
@@ -167,7 +204,7 @@ function toMenu() {
     sim.state.god = true;
     renderer = createRenderer(CHAPTER1);
   }
-  shown = null; ui.menu(profile, canClaimDaily(profile, Date.now()));
+  shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
 function newRun(id) {
   chapterId = id;

@@ -1,10 +1,10 @@
 // 商城與祈燈（抽獎）：純邏輯。存檔物件（profile）由呼叫端傳入並就地修改；亂數與時間由呼叫端注入。
-// 🔴 全部是模擬：不接任何付款、不收任何資料、不連外。「模擬購買」的項目只走流程，不扣任何東西。
+// 🔴 不接任何付款、不收任何資料、不連外。所有價格都是遊戲內貨幣（燈油／星砂／祈燈券），全部靠遊玩取得。
 // 機率只有一份來源：content.js 的 GACHA。抽獎（rollRarity）與商城畫面（gachaOdds → ui.js）都從它算；
 // tools/shop-test.mjs 會把「畫面上的百分比」和「實際抽 N 次量到的分布」這兩個獨立來源拿來比對。
 import { SHOP, GACHA, WEAPON_GACHA, WEAPONS, DAILY, RARITIES } from './content.js';
-import { rollGear, salvageValue } from './meta.js';
-import { MAX_ITEMS, MAX_HISTORY } from './save.js';
+import { rollGear, storeGear, gearSpace } from './meta.js';
+import { MAX_HISTORY } from './save.js';
 
 // ---- 機率（給畫面顯示）----
 // base：單抽機率（照表）。composite：長期下每一抽的實際機率（含保底）。
@@ -49,24 +49,24 @@ export function gachaPay(profile, count, table = GACHA) {
 }
 
 // 祈燈：count 抽（1 或 10），pay＝'tickets' | 'stardust'（遊戲內貨幣）。
-// 抽到的裝備進背包；背包滿就自動分解成燈油（另列）。
+// 抽到的裝備交給 storeGear：背包滿就放暫存區、不分解（只有玩家自己設的自動分解門檻以下才會分解）。
+// 背包＋暫存區放不下 count 件就整個拒絕、不扣錢——付款前就擋，抽到的東西絕不會因為沒地方放而消失。
 export function drawGacha(profile, rand, count, pay) {
   if (count !== 1 && count !== 10) return { ok: false, reason: 'count' };
   const cost = gachaCost(count)[pay];
   if (cost === undefined) return { ok: false, reason: 'pay' };
   if (profile[pay] < cost) return { ok: false, reason: pay };
+  if (gearSpace(profile).total < count) return { ok: false, reason: 'space' };
   profile[pay] -= cost;
   const results = [];
   let autoSalvage = 0;
   for (let i = 0; i < count; i++) {
     const { rarity, pity } = rollRarity(profile, rand);
     const item = rollGear(profile, rand, RARITIES.map((_, j) => (j === rarity ? 1 : 0)), rarity);
-    let salvaged = 0;
-    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(item);
-    else { salvaged = salvageValue(item); autoSalvage += salvaged; }
-    results.push({ rarity, pity, item, salvaged });
+    const where = storeGear(profile, item), salvaged = item.salvaged || 0;
+    autoSalvage += salvaged;
+    results.push({ rarity, pity, item, where, salvaged });
   }
-  profile.oil += autoSalvage;
   return { ok: true, results, cost: { [pay]: cost }, autoSalvage };
 }
 
@@ -107,30 +107,30 @@ export function claimDaily(profile, now) {
 }
 
 // ---- 商城購買 ----
-// kind 'sim'：模擬購買——不收任何東西，只走流程並記錄；kind 'game'：用遊戲內貨幣（星砂／燈油）買。
+// 價格一律是遊戲內貨幣（燈油／星砂／祈燈券）。
 export function shopItem(id) { return SHOP.find((x) => x.id === id); }
 export function canBuy(profile, id) {
   const item = shopItem(id);
   if (!item) return { ok: false, reason: 'missing' };
   if (item.limit && (profile.shop.bought[id] || 0) >= item.limit) return { ok: false, reason: 'limit' };
-  if (item.kind === 'game') for (const [cur, n] of Object.entries(item.price)) if (profile[cur] < n) return { ok: false, reason: cur };
+  for (const [cur, n] of Object.entries(item.price)) if (profile[cur] < n) return { ok: false, reason: cur };
+  if (item.gives.gear !== undefined && gearSpace(profile).total < 1) return { ok: false, reason: 'space' }; // 附裝備的禮包：沒地方放就不賣
   return { ok: true, item };
 }
 export function buyItem(profile, id, rand, now) {
   const chk = canBuy(profile, id);
   if (!chk.ok) return chk;
   const item = chk.item;
-  if (item.kind === 'game') for (const [cur, n] of Object.entries(item.price)) profile[cur] -= n;
+  for (const [cur, n] of Object.entries(item.price)) profile[cur] -= n;
   const g = item.gives, gear = [];
   profile.oil += g.oil || 0; profile.stardust += g.stardust || 0; profile.tickets += g.tickets || 0;
   if (g.gear !== undefined) {
     const it = rollGear(profile, rand, RARITIES.map((_, j) => (j === g.gear ? 1 : 0)), g.gear);
-    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(it);
-    else { it.salvaged = salvageValue(it); profile.oil += it.salvaged; }
+    it.where = storeGear(profile, it);
     gear.push(it);
   }
   profile.shop.bought[id] = (profile.shop.bought[id] || 0) + 1;
   profile.shop.history.push({ t: now, id });
   if (profile.shop.history.length > MAX_HISTORY) profile.shop.history.splice(0, profile.shop.history.length - MAX_HISTORY);
-  return { ok: true, simulated: item.kind === 'sim', item, gear };
+  return { ok: true, item, gear };
 }

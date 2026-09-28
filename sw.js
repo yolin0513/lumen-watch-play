@@ -1,7 +1,7 @@
 // Service Worker：預快取全部檔案，離線可玩。
 // VERSION 由 tools/build.mjs 依 ASSETS 內容雜湊自動蓋章——任何檔案一改，sw.js 內容就變，瀏覽器才會裝新版。
 // 新增/改名檔案要加進 ASSETS（tools/pwa-check.mjs 會檢查漏列）。路徑一律相對，GitHub Pages 子路徑才不會指錯。
-const VERSION = 'db0319866c9c';
+const VERSION = 'e594c5bdfeeb';
 const CACHE = `lumen-${VERSION}`;
 const ASSETS = [
   './',

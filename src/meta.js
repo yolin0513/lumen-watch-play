@@ -1,8 +1,8 @@
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX } from './content.js';
 import { aggregate } from './stats.js';
-import { MAX_ITEMS } from './save.js';
+import { MAX_ITEMS, PENDING_MAX } from './save.js';
 
 // ---- 加成：天賦＋已裝備的裝備 → modifier 陣列（交給 createSim 的 meta） ----
 export function talentMods(profile) {
@@ -64,14 +64,66 @@ export function upgradeGear(profile, uid) {
   return { ok: true, cost };
 }
 export const salvageValue = (it) => Math.round(RARITIES[it.rarity].salvage * (1 + 0.25 * (it.lv - 1)));
+// 找一件裝備在哪裡：背包（items）或暫存區（pending）
+function locate(profile, uid) {
+  for (const list of [profile.gear.items, profile.gear.pending]) { const i = list.findIndex((x) => x.uid === uid); if (i >= 0) return { list, i, it: list[i] }; }
+  return null;
+}
+// 單件分解：玩家在詳細頁親手按的，已裝備的也可以（先卸下）
 export function salvage(profile, uid) {
-  const i = profile.gear.items.findIndex((x) => x.uid === uid);
-  if (i < 0) return { ok: false };
-  const it = profile.gear.items[i];
+  const at = locate(profile, uid);
+  if (!at) return { ok: false };
+  const it = at.it;
   if (profile.gear.equipped[it.slot] === uid) profile.gear.equipped[it.slot] = null;
-  profile.gear.items.splice(i, 1);
+  at.list.splice(at.i, 1);
   const v = salvageValue(it); profile.oil += v;
   return { ok: true, oil: v };
+}
+// 批量分解：已裝備的一律跳過（批量勾選很容易順手勾到，裝備中的不可以這樣被分解掉）
+export function salvageMany(profile, uids) {
+  let oil = 0, count = 0; const skipped = [];
+  for (const uid of new Set(uids)) {
+    const at = locate(profile, uid);
+    if (!at) continue;
+    if (profile.gear.equipped[at.it.slot] === uid) { skipped.push(uid); continue; }
+    at.list.splice(at.i, 1);
+    oil += salvageValue(at.it); count++;
+  }
+  profile.oil += oil;
+  return { ok: true, count, oil, skipped };
+}
+// 暫存區 → 背包（背包有空位才行）
+export function claimPending(profile, uid) {
+  const i = profile.gear.pending.findIndex((x) => x.uid === uid);
+  if (i < 0) return { ok: false, reason: 'missing' };
+  if (profile.gear.items.length >= MAX_ITEMS) return { ok: false, reason: 'full' };
+  profile.gear.items.push(...profile.gear.pending.splice(i, 1));
+  return { ok: true };
+}
+
+// ---- 新裝備的去處：全遊戲唯一一處。關卡掉落、裝備祈燈、禮包都走 storeGear ----
+// 1. 玩家自己設了自動分解門檻、且這件在門檻以下 → 分解成燈油（'auto'）。門檻最高到 AUTO_SALVAGE_MAX，史詩與傳說永遠不會自動分解。
+// 2. 背包有空位 → 進背包（'bag'）。
+// 3. 背包滿 → 進暫存區（'pending'），不分解；玩家之後到裝備畫面收進背包或分解。
+// 4. 暫存區也滿 → 分解（'overflow'）。祈燈與禮包在付款前就檢查空間，不會走到這步；關卡掉落只有在開局時警告過、玩家仍選擇出發才可能走到。
+// 理由：M4 以前背包滿就直接分解，保底抽到的傳說在玩家不知情下變成燈油。高稀有度的東西不可以在玩家沒有做出選擇時消失。
+export const autoSalvageLevel = (profile) => Math.min(profile.settings?.autoSalvage ?? -1, AUTO_SALVAGE_MAX);
+export function gearSpace(profile) {
+  const bag = Math.max(0, MAX_ITEMS - profile.gear.items.length), pending = Math.max(0, PENDING_MAX - profile.gear.pending.length);
+  return { bag, pending, total: bag + pending };
+}
+export function storeGear(profile, it) {
+  let where;
+  if (it.rarity <= autoSalvageLevel(profile)) where = 'auto';
+  else if (profile.gear.items.length < MAX_ITEMS) { profile.gear.items.push(it); return 'bag'; }
+  else if (profile.gear.pending.length < PENDING_MAX) { profile.gear.pending.push(it); return 'pending'; }
+  else where = 'overflow';
+  it.salvaged = salvageValue(it); profile.oil += it.salvaged;
+  return where;
+}
+export function setAutoSalvage(profile, level) {
+  if (!Number.isInteger(level) || level < -1 || level > AUTO_SALVAGE_MAX) return { ok: false };
+  profile.settings.autoSalvage = level; return { ok: true };
 }
 
 // ---- 燈油結算 ----
@@ -106,12 +158,8 @@ export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   const n = won ? 2 : t >= 240 ? 1 : 0;
   for (let i = 0; i < n; i++) drops.push(rollGear(profile, rand, chapter.reward.gear));
   if (firstClear) drops.push(rollGear(profile, rand, chapter.reward.gear.map((w, i) => (i >= 2 ? Math.max(w, 1) : w)), 2));
-  let autoSalvage = 0;
-  for (const it of drops) {
-    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(it);
-    else { const v = salvageValue(it); autoSalvage += v; it.salvaged = v; }
-  }
-  profile.oil += autoSalvage;
+  let autoSalvage = 0; // 分解成燈油的部分另列，不混進本局燈油（storeGear 已經入帳）
+  for (const it of drops) { it.where = storeGear(profile, it); autoSalvage += it.salvaged || 0; }
 
   if (won && firstClear) profile.chapters.cleared = [...profile.chapters.cleared, chapterId].sort();
   const best = profile.chapters.best[chapterId];
