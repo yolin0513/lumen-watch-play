@@ -233,4 +233,6 @@ function drawStick() {
 
 toMenu();
 if (LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
+// 升級或修復成功就立刻寫回：否則在玩家做任何動作前，每次開遊戲都會重新升級、重跳提示
+if (loaded.writable && ['migrated', 'repaired', 'corrupt'].includes(loaded.status)) persist();
 requestAnimationFrame(frame);
