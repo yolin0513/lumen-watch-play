@@ -103,27 +103,61 @@ export const WEAPONS = {
       { dmg: 75, cd: 0.9, max: 8, trigger: 28, radius: 84, arm: 0.4 },
     ],
   },
+  // ---- M7 第三批新增：打一條線、擊退、定點火力 ----
+  lance: { // 瞬間光束：整條線上的怪都受傷
+    name: '聚光槍', color: '#8fd0ff', kind: 'lance',
+    desc: ['朝最近的敵人射出一道光束，一整條線上的怪都會受傷', '傷害 +35%', '光束更長更寬', '同時射出兩道（前後）', '射速加快、傷害 +30%'],
+    lv: [
+      { dmg: 22, cd: 1.6, len: 300, w: 16, beams: 1 },
+      { dmg: 30, cd: 1.6, len: 300, w: 16, beams: 1 },
+      { dmg: 30, cd: 1.6, len: 360, w: 22, beams: 1 },
+      { dmg: 30, cd: 1.6, len: 360, w: 22, beams: 2 },
+      { dmg: 39, cd: 1.25, len: 380, w: 24, beams: 2 },
+    ],
+  },
+  pulse: { // 震波：傷害＋把怪推開
+    name: '燈鐘', color: '#ffe08a', kind: 'pulse',
+    desc: ['每隔一段時間敲響燈鐘，震波傷害並把周圍的怪推開', '範圍變大', '傷害 +50%、推得更遠', '敲得更快', '範圍與傷害大幅提升'],
+    lv: [
+      { dmg: 14, cd: 2.4, radius: 80, push: 70 },
+      { dmg: 14, cd: 2.4, radius: 96, push: 70 },
+      { dmg: 21, cd: 2.4, radius: 96, push: 95 },
+      { dmg: 21, cd: 1.8, radius: 104, push: 95 },
+      { dmg: 30, cd: 1.8, radius: 124, push: 110 },
+    ],
+  },
+  sentry: { // 定點火力：放下的小燈塔自己射擊
+    name: '燈塔哨', color: '#9fffb8', kind: 'sentry',
+    desc: ['在腳下立起小燈塔，會自己朝附近的怪射擊，一段時間後熄滅', '可同時存在 +1', '射得更快', '每次射兩發、射程更遠', '可同時存在 +1、傷害 +40%'],
+    lv: [
+      { dmg: 9,  cd: 3.2, max: 1, life: 10, fireCd: 0.55, range: 240, shots: 1 },
+      { dmg: 9,  cd: 3.2, max: 2, life: 10, fireCd: 0.55, range: 240, shots: 1 },
+      { dmg: 9,  cd: 3.2, max: 2, life: 10, fireCd: 0.42, range: 240, shots: 1 },
+      { dmg: 9,  cd: 3.0, max: 2, life: 11, fireCd: 0.42, range: 280, shots: 2 },
+      { dmg: 13, cd: 3.0, max: 3, life: 11, fireCd: 0.42, range: 280, shots: 2 },
+    ],
+  },
   // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
   starfall: {
     name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
     desc: ['一開始就一次落三顆星的強化落星', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
     lv: [
-      { dmg: 40, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 54, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 54, cd: 1.35, count: 3, radius: 68, delay: 0.45 },
-      { dmg: 54, cd: 1.35, count: 4, radius: 68, delay: 0.45 },
-      { dmg: 70, cd: 1.25, count: 5, radius: 74, delay: 0.4 },
+      { dmg: 37, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 49, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
+      { dmg: 49, cd: 1.4, count: 3, radius: 66, delay: 0.45 },
+      { dmg: 49, cd: 1.4, count: 4, radius: 66, delay: 0.45 },
+      { dmg: 62, cd: 1.3, count: 5, radius: 72, delay: 0.4 },
     ],
   },
   twinblade: {
     name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
     desc: ['一開始就同時擲出兩把大光刃', '傷害 +30%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
     lv: [
-      { dmg: 15, cd: 1.15, count: 2, range: 200, speed: 380, size: 15 },
-      { dmg: 20, cd: 1.15, count: 2, range: 200, speed: 380, size: 15 },
-      { dmg: 20, cd: 1.15, count: 3, range: 240, speed: 400, size: 16 },
-      { dmg: 20, cd: 0.85, count: 3, range: 240, speed: 420, size: 16 },
-      { dmg: 27, cd: 0.85, count: 4, range: 250, speed: 440, size: 18 },
+      { dmg: 18, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 23, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 23, cd: 1.0, count: 3, range: 240, speed: 420, size: 17 },
+      { dmg: 23, cd: 0.9, count: 3, range: 240, speed: 430, size: 17 },
+      { dmg: 26, cd: 0.9, count: 4, range: 250, speed: 450, size: 19 },
     ],
   },
   emberbow: {
@@ -154,6 +188,12 @@ export const RESONANCES = {
            stats: { dmg: 24, cd: 0.32, shots: 5, pierce: 99, speed: 520, shard: 3 } },
   orbit: { needs: 'lens', name: '星環',   desc: '光環擴張，並不斷向外拋射星光',
            stats: { dmg: 32, count: 6, radius: 68, spin: 4.4, size: 12, flingCd: 0.6 } },
+  lance:     { needs: 'stone', name: '天光槍',   desc: '四道光束同時射向四方，又長又寬、傷害大增',
+               stats: { dmg: 52, cd: 1.0, len: 440, w: 30, beams: 4 } },
+  pulse:     { needs: 'ember', name: '晨鐘',     desc: '震波範圍大增、敲得更快，推開整片菌群',
+               stats: { dmg: 42, cd: 1.3, radius: 150, push: 140 } },
+  sentry:    { needs: 'wick',  name: '燈塔群',   desc: '可同時立起五座燈塔，每座三連發、射得更快更遠',
+               stats: { dmg: 16, cd: 2.4, max: 5, life: 12, fireCd: 0.34, range: 320, shots: 3, pierce: 2 } },
   // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
   // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
   // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
@@ -172,9 +212,9 @@ export const RESONANCES = {
   mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
                stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
   starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下七顆星，幾乎不停歇',
-               stats: { dmg: 90, cd: 1.1, count: 7, radius: 82, delay: 0.35 } },
+               stats: { dmg: 78, cd: 1.15, count: 7, radius: 80, delay: 0.35 } },
   twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '五把巨大光刃高速來回，範圍與速度都再提升',
-               stats: { dmg: 32, cd: 0.75, count: 5, range: 270, speed: 480, size: 20 } },
+               stats: { dmg: 28, cd: 0.8, count: 5, range: 270, speed: 480, size: 20 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
 };
@@ -196,10 +236,22 @@ export const ENEMIES = {
   turret:   { name: '晶刺',   r: 14, hp: 60,  speed: 0,   dmg: 8,  xp: 4, oil: 3, ai: 'turret', fireCd: 2.8, shotDmg: 8, mass: 99 },
   blinker:  { name: '閃晶蛾', r: 10, hp: 16,  speed: 80,  dmg: 7,  xp: 2, oil: 2, ai: 'blink', blinkCd: 3.6, blinkWarn: 0.8 },
   shell:    { name: '晶甲蟲', r: 17, hp: 42,  speed: 38,  dmg: 11, xp: 4, oil: 3, ai: 'chase', armor: 0.6, mass: 3 },
+  // 第四章：灰燼坡
+  cinder:   { name: '燼蟲',   r: 10, hp: 20,  speed: 72,  dmg: 7,  xp: 2, oil: 2, ai: 'chase', deathZone: { r: 28, dur: 1.5, dmg: 5 } }, // 死後留下一灘火
+  golem:    { name: '焦岩獸', r: 22, hp: 160, speed: 34,  dmg: 16, xp: 7, oil: 5, ai: 'slam', armor: 0.7, mass: 5, slamR: 76, slamDmg: 12, windup: 0.9, slamCd: 4.5 },
+  // 第五章：凍星原
+  frostmoth:{ name: '霜蛾',   r: 11, hp: 22,  speed: 72,  dmg: 5,  xp: 2, oil: 2, ai: 'spit', keep: 170, fireCd: 2.4, shotDmg: 6, shotSpeed: 150, slowShot: { t: 1.4, k: 0.4 } }, // 冰針命中會減速
+  glider:   { name: '冰滑蟲', r: 12, hp: 30,  speed: 66,  dmg: 10, xp: 3, oil: 2, ai: 'lunge', lungeSpeed: 430, windup: 0.5, lungeT: 0.45, lungeCd: 2.2, range: 200 },
+  // 第六章：深根城
+  hive:     { name: '菌巢',   r: 24, hp: 240, speed: 0,   dmg: 8,  xp: 10, oil: 6, ai: 'hive', mass: 99, spawnCd: 3.2, spawn: { kind: 'mite', n: 2, max: 8 } },
+  rooter:   { name: '根鬚兵', r: 16, hp: 64,  speed: 44,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', armor: 0.7, mass: 3 },
   // 燈塔守衛
   boss1:    { name: '噬燈菌母', r: 42, hp: 40000, speed: 44, dmg: 14, xp: 0, oil: 0, ai: 'boss', mass: 50 },
   boss2:    { name: '沼母巨蛭', r: 40, hp: 52000, speed: 50, dmg: 13, xp: 0, oil: 0, ai: 'boss', mass: 50 },
   boss3:    { name: '晶心守衛', r: 44, hp: 70000, speed: 30, dmg: 18, xp: 0, oil: 0, ai: 'boss', mass: 50 },
+  boss4:    { name: '熔心巨獸', r: 46, hp: 110000, speed: 40, dmg: 20, xp: 0, oil: 0, ai: 'boss', mass: 50 },
+  boss5:    { name: '霜冠巨像', r: 46, hp: 140000, speed: 34, dmg: 20, xp: 0, oil: 0, ai: 'boss', mass: 50 },
+  boss6:    { name: '深根之心', r: 50, hp: 180000, speed: 14, dmg: 24, xp: 0, oil: 0, ai: 'boss', mass: 50 },
 };
 
 // 精英：放大、加血、帶一個詞綴；死亡必掉燈核
@@ -278,6 +330,68 @@ export const CHAPTERS = [
     ],
     reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2], stardust: 20, firstStardust: 120 },
   },
+  // ---- M7 第三批：第四～六章。難度建立在「有進階系統之後」的戰力上（見 tools/chapter-curve.mjs） ----
+  {
+    id: 4, name: '灰燼坡', tagline: '熔坑定時噴發，敵我都會被燒；焦岩獸砸地、燼蟲死後留下火', palette: 'ash', hue: 330,
+    length: 480, bossAt: 420, arenaR: 250, boss: 'boss4', terrain: 'vents', fog: null,
+    hpScale: (t) => 1.4 + Math.max(0, t - 30) / 85,
+    dmgScale: (t) => 1.2 + t / 280,
+    spawnRate: (t) => 1.9 + t * 0.024 + (t > 240 ? (t - 240) * 0.02 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 6], [0, 'cinder', 4], [60, 'moth', 3], [120, 'golem', 1], [200, 'spitter', 2], [260, 'cinder', 4], [300, 'golem', 1]],
+    events: [
+      { at: 70,  type: 'ring',  kind: 'cinder', n: 24 },
+      { at: 130, type: 'elite', kind: 'golem' },
+      { at: 190, type: 'rush',  kind: 'cinder', n: 26 },
+      { at: 250, type: 'ring',  kind: 'golem', n: 5 },
+      { at: 300, type: 'elite', kind: 'cinder' },
+      { at: 350, type: 'rush',  kind: 'moth', n: 34 },
+      { at: 395, type: 'ring',  kind: 'cinder', n: 40 },
+      { at: 420, type: 'boss',  kind: 'boss4' },
+    ],
+    reward: { clear: 1200, firstClear: 1200, gear: [5, 25, 40, 25, 5], stardust: 25, firstStardust: 150 },
+  },
+  {
+    id: 5, name: '凍星原', tagline: '冰面上會滑，霜霧縮短瞄準，霜蛾的冰針會讓你變慢', palette: 'frost', hue: 200,
+    length: 480, bossAt: 420, arenaR: 260, boss: 'boss5', terrain: 'ice', fog: 260,
+    hpScale: (t) => 1.9 + Math.max(0, t - 30) / 60,
+    dmgScale: (t) => 1.45 + t / 240,
+    spawnRate: (t) => 2.1 + t * 0.026 + (t > 240 ? (t - 240) * 0.022 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 6], [0, 'frostmoth', 3], [40, 'glider', 3], [120, 'shell', 2], [200, 'frostmoth', 3], [280, 'glider', 3]],
+    events: [
+      { at: 65,  type: 'rush',  kind: 'glider', n: 14 },
+      { at: 125, type: 'elite', kind: 'frostmoth' },
+      { at: 180, type: 'ring',  kind: 'frostmoth', n: 16 },
+      { at: 240, type: 'elite', kind: 'glider' },
+      { at: 290, type: 'ring',  kind: 'shell', n: 12 },
+      { at: 345, type: 'rush',  kind: 'glider', n: 22 },
+      { at: 395, type: 'ring',  kind: 'frostmoth', n: 30 },
+      { at: 420, type: 'boss',  kind: 'boss5' },
+    ],
+    reward: { clear: 1600, firstClear: 1600, gear: [0, 20, 40, 32, 8], stardust: 30, firstStardust: 180 },
+  },
+  {
+    id: 6, name: '深根城', tagline: '菌根牆從兩側推進包夾，菌巢不拆會一直生怪', palette: 'root', hue: 100,
+    length: 480, bossAt: 420, arenaR: 270, boss: 'boss6', terrain: null, fog: null,
+    roots: { first: 25, every: 14, dist: 300, speed: 34, len: 420, w: 26, dmg: 6 },
+    hpScale: (t) => 2.0 + Math.max(0, t - 30) / 58,
+    dmgScale: (t) => 1.5 + t / 230,
+    spawnRate: (t) => 2.2 + t * 0.027 + (t > 240 ? (t - 240) * 0.024 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 6], [0, 'rooter', 2], [45, 'hive', 1], [100, 'splitter', 3], [160, 'rooter', 3], [240, 'hive', 1], [300, 'blinker', 3]],
+    events: [
+      { at: 60,  type: 'ring',  kind: 'rooter', n: 10 },
+      { at: 120, type: 'elite', kind: 'hive' },
+      { at: 175, type: 'rush',  kind: 'splitter', n: 18 },
+      { at: 235, type: 'elite', kind: 'rooter' },
+      { at: 285, type: 'ring',  kind: 'hive', n: 4 },
+      { at: 340, type: 'rush',  kind: 'rooter', n: 16 },
+      { at: 395, type: 'ring',  kind: 'blinker', n: 30 },
+      { at: 420, type: 'boss',  kind: 'boss6' },
+    ],
+    reward: { clear: 2000, firstClear: 2000, gear: [0, 10, 40, 38, 12], stardust: 35, firstStardust: 220 },
+  },
 ];
 export const CHAPTER1 = CHAPTERS[0];
 
@@ -287,7 +401,9 @@ export const CHAPTER1 = CHAPTERS[0];
 // cap：場上「菌潮怪」的上限，和一般怪的上限（章節的 maxEnemies）分開算——若共用同一個上限，菌潮滿場會擠掉本章的招牌怪
 //      （量過：第二章脹孢囊的引信從 136 次掉到 1 次）。實際同屏總數見 tools/level-report 旁的量測與回報。
 //      依據：擁有者手機（第 2 章、DPR 3）重場面 89 隻怪時繪製 p95 2ms、平均 59.5fps；怪物繪製大致隨數量線性增加（推論，要請擁有者重量）。
-export const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3 };
+export const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3, total: 360, reserve: 60 };
+// total：場上怪物總數的硬上限（M7 第三批量到：各類上限只管自己時，第六章同屏衝到 487 隻、邏輯耗時超過門檻）。
+// reserve：菌潮最多只填到 total − reserve，保留給本章的怪（招牌怪不會被菌潮擠掉）。
 
 // ---- 燈油（局外貨幣）結算 ----
 // 一局的燈油 ＝ floor( (floor(Σ擊倒×該怪 oil × perKill) ＋ 精英數×elite ＋ 擊敗守衛×boss ＋ 通關獎勵 ＋ 首通獎勵) × (1 + 燈油加成) )

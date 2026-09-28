@@ -1,5 +1,5 @@
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
-import { VW, terrainIn } from './sim.js';
+import { VW, terrainIn, ventState } from './sim.js';
 import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } from './content.js';
 import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } from './art.js';
 
@@ -19,6 +19,15 @@ const CREATURE_ART = {
   boss1:    { seed: 77, radius: 42, hue: 322, eyes: 3, spikes: 12 },
   boss2:    { seed: 83, radius: 40, hue: 95,  eyes: 4, spikes: 6 },
   boss3:    { seed: 47, radius: 44, hue: 250, eyes: 1, spikes: 16 },
+  cinder:   { seed: 71, radius: 10, hue: 20,  eyes: 1, spikes: 5 },
+  golem:    { seed: 33, radius: 22, hue: 10,  eyes: 2, spikes: 11 },
+  frostmoth:{ seed: 19, radius: 11, hue: 195, eyes: 2, spikes: 4 },
+  glider:   { seed: 88, radius: 12, hue: 180, eyes: 1, spikes: 3 },
+  hive:     { seed: 52, radius: 24, hue: 80,  eyes: 5, spikes: 14 },
+  rooter:   { seed: 61, radius: 16, hue: 45,  eyes: 2, spikes: 8 },
+  boss4:    { seed: 95, radius: 46, hue: 15,  eyes: 3, spikes: 14 },
+  boss5:    { seed: 26, radius: 46, hue: 200, eyes: 2, spikes: 18 },
+  boss6:    { seed: 14, radius: 50, hue: 90,  eyes: 6, spikes: 20 },
 };
 const NONE = new Set();
 const AFFIX_COLOR = { swift: 'rgba(120,255,200,1)', regen: 'rgba(120,255,120,1)', armor: 'rgba(255,200,90,1)' };
@@ -34,10 +43,12 @@ export function createRenderer(chapter = CHAPTER1) {
     gold: glow('rgba(255,210,90,1)', 30), heal: glow('rgba(255,140,170,1)', 18), magnet: glow('rgba(120,200,255,1)', 18),
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
+    frost: glow('rgba(170,230,255,1)', 16), lava: glow('rgba(255,140,50,1)', 48),
+    evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16),
     blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
-  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
+  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
   const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
 
   // ---- 螢幕尺寸相關的快取（效能：量測顯示每幀重建全螢幕漸層與紋理圖樣是繪製的最大成本）----
@@ -84,8 +95,10 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'fade': burst(e.x, e.y, 5, G.spark, 60); break;
         case 'hurt': fx.shake = 7; fx.hurtFlash = 0.35; burst(e.x, e.y, 10, G.spark, 160); break;
         case 'level': fx.levelFlash = 1; burst(e.x, e.y, 30, G.gem, 220); break;
-        case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18 }); break;
-        case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3 }); break;
+        case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18, evo: e.evo }); break;
+        case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3, color: e.evo ? 'sun' : undefined }); break;
+        case 'lance': fx.lances.push({ x: e.x, y: e.y, ang: e.ang, len: e.len, w: e.w, evo: e.evo, life: 0.22 }); break;
+        case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
         case 'heal': burst(e.x, e.y, 16, G.heal, 120); break;
@@ -94,8 +107,8 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'blast': fx.shake = Math.max(fx.shake, 6); fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 26, G.blast, 240, 0.6, 14); break;
         case 'blink': burst(e.x, e.y, 14, G.crystal, 150, 0.4, 10); break;
         case 'spark': burst(e.x, e.y, 3, G.crystal, 90, 0.25, 8); break;
-        case 'strike': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'strike' }); burst(e.x, e.y, 16, G.star2, 200, 0.45, 12); fx.shake = Math.max(fx.shake, 3); break;
-        case 'mineBoom': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 18, G.lantern, 220, 0.5, 12); break;
+        case 'strike': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'strike' }); burst(e.x, e.y, e.evo ? 22 : 16, e.evo ? G.evo : G.star2, e.evo ? 260 : 200, 0.45, 12); fx.shake = Math.max(fx.shake, e.evo ? 5 : 3); break;
+        case 'mineBoom': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'blast' }); burst(e.x, e.y, e.evo ? 26 : 18, e.evo ? G.evo : G.lantern, e.evo ? 280 : 220, 0.5, 12); break;
         case 'revive': fx.whiteFlash = 1; banner('燈芯復燃！', true); burst(e.x, e.y, 80, G.gold, 320, 1, 14); break;
         case 'bossdown': fx.whiteFlash = 1; fx.shake = 16; burst(e.x, e.y, 120, G.gold, 380, 1.4, 16); burst(e.x, e.y, 80, G.spore, 300, 1.2, 14); break;
       }
@@ -109,8 +122,8 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const q of fx.texts) { q.y -= 30 * dt; q.life -= dt; }
     fx.texts = fx.texts.filter((q) => q.life > 0);
     if (fx.texts.length > 80) fx.texts.splice(0, fx.texts.length - 80);
-    for (const list of [fx.arcs, fx.rings, fx.banners]) for (const q of list) q.life -= dt;
-    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0);
+    for (const list of [fx.arcs, fx.rings, fx.banners, fx.lances]) for (const q of list) q.life -= dt;
+    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0); fx.lances = fx.lances.filter((q) => q.life > 0);
   }
 
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
@@ -151,11 +164,37 @@ export function createRenderer(chapter = CHAPTER1) {
       g.beginPath(); g.ellipse(f.x - f.r * 0.2, f.y - f.r * 0.15, f.r * 0.35, f.r * 0.12, -0.2, 0, Math.PI * 2); g.stroke();
     }
 
+    // 熔坑（第四章）：焦黑坑洞；預警時坑緣的橘光一圈圈收緊，噴發時整個坑冒出亮橘色火柱
+    if (ter === 'vents') for (const f of terrainIn('vents', s.terrainSeed, camX - 80, camY - 80, camX + VW + 80, camY + vh + 80)) {
+      const st = ventState(f, s.terrainSeed, T);
+      g.fillStyle = 'rgba(20,8,6,0.85)'; g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.78, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,110,50,0.45)'; g.lineWidth = 2; g.stroke();
+      if (st?.warn !== undefined) {
+        g.fillStyle = `rgba(255,120,40,${0.1 + st.warn * 0.3})`; g.fill();
+        g.strokeStyle = `rgba(255,190,90,${0.5 + st.warn * 0.5})`; g.lineWidth = 2.5; g.setLineDash([6, 5]);
+        g.beginPath(); g.ellipse(f.x, f.y, f.r * (1.5 - st.warn * 0.5), f.r * 0.78 * (1.5 - st.warn * 0.5), 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      } else if (st?.fire) {
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.8 + Math.random() * 0.2; g.drawImage(G.lava, f.x - f.r * 1.6, f.y - f.r * 1.9, f.r * 3.2, f.r * 3.2); g.globalAlpha = 1;
+        g.fillStyle = 'rgba(255,220,140,0.55)'; g.beginPath(); g.ellipse(f.x, f.y, f.r * 0.85, f.r * 0.66, 0, 0, Math.PI * 2); g.fill();
+        g.globalCompositeOperation = 'source-over';
+      }
+    }
+    // 冰面（第五章）：半透明淡藍冰片＋幾道反光（踩上去會滑）
+    if (ter === 'ice') for (const f of terrainIn('ice', s.terrainSeed, camX - 100, camY - 100, camX + VW + 100, camY + vh + 100)) {
+      const ig = g.createRadialGradient(f.x - f.r * 0.3, f.y - f.r * 0.3, f.r * 0.1, f.x, f.y, f.r);
+      ig.addColorStop(0, 'rgba(220,245,255,0.55)'); ig.addColorStop(0.8, 'rgba(150,200,240,0.4)'); ig.addColorStop(1, 'rgba(120,170,230,0.1)');
+      g.fillStyle = ig; g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.72, 0.3, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(230,250,255,0.5)'; g.lineWidth = 1.5; g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(f.x - f.r * 0.5, f.y - f.r * 0.1); g.lineTo(f.x - f.r * 0.1, f.y - f.r * 0.35); g.moveTo(f.x + f.r * 0.1, f.y + f.r * 0.2); g.lineTo(f.x + f.r * 0.45, f.y); g.stroke();
+    }
+
     // 地面危險：預警時畫虛線輪廓，生效時填滿
     for (const h of s.hazards) {
       const active = h.t >= h.arm, k = active ? 1 : h.t / h.arm;
       if (h.type === 'zone') {
-        const col = h.src === 'poison' ? '120,255,140' : h.src === 'rain' ? '180,150,255' : '255,120,120';
+        const col = h.src === 'poison' ? '120,255,140' : h.src === 'rain' ? '180,150,255' : h.src === 'fire' ? '255,130,40' : h.src === 'slam' ? '255,190,110' : h.src === 'frostzone' ? '150,220,255' : '255,120,120';
         g.fillStyle = `rgba(${col},${active ? 0.35 : 0.08 + k * 0.12})`;
         g.beginPath(); g.arc(h.x, h.y, h.r, 0, Math.PI * 2); g.fill();
         g.strokeStyle = `rgba(${col},${active ? 0.8 : 0.5})`; g.lineWidth = 2; g.setLineDash(active ? [] : [6, 5]);
@@ -189,6 +228,18 @@ export function createRenderer(chapter = CHAPTER1) {
       g.globalCompositeOperation = 'source-over';
     }
 
+    // 菌根牆（第六章）：粗大的根，表面有刺；朝移動方向那一側發暗紅光（代表會被推著走）
+    for (const r of s.roots) {
+      g.save(); g.translate(r.x, r.y); g.rotate(Math.atan2(r.ny, r.nx));
+      const hw = r.w / 2, hl = r.len / 2;
+      g.fillStyle = 'rgba(255,60,60,0.18)'; g.fillRect(hw - 2, -hl, 14, r.len);
+      const rg = g.createLinearGradient(-hw, 0, hw, 0); rg.addColorStop(0, '#2a1a0c'); rg.addColorStop(0.5, '#5a3a1a'); rg.addColorStop(1, '#3a2410');
+      g.fillStyle = rg; g.fillRect(-hw, -hl, r.w, r.len);
+      g.fillStyle = '#8a6a3a';
+      for (let y = -hl + 10; y < hl; y += 22) { g.beginPath(); g.moveTo(hw, y); g.lineTo(hw + 9, y + 5); g.lineTo(hw, y + 10); g.fill(); }
+      g.strokeStyle = 'rgba(180,230,120,0.35)'; g.lineWidth = 1.5; g.strokeRect(-hw, -hl, r.w, r.len);
+      g.restore();
+    }
     prof?.lap('地形與危險');
     // 燈暈（在怪物底下）
     const aura = p.weapons.find((w) => w.id === 'aura');
@@ -197,6 +248,10 @@ export function createRenderer(chapter = CHAPTER1) {
       const r = aura.radius * (1 + Math.sin(T * 5) * 0.03);
       g.globalAlpha = 0.55; g.drawImage(G.aura, p.x - r, p.y - r, r * 2, r * 2); g.globalAlpha = 1;
       g.strokeStyle = 'rgba(255,190,110,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.stroke();
+      if (aura.evo) { // 共鳴「暖陽」：一圈緩慢旋轉的金色光芒
+        g.strokeStyle = 'rgba(255,220,120,0.35)'; g.lineWidth = 3;
+        for (let i = 0; i < 12; i++) { const a = T * 0.6 + (i / 12) * Math.PI * 2; g.beginPath(); g.moveTo(p.x + Math.cos(a) * r * 0.45, p.y + Math.sin(a) * r * 0.45); g.lineTo(p.x + Math.cos(a) * r * 0.95, p.y + Math.sin(a) * r * 0.95); g.stroke(); }
+      }
       g.globalCompositeOperation = 'source-over';
     }
 
@@ -226,13 +281,20 @@ export function createRenderer(chapter = CHAPTER1) {
     // 玩家的落星預警（粉紅虛線圈，越接近落下越實）與地上的燈籠雷
     for (const k of s.strikes) {
       const q = Math.max(0, 1 - k.t / k.delay);
-      g.fillStyle = `rgba(255,150,240,${0.08 + q * 0.18})`; g.beginPath(); g.arc(k.x, k.y, k.r, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = 'rgba(255,190,245,0.8)'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.arc(k.x, k.y, k.r * (1.4 - q * 0.4), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      g.fillStyle = k.evo ? `rgba(255,210,120,${0.1 + q * 0.2})` : `rgba(255,150,240,${0.08 + q * 0.18})`; g.beginPath(); g.arc(k.x, k.y, k.r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = k.evo ? 'rgba(255,230,160,0.9)' : 'rgba(255,190,245,0.8)'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.arc(k.x, k.y, k.r * (1.4 - q * 0.4), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
     }
     for (const m of s.mines) {
       const armed = m.arm <= 0, pulse = armed ? 0.7 + Math.sin(T * 6 + m.x) * 0.3 : 0.35;
-      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-      g.fillStyle = armed ? '#ffd84a' : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; if (m.evo) g.drawImage(G.evo, m.x - 22, m.y - 22, 44, 44); g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.fillStyle = armed ? (m.evo ? '#fff0b0' : '#ffd84a') : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
+    }
+    // 燈塔哨：小燈塔＋頂端的光（快熄滅時閃爍）；共鳴後多一圈金光
+    for (const q of s.sentries) {
+      const fade = q.life < 2 ? 0.4 + Math.sin(T * 20) * 0.3 : 1, evo = q.src.evo;
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = fade; g.drawImage(evo ? G.evo : G.sentry, q.x - 18, q.y - 30, 36, 36); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.fillStyle = evo ? '#8a6a2a' : '#2a5a3a'; g.beginPath(); g.moveTo(q.x - 6, q.y + 6); g.lineTo(q.x - 3, q.y - 10); g.lineTo(q.x + 3, q.y - 10); g.lineTo(q.x + 6, q.y + 6); g.closePath(); g.fill();
+      g.fillStyle = evo ? '#fff0b0' : '#d8ffe0'; g.fillRect(q.x - 3.5, q.y - 15, 7, 5);
     }
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
@@ -263,7 +325,11 @@ export function createRenderer(chapter = CHAPTER1) {
     vis.push({ player: true, y: p.y });
     vis.sort((a, b) => a.y - b.y);
     for (const e of vis) {
-      if (e.player) { drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); continue; }
+      if (e.player) {
+        drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4);
+        if (p.slowT > 0) { g.strokeStyle = `rgba(180,230,255,${0.4 + Math.sin(T * 10) * 0.2})`; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } // 被冰針減速
+        continue;
+      }
       if (e.pillar) {
         const f = e.pillar, img = makePillar(f.r), k = f.r / (Math.round(f.r / 3) * 3);
         g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35 + Math.sin(T * 2 + f.x) * 0.1;
@@ -299,14 +365,22 @@ export function createRenderer(chapter = CHAPTER1) {
     g.lineCap = 'round';
     for (const b of s.bullets) {
       if (!onScreen(b.x, b.y)) continue;
+      if (b.evo && !b.big && !OFF.has('glow')) { const r = (b.size ?? 8) * 2.2 + 8; g.drawImage(G.evo, b.x - r, b.y - r, r * 2, r * 2); } // 共鳴後的投射物：一律多一層金色光暈
       if (b.boom) { // 旋轉的新月光刃
         const k = b.size / 11;
+        if (b.evo) for (const [back, al] of [[0.05, 0.45], [0.1, 0.22]]) { g.globalAlpha = al; g.drawImage(G.evo, b.x - b.vx * back - 18 * k, b.y - b.vy * back - 18 * k, 36 * k, 36 * k); } // 共鳴：殘影
+        g.globalAlpha = 1;
         g.drawImage(G.blade, b.x - 18 * k, b.y - 18 * k, 36 * k, 36 * k);
-        g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = 'rgba(220,255,240,0.95)';
+        g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = b.evo ? 'rgba(255,245,200,0.98)' : 'rgba(220,255,240,0.95)';
         g.beginPath(); g.arc(0, 0, b.size, 0, Math.PI); g.arc(0, -b.size * 0.3, b.size * 0.75, Math.PI, 0, true); g.closePath(); g.fill(); g.restore();
         continue;
       }
-      if (b.burn) { g.drawImage(G.ember, b.x - 14, b.y - 14, 28, 28); g.strokeStyle = 'rgba(255,200,140,0.95)'; g.lineWidth = 3; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.03, b.y - b.vy * 0.03); g.stroke(); continue; }
+      if (b.burn) {
+        g.drawImage(G.ember, b.x - 14, b.y - 14, 28, 28); g.strokeStyle = 'rgba(255,200,140,0.95)'; g.lineWidth = b.evo ? 5 : 3; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * (b.evo ? 0.05 : 0.03), b.y - b.vy * (b.evo ? 0.05 : 0.03)); g.stroke();
+        if (b.evo && Math.random() < 0.3) burst(b.x, b.y, 1, G.ember, 40, 0.3, 8); // 共鳴「焚天羽」：一路掉火星（受粒子上限限制）
+        continue;
+      }
+      if (b.sentry) { g.drawImage(b.evo ? G.evo : G.sentry, b.x - 10, b.y - 10, 20, 20); g.strokeStyle = b.evo ? 'rgba(255,240,190,0.95)' : 'rgba(200,255,210,0.95)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02); g.stroke(); continue; }
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
       if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
@@ -314,12 +388,20 @@ export function createRenderer(chapter = CHAPTER1) {
       g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.025 * k, b.y - b.vy * 0.025 * k); g.stroke();
     }
     for (const w of p.weapons) {
-      for (const q of w.wisps) { g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill(); }
+      for (const q of w.wisps) {
+        if (w.evo) { g.drawImage(G.evo, q.x - 16, q.y - 16, 32, 32); if (Math.random() < 0.15) burst(q.x, q.y, 1, G.evo, 30, 0.3, 7); } // 共鳴「螢群」：金色、拖著光點
+        g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = w.evo ? '#fff6c8' : '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill();
+      }
       if (w.flame) { // 火焰錐：從玩家往火口方向，半透明漸層＋閃爍
         const f = w.flame, a = Math.atan2(f.ay, f.ax), flick = 0.85 + Math.random() * 0.25;
         const gr = g.createRadialGradient(p.x, p.y, 4, p.x, p.y, f.range * flick);
         gr.addColorStop(0, 'rgba(255,240,180,0.55)'); gr.addColorStop(0.5, 'rgba(255,150,60,0.35)'); gr.addColorStop(1, 'rgba(255,80,30,0)');
         g.fillStyle = gr; g.beginPath(); g.moveTo(p.x, p.y); g.arc(p.x, p.y, f.range * flick, a - f.half, a + f.half); g.closePath(); g.fill();
+        if (w.evo) { // 共鳴「龍焰」：中心一道白金色的焰心
+          const core = g.createRadialGradient(p.x, p.y, 2, p.x, p.y, f.range * 0.7 * flick);
+          core.addColorStop(0, 'rgba(255,255,230,0.7)'); core.addColorStop(1, 'rgba(255,220,120,0)');
+          g.fillStyle = core; g.beginPath(); g.moveTo(p.x, p.y); g.arc(p.x, p.y, f.range * 0.7 * flick, a - f.half * 0.5, a + f.half * 0.5); g.closePath(); g.fill();
+        }
       }
     }
     for (const w of p.weapons) if (w.orbs) for (const o of w.orbs) {
@@ -327,9 +409,15 @@ export function createRenderer(chapter = CHAPTER1) {
       if (!OFF.has('glow')) g.drawImage(G.orb, o.x - r, o.y - r, r * 2, r * 2);
       g.fillStyle = w.evo ? '#fff' : '#dffaff'; g.beginPath(); g.arc(o.x, o.y, w.evo ? 6 : 4.5, 0, 7); g.fill();
     }
+    for (const l of fx.lances) { // 聚光槍：一道瞬間的光束（共鳴後金色、更寬）
+      g.globalAlpha = l.life / 0.22; g.save(); g.translate(l.x, l.y); g.rotate(l.ang);
+      g.fillStyle = l.evo ? 'rgba(255,220,130,0.45)' : 'rgba(120,190,255,0.4)'; g.fillRect(0, -l.w, l.len, l.w * 2);
+      g.fillStyle = l.evo ? 'rgba(255,250,220,0.95)' : 'rgba(225,245,255,0.95)'; g.fillRect(0, -l.w * 0.22, l.len, l.w * 0.44);
+      g.restore();
+    }
     for (const a of fx.arcs) {
       g.globalAlpha = a.life / 0.18;
-      for (const [lw, col] of [[5, 'rgba(160,120,255,0.5)'], [2, 'rgba(235,225,255,1)']]) {
+      for (const [lw, col] of a.evo ? [[8, 'rgba(255,210,120,0.5)'], [3, 'rgba(255,250,225,1)']] : [[5, 'rgba(160,120,255,0.5)'], [2, 'rgba(235,225,255,1)']]) {
         g.strokeStyle = col; g.lineWidth = lw; g.beginPath();
         for (let i = 0; i < a.pts.length - 1; i++) {
           const [x0, y0] = a.pts[i], [x1, y1] = a.pts[i + 1];
@@ -342,14 +430,14 @@ export function createRenderer(chapter = CHAPTER1) {
     g.globalAlpha = 1;
     for (const b of s.ebullets) {
       if (!onScreen(b.x, b.y)) continue;
-      const r = b.r * 2.6; if (!OFF.has('glow')) g.drawImage(G.spore, b.x - r, b.y - r, r * 2, r * 2);
+      const r = b.r * 2.6; if (!OFF.has('glow')) g.drawImage(b.frost ? G.frost : G.spore, b.x - r, b.y - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = 'source-over';
-    for (const b of s.ebullets) { if (!onScreen(b.x, b.y)) continue; g.fillStyle = '#ffd6f4'; g.beginPath(); g.arc(b.x, b.y, b.r * 0.6, 0, 7); g.fill(); g.strokeStyle = '#8a1a6a'; g.lineWidth = 1.5; g.stroke(); }
+    for (const b of s.ebullets) { if (!onScreen(b.x, b.y)) continue; g.fillStyle = b.frost ? '#e8f8ff' : '#ffd6f4'; g.beginPath(); g.arc(b.x, b.y, b.r * 0.6, 0, 7); g.fill(); g.strokeStyle = b.frost ? '#3a7aaa' : '#8a1a6a'; g.lineWidth = 1.5; g.stroke(); }
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }

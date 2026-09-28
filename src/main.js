@@ -16,7 +16,7 @@ const g = canvas.getContext('2d');
 const input = createInput(canvas);
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
-const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean)) : null; // 效能量測模式，見 perf.js
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean), params.get('waves') !== 'off') : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 const clock = createClock(); // 固定步長時鐘：倍速只改每幀跑幾步，不改步長
@@ -318,7 +318,7 @@ function perfFrame(now, dt) {
   }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';
-  box.textContent = perf.done ? perf.report.text : `效能量測中…（${perf.stage + 1}/2）第 ${Math.floor(s.t)} 秒`;
+  box.textContent = perf.done ? perf.report.text : `效能量測中…（${perf.stage + 1}/${perf.stageCount}）第 ${Math.floor(s.t)} 秒`;
 }
 
 // 浮動搖桿
@@ -344,7 +344,7 @@ if (perf?.sync) window.__perfRun = (budget = 20000) => {
   return perf.done ? perf.report.text : document.getElementById('perfBox').textContent;
 };
 if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
-  mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true;
+  mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true; sim.state.surgeOn = perf.waves;
   renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
 } else toMenu();
 if (!perf && LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);

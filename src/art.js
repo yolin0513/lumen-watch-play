@@ -167,6 +167,9 @@ export function drawPlayer(g, x, y, t, facing, hurt) {
 export const PALETTES = {
   moss:    { base: '#15182b', blotchA: 'rgba(60,40,120,0.18)', blotchB: 'rgba(20,110,120,0.15)', crack: 'rgba(120,220,255,0.12)', crystal: 'rgba(140,200,255,0.55)', dotA: 'rgba(160,140,255,0.25)', dotB: 'rgba(80,220,200,0.2)' },
   marsh:   { base: '#0f1a17', blotchA: 'rgba(40,90,60,0.22)', blotchB: 'rgba(90,110,40,0.14)', crack: 'rgba(150,220,140,0.10)', crystal: 'rgba(170,230,150,0.35)', dotA: 'rgba(120,200,120,0.22)', dotB: 'rgba(200,220,120,0.14)' },
+  ash:     { base: '#1a0f0e', blotchA: 'rgba(120,40,20,0.22)', blotchB: 'rgba(60,30,30,0.2)', crack: 'rgba(255,120,60,0.18)', crystal: 'rgba(255,150,80,0.45)', dotA: 'rgba(255,110,60,0.22)', dotB: 'rgba(200,80,60,0.16)' },
+  frost:   { base: '#0e1624', blotchA: 'rgba(120,170,230,0.16)', blotchB: 'rgba(200,220,255,0.10)', crack: 'rgba(200,240,255,0.18)', crystal: 'rgba(210,240,255,0.6)', dotA: 'rgba(200,230,255,0.25)', dotB: 'rgba(150,200,255,0.2)' },
+  root:    { base: '#121008', blotchA: 'rgba(80,60,30,0.24)', blotchB: 'rgba(60,90,40,0.18)', crack: 'rgba(160,200,90,0.14)', crystal: 'rgba(180,230,120,0.4)', dotA: 'rgba(160,210,110,0.2)', dotB: 'rgba(200,160,90,0.16)' },
   crystal: { base: '#0c1024', blotchA: 'rgba(40,60,160,0.22)', blotchB: 'rgba(140,40,140,0.14)', crack: 'rgba(200,160,255,0.16)', crystal: 'rgba(255,140,230,0.6)', dotA: 'rgba(120,160,255,0.3)', dotB: 'rgba(255,120,220,0.2)' },
 };
 
@@ -254,6 +257,19 @@ export function makeIcon(id, color, size = 64) {
     case 'flame': // 錐形火舌
       g.beginPath(); g.moveTo(-16, 0); g.lineTo(16, -12); g.quadraticCurveTo(10, 0, 16, 12); g.closePath(); g.fill();
       g.fillStyle = '#fff3c0'; g.beginPath(); g.moveTo(-12, 0); g.lineTo(8, -5); g.quadraticCurveTo(5, 0, 8, 5); g.closePath(); g.fill();
+      break;
+    case 'lance': // 一道斜向光束
+      g.lineWidth = 6; g.lineCap = 'round'; P([[-16, 12], [16, -12]]); g.stroke();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 2; P([[-14, 10], [14, -10]]); g.stroke();
+      break;
+    case 'pulse': // 燈鐘＋兩道震波
+      g.beginPath(); g.moveTo(-9, 6); g.quadraticCurveTo(-9, -12, 0, -12); g.quadraticCurveTo(9, -12, 9, 6); g.closePath(); g.fill();
+      g.fillRect(-12, 5, 24, 3); g.beginPath(); g.arc(0, 11, 2.5, 0, 7); g.fill();
+      g.lineWidth = 2; for (const r of [15, 19]) { g.beginPath(); g.arc(0, 0, r, -0.6, 0.6); g.stroke(); g.beginPath(); g.arc(0, 0, r, Math.PI - 0.6, Math.PI + 0.6); g.stroke(); }
+      break;
+    case 'sentry': // 小燈塔
+      P([[-7, 14], [-4, -6], [4, -6], [7, 14]]); g.closePath(); g.fill();
+      g.fillStyle = '#fff6d0'; g.fillRect(-5, -13, 10, 7); g.beginPath(); g.moveTo(-6, -13); g.lineTo(0, -18); g.lineTo(6, -13); g.fill();
       break;
     case 'wisps': // 三隻小光點
       for (const [x, y, r] of [[-9, 6, 5], [8, 8, 4], [0, -9, 6]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }

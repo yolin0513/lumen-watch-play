@@ -19,10 +19,19 @@ const AIM_RANGE = 420;
 
 // ---------- 地形（依座標與種子決定，sim 與 render 共用；不存狀態，無限大地圖也不佔記憶體） ----------
 // pools 泥沼：玩家在裡面移速 ×slow。pillars 晶柱：擋住玩家、怪物、雙方子彈。出生點附近 clear 範圍內不放。
+// vents 熔坑（第四章）：每個熔坑依自己的相位週期性「預警 warn 秒 → 噴發 active 秒」，噴發時站在上面的玩家與怪都會受傷。
+// ice 冰面（第五章）：玩家在冰上有慣性（速度每秒只往操作方向靠近 grip 倍），轉向與煞車都會滑。
 export const TERRAIN = {
   pools:   { cell: 190, chance: 0.32, rMin: 38, rMax: 68, slow: 0.55, clear: 150 },
   pillars: { cell: 150, chance: 0.38, rMin: 16, rMax: 30, clear: 130 },
+  vents:   { cell: 170, chance: 0.42, rMin: 30, rMax: 46, clear: 150, period: 5.5, warn: 1.4, active: 0.7, dmg: 16, enemyDps: 70 },
+  ice:     { cell: 210, chance: 0.5,  rMin: 55, rMax: 92, clear: 110, grip: 2.2 },
 };
+// 熔坑現在的狀態：{ warn: 0～1 的預警進度 } 或 { fire: true } 或 null（休眠）。sim 與 render 共用，不存狀態。
+export function ventState(f, seed, t) {
+  const T = TERRAIN.vents, ph = hash2(f.ix, f.iy, seed, 5) * T.period, c = (t + ph) % T.period;
+  return c < T.warn ? { warn: c / T.warn } : c < T.warn + T.active ? { fire: true } : null;
+}
 function hash2(ix, iy, seed, salt) {
   let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed + salt, 2246822519);
   h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
@@ -35,7 +44,7 @@ export function terrainCell(kind, seed, ix, iy) {
   const x = ix * T.cell + r + hash2(ix, iy, seed, 3) * (T.cell - 2 * r);
   const y = iy * T.cell + r + hash2(ix, iy, seed, 4) * (T.cell - 2 * r);
   if (Math.hypot(x, y) < T.clear + r) return null;
-  return { x, y, r };
+  return { x, y, r, ix, iy };
 }
 export function terrainIn(kind, seed, x0, y0, x1, y1) {
   const T = TERRAIN[kind], out = [];
@@ -54,8 +63,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     player: {
       x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1, armorMul: 1,
       revives: 0, facing: 1, aimX: 1, aimY: 0, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
+      vx: 0, vy: 0, onIce: false, slowT: 0, slowK: 0, // 冰面慣性、霜冰減速
     },
-    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [],
+    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -63,6 +73,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     surge: { idx: 0, queue: [] }, // 菌潮：idx＝已開始幾波；queue＝還沒湧入的批次 [時間, 隻數]
     surgeAlive: 0, // 場上的菌潮怪數（上限 SURGE.cap，和一般怪的上限分開算）
     surgeOn: true, // 量測用：false＝關掉菌潮（tools/level-report.mjs --no-surge 做前後對照）
+    roots: [], rootT: 0,   // 第六章：移動的菌根牆
+    counters: {},          // 各章招牌機制的實際發生次數（量測用：熔坑燒到怪、滑行時間、根牆推擠…）
     autoSpawn: true, god: false, // 測試用
   };
   const p = s.player;
@@ -226,7 +238,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     }
     while (sg.queue.length && s.t >= sg.queue[0][0]) {
       const [, cnt] = sg.queue.shift(), off = rand() * TAU;
-      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && !s.boss; i++) { spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }).surge = true; s.surgeAlive++; }
+      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && s.enemies.length < SURGE.total - SURGE.reserve && !s.boss; i++) { spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }).surge = true; s.surgeAlive++; }
     }
   }
   function startBoss(kind) {
@@ -237,7 +249,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (!inside) s.events.push({ type: 'fade', x: e.x, y: e.y });
       return inside;
     });
-    s.ebullets.length = 0; s.hazards.length = 0; s.mines = s.mines.filter((m) => Math.hypot(m.x - s.arena.x, m.y - s.arena.y) < s.arena.r);
+    s.ebullets.length = 0; s.hazards.length = 0; s.roots.length = 0; s.rootT = 3; s.mines = s.mines.filter((m) => Math.hypot(m.x - s.arena.x, m.y - s.arena.y) < s.arena.r);
     s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7 });
     s.events.push({ type: 'announce', text: `燈塔守衛：${ENEMIES[kind].name}`, big: true });
   }
@@ -281,6 +293,49 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (d < min) { o.x = f.x + dx / d * min; o.y = f.y + dy / d * min; }
     }
   }
+  const count = (k, n = 1) => { s.counters[k] = (s.counters[k] || 0) + n; };
+  function cellFeature(kind, x, y) { // 查自己所在格的地形（地形完整落在格內）
+    if (terrain !== kind) return null;
+    const T = TERRAIN[kind], f = terrainCell(kind, s.terrainSeed, Math.floor(x / T.cell), Math.floor(y / T.cell));
+    return f && (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r ? f : null;
+  }
+  // 熔坑噴發：玩家受固定傷害；怪每秒受 enemyDps（可以把怪引進熔坑）
+  function updateVents(dt) {
+    if (terrain !== 'vents') return;
+    const T = TERRAIN.vents, fp = cellFeature('vents', p.x, p.y);
+    if (fp && ventState(fp, s.terrainSeed, s.t)?.fire) { const before = p.hp; hurtPlayer(T.dmg, 'vent'); if (p.hp < before) count('ventHitsPlayer'); }
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || isBoss(e.kind)) continue;
+      const f = cellFeature('vents', e.x, e.y);
+      if (!f || !ventState(f, s.terrainSeed, s.t)?.fire) continue;
+      const burn = `${f.ix},${f.iy},${Math.floor(s.t / T.period)}`; // 同一次噴發只算一次「燒到一隻怪」
+      if (e.ventBurn !== burn) { e.ventBurn = burn; count('ventBurnsEnemy'); }
+      e.hp -= T.enemyDps * dt; e.flash = 0.06;
+    }
+  }
+  // 菌根牆（第六章）：兩道根牆從玩家兩側往中間推進、互相穿過後消失；碰到會被推著走並被刺傷。怪不受影響（菌群本來就從根裡長出來）。
+  function spawnRootPair(cx, cy, dist, R) {
+    const a = rand() * TAU;
+    for (const sgn of [1, -1]) {
+      const nx = -Math.cos(a) * sgn, ny = -Math.sin(a) * sgn; // 往中心移動的方向
+      s.roots.push({ x: cx - nx * dist, y: cy - ny * dist, nx, ny, len: R.len, w: R.w, speed: R.speed, left: dist * 2 + 60, dmg: R.dmg });
+    }
+    s.events.push({ type: 'roots', x: cx, y: cy });
+  }
+  function updateRoots(dt) {
+    const R = s.chapter.roots;
+    if (!R) return;
+    if (!s.boss) { s.rootT -= dt; if (s.rootT <= 0 && s.t > R.first) { s.rootT = R.every; spawnRootPair(p.x, p.y, R.dist, R); } }
+    for (const r of s.roots) {
+      const step = r.speed * dt; r.x += r.nx * step; r.y += r.ny * step; r.left -= step;
+      const tx = -r.ny, ty = r.nx, rx = p.x - r.x, ry = p.y - r.y, along = rx * tx + ry * ty, perp = rx * r.nx + ry * r.ny;
+      if (Math.abs(along) < r.len / 2 && Math.abs(perp) < r.w / 2 + 12) { // 被根牆推著走（推到牆的前方）
+        const push = r.w / 2 + 12 - perp; p.x += r.nx * push; p.y += r.ny * push; count('rootPushFrames');
+        const before = p.hp; hurtPlayer(r.dmg, 'root'); if (p.hp < before) count('rootHits');
+      }
+    }
+    s.roots = s.roots.filter((r) => r.left > 0);
+  }
   function inPool(x, y) {
     if (terrain !== 'pools') return false;
     const R = TERRAIN.pools.rMax; // 泥沼完整落在自己的格內，查 ±rMax 的範圍就夠
@@ -323,7 +378,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const base = Math.atan2(target.y - p.y, target.x - p.x);
     for (let i = 0; i < st.shots; i++) {
       const a = base + (i - (st.shots - 1) / 2) * 0.14;
-      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: !!w.evo, src: w.id, burn: st.burn, burnT: st.burnT });
+      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: w.id === 'bolt' && !!w.evo, evo: !!w.evo, src: w.id, burn: st.burn, burnT: st.burnT });
     }
   }
   function orbitWeapon(w, st, dt) {
@@ -358,7 +413,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         if (st.slow) { e.slowT = 0.6; e.slow = st.slow; }
       }
     }, Math.ceil(st.radius / CELL) + 1);
-    s.events.push({ type: 'aura', x: p.x, y: p.y, r: st.radius });
+    s.events.push({ type: 'aura', x: p.x, y: p.y, r: st.radius, evo: !!w.evo });
   }
   function chainWeapon(w, st, dt) {
     w.cd -= dt;
@@ -377,7 +432,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         damage(cur, st.dmg);
         cur = nearest(cur.x, cur.y, st.range, hit);
       }
-      s.events.push({ type: 'arc', pts });
+      s.events.push({ type: 'arc', pts, evo: !!w.evo });
     }
   }
   // 迴光刃：朝最近的敵人擲出，飛到 range 後折返回到玩家；折返時清空已命中名單，所以來回都能打到
@@ -390,7 +445,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const base = Math.atan2(target.y - p.y, target.x - p.x);
     for (let i = 0; i < st.count; i++) {
       const a = base + (i - (st.count - 1) / 2) * 0.45;
-      s.bullets.push({ boom: true, out: true, x: p.x, y: p.y, dx: Math.cos(a), dy: Math.sin(a), vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, speed: st.speed, range: st.range, traveled: 0, life: 6, dmg: st.dmg, pierce: 1e9, hit: new Set(), size: st.size, src: w.id });
+      s.bullets.push({ boom: true, out: true, x: p.x, y: p.y, dx: Math.cos(a), dy: Math.sin(a), vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, speed: st.speed, range: st.range, traveled: 0, life: 6, dmg: st.dmg, pierce: 1e9, hit: new Set(), size: st.size, src: w.id, evo: !!w.evo });
     }
   }
   // 落星：挑怪最密集的點（在附近隨機取樣幾隻，數各自周圍的怪），延遲 delay 秒後範圍爆炸
@@ -409,7 +464,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     scored.sort((a, b) => b.n - a.n);
     for (let i = 0; i < st.count; i++) {
       const t = scored[i % scored.length].e, j = i >= scored.length ? 30 : 0;
-      s.strikes.push({ x: t.x + (rand() - 0.5) * j, y: t.y + (rand() - 0.5) * j, r: st.radius, t: st.delay + i * 0.08, delay: st.delay, dmg: st.dmg, src: w.id });
+      s.strikes.push({ x: t.x + (rand() - 0.5) * j, y: t.y + (rand() - 0.5) * j, r: st.radius, t: st.delay + i * 0.08, delay: st.delay, dmg: st.dmg, src: w.id, evo: !!w.evo });
     }
   }
   function updateStrikes(dt) {
@@ -417,7 +472,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       k.t -= dt;
       if (k.t > 0) continue;
       near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
-      s.events.push({ type: 'strike', x: k.x, y: k.y, r: k.r, src: k.src });
+      s.events.push({ type: 'strike', x: k.x, y: k.y, r: k.r, src: k.src, evo: k.evo });
     }
     s.strikes = s.strikes.filter((k) => k.t > 0);
   }
@@ -462,7 +517,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   function minesWeapon(w, st, dt) {
     w.cd -= dt;
     const mine = s.mines.filter((m) => m.src === w);
-    if (w.cd <= 0 && mine.length < st.max) { w.cd = st.cd * p.cdMul; s.mines.push({ x: p.x, y: p.y, arm: st.arm, trigger: st.trigger, r: st.radius, dmg: st.dmg, src: w }); }
+    if (w.cd <= 0 && mine.length < st.max) { w.cd = st.cd * p.cdMul; s.mines.push({ x: p.x, y: p.y, arm: st.arm, trigger: st.trigger, r: st.radius, dmg: st.dmg, src: w, evo: !!w.evo }); }
   }
   function updateMines(dt) {
     for (const m of s.mines) {
@@ -472,16 +527,65 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       near(m.x, m.y, (e) => { if (!hit && e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.trigger + e.r) ** 2) hit = true; });
       if (!hit) continue;
       near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
-      s.events.push({ type: 'mineBoom', x: m.x, y: m.y, r: m.r });
+      s.events.push({ type: 'mineBoom', x: m.x, y: m.y, r: m.r, evo: m.evo });
       m.done = true;
     }
     s.mines = s.mines.filter((m) => !m.done);
   }
-  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon };
+  // ---- M7 第三批新武器 ----
+  // 聚光槍：朝最近的敵人瞬間射出一道光束（beams 道時等角度分散），整條線上的怪都受傷——打「一排」，不是打「一隻」
+  function lanceWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.beams; i++) {
+      const a = base + (i / st.beams) * TAU, cx = Math.cos(a), cy = Math.sin(a);
+      for (const e of s.enemies) {
+        if (e.hp <= 0) continue;
+        const rx = e.x - p.x, ry = e.y - p.y, along = rx * cx + ry * cy;
+        if (along > 0 && along < st.len && Math.abs(rx * cy - ry * cx) < st.w / 2 + e.r) damage(e, st.dmg, cx, cy);
+      }
+      s.events.push({ type: 'lance', x: p.x, y: p.y, ang: a, len: st.len, w: st.w, evo: !!w.evo });
+    }
+  }
+  // 燈鐘：每隔一段時間敲響，一圈震波傷害並把周圍的怪推開——唯一會擊退的武器，被包圍時用來開路
+  function pulseWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    w.cd = st.cd * p.cdMul;
+    near(p.x, p.y, (e) => {
+      const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+      if (e.hp <= 0 || d > st.radius + e.r) return;
+      damage(e, st.dmg, 0, 0);
+      if (!isBoss(e.kind)) { const k = st.push / e.mass; e.x += dx / d * k; e.y += dy / d * k; }
+    }, Math.ceil(st.radius / CELL) + 1);
+    s.events.push({ type: 'pulse', x: p.x, y: p.y, r: st.radius, evo: !!w.evo });
+  }
+  // 燈塔哨：在腳下立一座小燈塔（最多 max 座、存在 life 秒），自己朝射程內最近的怪射擊——邊跑邊留下火力點
+  function sentryWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd <= 0 && s.sentries.filter((q) => q.src === w).length < st.max) { w.cd = st.cd * p.cdMul; s.sentries.push({ x: p.x, y: p.y, life: st.life, fire: 0.2, src: w }); }
+  }
+  function updateSentries(dt) {
+    for (const q of s.sentries) {
+      q.life -= dt; q.fire -= dt;
+      if (q.fire > 0) continue;
+      const st = weaponStats(q.src), t = nearest(q.x, q.y, st.range);
+      if (!t) continue;
+      q.fire = st.fireCd * p.cdMul;
+      const base = Math.atan2(t.y - q.y, t.x - q.x);
+      for (let i = 0; i < st.shots; i++) { const a = base + (i - (st.shots - 1) / 2) * 0.18; s.bullets.push({ x: q.x, y: q.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, life: 0.9, dmg: st.dmg, pierce: st.pierce ?? 1, hit: new Set(), shard: 0, src: 'sentry', sentry: true, evo: !!q.src.evo }); }
+    }
+    s.sentries = s.sentries.filter((q) => q.life > 0 && p.weapons.includes(q.src));
+  }
+  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon, lance: lanceWeapon, pulse: pulseWeapon, sentry: sentryWeapon };
 
   // ---------- 敵人行為 ----------
-  function shoot(e, ux, uy, speed, dmg, r, spread = [0]) {
-    for (const off of spread) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * speed, vy: (uy * c + ux * sn) * speed, life: 4, dmg, r }); }
+  function shoot(e, ux, uy, speed, dmg, r, spread = [0], extra = null) {
+    for (const off of spread) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * speed, vy: (uy * c + ux * sn) * speed, life: 4, dmg, r, ...extra }); }
   }
   const eliteDmg = (e) => (e.elite ? ELITE.dmgMul : 1);
   function enemyMove(e, dt) {
@@ -498,7 +602,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         const side = Math.sin(e.seed) > 0 ? 1 : -1;
         vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
         e.fireT -= dt;
-        if (e.fireT <= 0 && d < 320) { e.fireT = t.fireCd; shoot(e, ux, uy, 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0]); }
+        if (e.fireT <= 0 && d < 320) { e.fireT = t.fireCd; shoot(e, ux, uy, t.shotSpeed ?? 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0], t.slowShot ? { slow: t.slowShot, src: 'frost', frost: true } : null); }
         break;
       }
       case 'turret': {
@@ -521,6 +625,25 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         if (e.warn) { e.warn.t -= dt; if (e.warn.t <= 0) { e.x = e.warn.x; e.y = e.warn.y; e.warn = null; e.cdT = t.blinkCd; s.events.push({ type: 'blink', x: e.x, y: e.y }); } return [0, 0]; }
         if (e.cdT <= 0 && d < 420 && d > 90) { const a = rand() * TAU; e.warn = { x: p.x + Math.cos(a) * 70, y: p.y + Math.sin(a) * 70, t: t.blinkWarn }; return [0, 0]; }
         break;
+      }
+      case 'slam': { // 焦岩獸：靠近後原地蓄力（地面預警圈），砸下震波
+        if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = t.slamCd; } return [0, 0]; }
+        if (d < t.slamR * 0.85 && e.cdT <= 0) {
+          e.mode = 'windup'; e.modeT = t.windup;
+          s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: t.slamR, arm: t.windup, dur: 0.15, t: 0, dmg: Math.round(t.slamDmg * eliteDmg(e)), src: 'slam' }); count('slams');
+          return [0, 0];
+        }
+        break;
+      }
+      case 'hive': { // 菌巢：不動，每隔一段時間生出小怪（同時存活有上限）；不先拆掉它，怪會一直冒
+        if (e.cdT <= 0) {
+          e.cdT = t.spawnCd;
+          const alive = s.enemies.filter((o) => o.hive === e && o.hp > 0).length;
+          // 菌巢生的怪也算進本章一般怪的上限（量過：不算的話第六章同屏衝到 425 隻、邏輯耗時超過門檻）
+          const room = Math.min(s.chapter.maxEnemies - (s.enemies.length - s.surgeAlive), SURGE.total - s.enemies.length);
+          for (let i = 0; i < t.spawn.n && alive + i < t.spawn.max && i < room; i++) { const a = rand() * TAU; spawnEnemy(t.spawn.kind, { x: e.x + Math.cos(a) * (e.r + 14), y: e.y + Math.sin(a) * (e.r + 14) }).hive = e; count('hiveSpawns'); }
+        }
+        return [0, 0];
       }
       case 'boss': return BOSS_AI[e.kind](e, dt, ux, uy, d);
     }
@@ -588,6 +711,59 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       }
       return v;
     },
+    // 熔心巨獸：砸地震波＋在你腳下點火 → 加上衝撞（沿路留下火痕）→ 更快
+    boss4(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['巨獸身上的裂縫噴出火焰！', '熔心沸騰！']);
+      e.burstT -= dt;
+      if (e.burstT <= 0) {
+        e.burstT = phase === 3 ? 2.2 : 3.2;
+        radial(e, phase === 1 ? 14 : 20, 110, rand() * TAU, 12);
+        for (let i = 0; i < (phase === 3 ? 4 : 3); i++) { const a = rand() * TAU, r = i === 0 ? 0 : 50 + rand() * 90; s.hazards.push({ type: 'zone', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, r: 40, arm: 1.1, dur: 0.6, t: 0, dmg: 20, src: 'fire' }); }
+        s.events.push({ type: 'burst', x: e.x, y: e.y });
+      }
+      if (phase >= 2 && e.mode === 'move') e.dashT -= dt;
+      const v = dashStep(e, ux, uy, ENEMIES.boss4.speed, phase === 3 ? 0.6 : 0.8, 0.5, 560, 280, () => {
+        e.trailAcc = (e.trailAcc || 0) + dt;
+        if (e.trailAcc > 0.1) { e.trailAcc = 0; s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: 30, arm: 0.3, dur: 3, t: 0, dmg: 12, src: 'fire' }); }
+      });
+      if (e.mode !== 'move' && e.dashT <= 0) e.dashT = phase === 3 ? 3.2 : 4.5;
+      if (phase >= 2) summonEvery(e, dt, 13, 'cinder', 6, 60);
+      return v;
+    },
+    // 霜冠巨像：減速冰針彈幕 → 加上霜地（腳下預警圈）→ 加上旋轉冰光束
+    boss5(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['霜冠降下寒霜！', '巨像全力凍結！']);
+      e.burstT -= dt;
+      if (e.burstT <= 0) {
+        e.burstT = phase === 3 ? 1.8 : 2.6;
+        const n = phase === 1 ? 14 : 18, off = rand() * TAU;
+        for (let i = 0; i < n; i++) { const a = off + (i / n) * TAU; s.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 5, dmg: 11, r: 7, slow: { t: 1.4, k: 0.4 }, src: 'frost', frost: true }); }
+        s.events.push({ type: 'burst', x: e.x, y: e.y });
+      }
+      if (phase >= 2) {
+        e.rainT -= dt;
+        if (e.rainT <= 0) { e.rainT = phase === 3 ? 2.6 : 3.6; for (let i = 0; i < 5; i++) { const a = rand() * TAU, r = i === 0 ? 0 : 40 + rand() * 100; s.hazards.push({ type: 'zone', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, r: 44, arm: 1.0, dur: 0.3, t: 0, dmg: 22, src: 'frostzone' }); } }
+      }
+      if (phase === 3) {
+        e.beamT -= dt;
+        if (e.beamT <= 0) { const a0 = rand() * TAU; for (let i = 0; i < 2; i++) s.hazards.push({ type: 'beam', owner: e, ang: a0 + i * Math.PI, spin: 0.6, len: 600, w: 20, arm: 1.0, dur: 3, t: 0, dmg: 16, src: 'beam' }); e.beamT = 6; }
+      }
+      if (phase >= 2) summonEvery(e, dt, 12, 'glider', 4, 70);
+      return [ux * ENEMIES.boss5.speed, uy * ENEMIES.boss5.speed];
+    },
+    // 深根之心：不太移動；孢子彈幕＋召喚菌巢 → 場內菌根牆包夾 → 全部加快、加上孢雨
+    boss6(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['菌根從地底竄出！', '深根之心狂暴了！']);
+      e.burstT -= dt;
+      if (e.burstT <= 0) { e.burstT = phase === 3 ? 1.6 : 2.6; radial(e, phase === 1 ? 16 : 22, 105, s.t * 1.3, 12); s.events.push({ type: 'burst', x: e.x, y: e.y }); }
+      summonEvery(e, dt, phase === 3 ? 10 : 15, 'hive', 1, 140);
+      if (phase >= 2) { s.rootT -= dt; if (s.rootT <= 0) { s.rootT = phase === 3 ? 6 : 8; spawnRootPair(s.arena.x, s.arena.y, s.arena.r * 0.95, { ...s.chapter.roots, speed: s.chapter.roots.speed * 1.4 }); } }
+      if (phase === 3) {
+        e.rainT -= dt;
+        if (e.rainT <= 0) { e.rainT = 3; for (let i = 0; i < 6; i++) { const a = rand() * TAU, r = i === 0 ? 0 : 40 + rand() * 110; s.hazards.push({ type: 'zone', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, r: 40, arm: 1.0, dur: 0.25, t: 0, dmg: 24, src: 'rain' }); } }
+      }
+      return [ux * ENEMIES.boss6.speed, uy * ENEMIES.boss6.speed];
+    },
     // 晶心守衛：旋轉光束（先預警）→ 加上晶雨（地面預警圈）→ 更多、更快的光束＋召喚晶刺
     boss3(e, dt, ux, uy) {
       const phase = bossPhase(e, ['晶心裂開，晶雨落下！', '晶心全力運轉！']);
@@ -637,8 +813,14 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
 
     // 玩家
     p.inPool = inPool(p.x, p.y);
-    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1);
-    p.x += move.x * spd * dt; p.y += move.y * spd * dt;
+    p.slowT = Math.max(0, p.slowT - dt);
+    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1) * (p.slowT > 0 ? 1 - p.slowK : 1);
+    p.onIce = !!cellFeature('ice', p.x, p.y);
+    if (p.onIce) { // 冰面：速度只慢慢靠近操作方向（慣性），轉向與煞車都會滑
+      const k = 1 - Math.exp(-TERRAIN.ice.grip * dt);
+      p.vx += (move.x * spd - p.vx) * k; p.vy += (move.y * spd - p.vy) * k; count('iceTime', dt);
+    } else { p.vx = move.x * spd; p.vy = move.y * spd; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
     if (move.x) p.facing = move.x > 0 ? 1 : -1;
     { const ml = Math.hypot(move.x, move.y); if (ml > 0.1) { p.aimX = move.x / ml; p.aimY = move.y / ml; } } // 燈焰吐息的方向
     pushOutOfPillars(p, 12);
@@ -653,7 +835,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (s.autoSpawn && !s.boss) {
       s.spawnAcc += dt * ch.spawnRate(s.t);
       // 一般生怪只看「非菌潮」的怪數：菌潮滿場時照樣出本章的怪，否則每章的招牌怪（脹孢囊、沼蛭…）會被菌潮擠掉（M7 量過：第二章脹孢囊引信從 136 次掉到 1 次）
-      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies) spawnEnemy(rosterPick()); }
+      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies && s.enemies.length < SURGE.total) spawnEnemy(rosterPick()); }
     }
 
     buildGrid();
@@ -680,11 +862,11 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
       if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
     }
-    updateHazards(dt);
+    updateHazards(dt); updateVents(dt); updateRoots(dt);
 
     // 武器
     for (const w of p.weapons) WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt);
-    updateStrikes(dt); updateMines(dt);
+    updateStrikes(dt); updateMines(dt); updateSentries(dt);
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -714,7 +896,10 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (const b of s.ebullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (pillarAt(b.x, b.y)) { b.life = 0; continue; }
-      if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + 8) ** 2) { hurtPlayer(b.dmg, 'spore'); b.life = 0; }
+      if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + 8) ** 2) {
+        hurtPlayer(b.dmg, b.src ?? 'spore'); b.life = 0;
+        if (b.slow) { p.slowT = b.slow.t; p.slowK = b.slow.k; count('frostSlows'); } // 霜冰針：命中會減速
+      }
     }
     s.ebullets = s.ebullets.filter((b) => b.life > 0);
 
@@ -789,6 +974,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (r < 0.006) s.pickups.push({ type: 'heal', x: e.x, y: e.y });
       else if (r < 0.009) s.pickups.push({ type: 'magnet', x: e.x, y: e.y });
     }
+    if (t.deathZone) { s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: t.deathZone.r, arm: 0.5, dur: t.deathZone.dur, t: 0, dmg: t.deathZone.dmg, src: 'fire' }); count('cinderZones'); }
     if (t.split) for (let i = 0; i < t.split.n; i++) {
       const a = (i / t.split.n) * TAU;
       const m = spawnEnemy(t.split.kind, { x: e.x + Math.cos(a) * 12, y: e.y + Math.sin(a) * 12 });
