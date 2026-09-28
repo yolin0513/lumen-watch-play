@@ -417,7 +417,8 @@ export function createRenderer(chapter = CHAPTER1) {
     const clock = s.boss || s.arena ? '燈塔守衛' : `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
     g.font = '700 16px system-ui'; shadowText(g, clock, w / 2, top + 21);
     g.font = '600 10px system-ui'; g.fillStyle = '#9aa3d6'; shadowText(g, s.boss || s.arena ? '' : '距離燈塔守衛', w / 2, top + 33);
-    g.textAlign = 'right'; g.font = '600 13px system-ui'; g.fillStyle = '#e9ecff'; shadowText(g, `擊倒 ${s.kills}`, w - 48, top + 20);
+    // 擊倒次數放在左上、等級旁邊：右上角留給倍速鍵與暫停鍵（M7 以前畫在右上，會被倍速鍵蓋住）
+    g.textAlign = 'left'; g.font = '600 13px system-ui'; g.fillStyle = '#e9ecff'; shadowText(g, `擊倒 ${s.kills}`, 64, top + 20);
 
     // 裝備列
     let x = 8; const y = top + 30, S = 18;

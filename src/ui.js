@@ -3,7 +3,7 @@
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
 import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, gearUpgradeCost } from './content.js';
 import { makeIcon } from './art.js';
-import { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel } from './meta.js';
+import { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
 import { aggregate } from './stats.js';
 import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } from './shop.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
@@ -45,13 +45,17 @@ export function createUI(actions) {
   function show(id) {
     for (const o of document.querySelectorAll('.overlay')) o.classList.toggle('show', o.id === id);
     $('#pauseBtn').style.display = id === null ? 'flex' : 'none';
+    $('#speedBtn').style.display = id === null ? 'flex' : 'none';
     if (id && id !== current) lock(); // 只有換面板時才鎖；同一頁重畫（例如連按升級）不鎖，否則連點會被吃掉
     current = id;
   }
+  // 升級卡。o.reso（sim 的 describe 從共鳴資料算出）：partners＝能跟這張卡共鳴的對象、held＝其中玩家身上已有的。
+  // 身上已有對應的就亮「可共鳴」標記；data-reso-* 讓測試直接比對畫面提示與實際共鳴規則。
   function card(o, i) {
-    return `<button class="card" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`} style="--c:${o.color}">
+    const r = o.reso, ready = !!r?.held.length;
+    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"` : ''} style="--c:${o.color}">
       <img src="${iconUrl(o.icon, o.color)}" alt="">
-      <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span></div>
+      <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span>${ready ? '<span class="rb">可共鳴</span>' : ''}</div>
       <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}</div></button>`;
   }
   function buildHtml(p) {
@@ -79,7 +83,7 @@ export function createUI(actions) {
   function gearTile(it, equipped, sel = null, fx = false) {
     const c = RARITIES[it.rarity].color;
     if (sel) {
-      if (equipped) return `<button class="gear locked" disabled data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
+      if (equipped) return `<button class="gear locked" disabled data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
       const on = sel.has(it.uid);
       return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
@@ -127,7 +131,7 @@ export function createUI(actions) {
     chapters(profile) {
       $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
         const open = chapterUnlocked(profile, c.id), done = profile.chapters.cleared.includes(c.id), best = profile.chapters.best[c.id];
-        return `<button class="chapter ch${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
+        return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
           <b>第${'一二三四五六'[c.id - 1]}章・${esc(c.name)}</b>${done ? '<span class="done">已點亮</span>' : ''}
           <div>${open ? esc(c.tagline) : `通關第${'一二三四五六'[c.id - 2]}章後解鎖`}</div>
           ${best ? `<div class="best">最快 ${clock(best.t)}・擊倒 ${best.kills}</div>` : ''}</button>`;
@@ -152,13 +156,13 @@ export function createUI(actions) {
       $('#gear .oil-slot').innerHTML = oilTag(profile);
       { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
         const eq = profile.weapons.equipped, owned = profile.weapons.owned;
-        const cur = eq ?? START_WEAPON;
+        // 清單固定是「預設武器 ＋ 全部專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
+        // M4～M6 的錯誤：第一列畫的是「目前裝備的武器」，裝了專屬武器後它出現兩次、預設武器從清單消失。
+        const cur = startWeaponOf(profile);
         $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
-          <div class="wslot${fx?.kind === 'weapon' ? ' fx-flash' : ''}"><img src="${iconUrl(cur, WEAPONS[cur].color)}" alt=""><div><b style="color:${WEAPONS[cur].color}">${esc(WEAPONS[cur].name)}</b>${eq ? '<span class="lim">專屬</span>' : '<span class="lim">預設</span>'}<div class="d">${esc(WEAPONS[cur].desc[0])}</div></div>
-          ${eq ? '<button class="buy" data-act="weaponUnequip">卸下</button>' : ''}</div>
-          ${EXCLUSIVES.map((id) => { const own = owned.includes(id), on = eq === id;
-            return `<div class="wslot ${own ? '' : 'locked'}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
-            ${own && !on ? `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>` : on ? '<span class="max">裝備中</span>' : ''}</div>`; }).join('')}`;
+          ${[START_WEAPON, ...EXCLUSIVES].map((id) => { const def = id === START_WEAPON, own = def || owned.includes(id), on = cur === id;
+            return `<div class="wslot${own ? '' : ' locked'}${on && fx?.kind === 'weapon' ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
+            ${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}</div>`; }).join('')}`;
       }
       const eq = profile.gear.equipped, items = profile.gear.items, pending = profile.gear.pending;
       const isEq = (it) => eq[it.slot] === it.uid;

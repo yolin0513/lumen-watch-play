@@ -8,6 +8,7 @@ import { CHAPTERS, CHAPTER1, WEAPON_GACHA } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
 import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
+import { createClock, SPEEDS } from './clock.js';
 import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
 const canvas = document.getElementById('game');
@@ -18,6 +19,7 @@ const DEBUG = params.has('debug');
 const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean)) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
+const clock = createClock(); // 固定步長時鐘：倍速只改每幀跑幾步，不改步長
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
 let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
@@ -185,6 +187,12 @@ const ui = createUI({
   quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
+// 倍速鍵：1 → 1.5 → 2 → 1 循環，記在存檔設定裡
+const speed = () => (SPEEDS.includes(profile.settings?.speed) ? profile.settings.speed : 1);
+const speedBtn = document.getElementById('speedBtn');
+const showSpeed = () => { speedBtn.textContent = `${speed()}×`; speedBtn.classList.toggle('fast', speed() > 1); };
+speedBtn.addEventListener('click', () => { profile.settings.speed = SPEEDS[(SPEEDS.indexOf(speed()) + 1) % SPEEDS.length]; persist(); showSpeed(); });
+showSpeed();
 addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' && e.code !== 'KeyP') return;
   if (paused) { paused = false; input.reset(); sync(); } else pause();
@@ -212,6 +220,7 @@ function toMenu() {
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
 function newRun(id) {
+  clock.reset();
   chapterId = id;
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
@@ -261,14 +270,13 @@ function frame(now) {
   const t0 = performance.now();
   if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
-  else if (!paused) {
-    // 掉幀時（一幀超過 1/30 秒）拆成數個小步補上，最多補到 4 步；否則低幀率時整個遊戲會變慢動作
-    const steps = Math.min(4, Math.max(1, Math.ceil(raw / (1 / 30))));
-    const sdt = Math.min(raw, 4 / 30) / steps;
-    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(steps > 1 ? sdt : dt, input.move);
+  else if (!paused && sim.state.phase === 'play') {
+    // 固定步長：每步永遠 1/60 秒，倍速＝這一幀多跑幾步（見 clock.js）。掉幀時一樣靠多跑幾步補回，最多 MAX_STEPS 步。
+    const { steps, dt: sdt } = clock.advance(raw, speed());
+    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(sdt, input.move);
     sync();
-  }
-  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
+  } else { clock.reset(); if (!paused) sync(); } // 選卡／燈核／暫停時不累積時間，回來不會一口氣補一大段
+  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt * (mode === 'run' ? speed() : 1), W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
   fps.frames++; fps.acc += raw; fps.worst = Math.max(fps.worst, cost);

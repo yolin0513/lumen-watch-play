@@ -81,6 +81,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   }
   function weaponStats(w) { return w.evo ? RESONANCES[w.id].stats : WEAPONS[w.id].lv[w.lv - 1]; }
   function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0, wisps: [] }; p.weapons.push(w); return w; }
+  // 提示用的共鳴配對：直接讀 RESONANCES（不准另寫對照表）。燈核真正判斷共鳴的是 canEvolve；
+  // shop-test 用「實際開燈核」得到的結果比對提示，兩條路徑分開，提示寫錯或過期才抓得到。
+  function resoNeeds(id) { return RESONANCES[id]?.needs; }
   function canEvolve(w) { const r = RESONANCES[w.id]; return r && !w.evo && w.lv >= MAX_LV && (p.passives[r.needs] || 0) > 0; }
 
   function options() {
@@ -99,13 +102,23 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const isW = o.kind === 'wup' || o.kind === 'wnew';
     const def = isW ? WEAPONS[o.id] : PASSIVES[o.id];
     const desc = isW ? def.desc[o.from] : def.desc;
-    let hint = '';
-    if (isW && RESONANCES[o.id]) hint = `滿級＋${PASSIVES[RESONANCES[o.id].needs].name} → 共鳴「${RESONANCES[o.id].name}」`;
-    if (!isW) { // 一個被動可以對應好幾把武器：先列玩家身上有的，沒有才列全部
-      const ws = Object.keys(RESONANCES).filter((wid) => RESONANCES[wid].needs === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
-      if (ws.length) hint = `與 ${(held.length ? held : ws).map((wid) => WEAPONS[wid].name).join('、')} 共鳴`;
+    // 共鳴提示：一律從 RESONANCES 算，不另外寫對照表（shop-test 會拿「實際開燈核會不會共鳴」逐一比對）
+    // reso.partners＝能跟這張卡共鳴的對象（武器卡 → 需要的被動；被動卡 → 所有需要它的武器）；reso.held＝其中玩家身上已經有的
+    let hint = '', reso = null;
+    if (isW && RESONANCES[o.id]) {
+      const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
+      reso = { partners: [need], held: have ? [need] : [] };
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」`;
     }
-    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint };
+    if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
+      const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
+      if (ws.length) {
+        reso = { partners: ws, held };
+        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name);
+        hint = held.length ? `★ 可與你的 ${held.map(name).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}` : `可與 ${ws.map(name).join('、')} 共鳴`;
+      }
+    }
+    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
   }
   function rollChoices() {
     const pool = options();
@@ -773,5 +786,5 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   p.hp = p.maxHp;
   p.revives = Math.floor(scaled(0, agg0.revive));
   addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
-  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options };
+  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
 }

@@ -24,6 +24,10 @@
   #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 36px; height: 36px; border-radius: 50%; padding: 0;
     border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; }
   #pauseBtn svg { width: 14px; height: 14px; display: block; }
+  /* 倍速鍵：在暫停鍵左邊；不是 1 倍時亮起來，提醒玩家目前在加速 */
+  #speedBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 52px; min-width: 44px; height: 36px; border-radius: 18px; padding: 0 8px;
+    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; color: var(--gold); font-weight: 800; font-size: 14px; }
+  #speedBtn.fast { background: rgba(255, 190, 90, 0.25); border-color: #ffd27a; }
 
   .overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
     padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); box-sizing: border-box;
@@ -124,6 +128,10 @@
   .card img { width: 52px; height: 52px; flex: none; }
   .card .t { font-weight: 800; font-size: 16px; } .card .l { font-size: 12px; font-weight: 700; color: var(--c); margin-left: 6px; }
   .card .d { font-size: 13px; color: #cfd6ff; margin-top: 3px; line-height: 1.4; } .card .h { font-size: 11px; color: #ffcf8a; margin-top: 4px; }
+  /* 身上已有可共鳴的對象：卡片外框改成金色、右上角標「可共鳴」 */
+  .card.reso-ready { border-color: #ffd27a; box-shadow: 0 0 18px rgba(255, 210, 122, 0.45); }
+  .card.reso-ready .h { color: #ffe9a8; font-weight: 700; }
+  .card .rb { margin-left: 6px; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 800; color: #1a1206; background: #ffd27a; vertical-align: 2px; }
   .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 16px; max-width: 320px; }
   .build span { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--dim); width: 60px; }
   .build img { width: 40px; height: 40px; }
@@ -196,6 +204,7 @@
 <div id="stage">
   <canvas id="game"></canvas>
   <div id="safeProbe" style="position:absolute;top:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none"></div>
+  <button id="speedBtn" aria-label="倍速">1×</button>
   <button id="pauseBtn" aria-label="暫停"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/></svg></button>
 
   <div id="menu" class="overlay show">

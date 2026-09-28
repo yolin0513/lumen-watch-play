@@ -22,6 +22,10 @@
   #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 36px; height: 36px; border-radius: 50%; padding: 0;
     border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; }
   #pauseBtn svg { width: 14px; height: 14px; display: block; }
+  /* 倍速鍵：在暫停鍵左邊；不是 1 倍時亮起來，提醒玩家目前在加速 */
+  #speedBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 52px; min-width: 44px; height: 36px; border-radius: 18px; padding: 0 8px;
+    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; color: var(--gold); font-weight: 800; font-size: 14px; }
+  #speedBtn.fast { background: rgba(255, 190, 90, 0.25); border-color: #ffd27a; }
 
   .overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
     padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); box-sizing: border-box;
@@ -122,6 +126,10 @@
   .card img { width: 52px; height: 52px; flex: none; }
   .card .t { font-weight: 800; font-size: 16px; } .card .l { font-size: 12px; font-weight: 700; color: var(--c); margin-left: 6px; }
   .card .d { font-size: 13px; color: #cfd6ff; margin-top: 3px; line-height: 1.4; } .card .h { font-size: 11px; color: #ffcf8a; margin-top: 4px; }
+  /* 身上已有可共鳴的對象：卡片外框改成金色、右上角標「可共鳴」 */
+  .card.reso-ready { border-color: #ffd27a; box-shadow: 0 0 18px rgba(255, 210, 122, 0.45); }
+  .card.reso-ready .h { color: #ffe9a8; font-weight: 700; }
+  .card .rb { margin-left: 6px; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 800; color: #1a1206; background: #ffd27a; vertical-align: 2px; }
   .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 16px; max-width: 320px; }
   .build span { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--dim); width: 60px; }
   .build img { width: 40px; height: 40px; }
@@ -194,6 +202,7 @@
 <div id="stage">
   <canvas id="game"></canvas>
   <div id="safeProbe" style="position:absolute;top:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none"></div>
+  <button id="speedBtn" aria-label="倍速">1×</button>
   <button id="pauseBtn" aria-label="暫停"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/></svg></button>
 
   <div id="menu" class="overlay show">
@@ -842,6 +851,9 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   }
   function weaponStats(w) { return w.evo ? RESONANCES[w.id].stats : WEAPONS[w.id].lv[w.lv - 1]; }
   function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0, wisps: [] }; p.weapons.push(w); return w; }
+  // 提示用的共鳴配對：直接讀 RESONANCES（不准另寫對照表）。燈核真正判斷共鳴的是 canEvolve；
+  // shop-test 用「實際開燈核」得到的結果比對提示，兩條路徑分開，提示寫錯或過期才抓得到。
+  function resoNeeds(id) { return RESONANCES[id]?.needs; }
   function canEvolve(w) { const r = RESONANCES[w.id]; return r && !w.evo && w.lv >= MAX_LV && (p.passives[r.needs] || 0) > 0; }
 
   function options() {
@@ -860,13 +872,23 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const isW = o.kind === 'wup' || o.kind === 'wnew';
     const def = isW ? WEAPONS[o.id] : PASSIVES[o.id];
     const desc = isW ? def.desc[o.from] : def.desc;
-    let hint = '';
-    if (isW && RESONANCES[o.id]) hint = `滿級＋${PASSIVES[RESONANCES[o.id].needs].name} → 共鳴「${RESONANCES[o.id].name}」`;
-    if (!isW) { // 一個被動可以對應好幾把武器：先列玩家身上有的，沒有才列全部
-      const ws = Object.keys(RESONANCES).filter((wid) => RESONANCES[wid].needs === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
-      if (ws.length) hint = `與 ${(held.length ? held : ws).map((wid) => WEAPONS[wid].name).join('、')} 共鳴`;
+    // 共鳴提示：一律從 RESONANCES 算，不另外寫對照表（shop-test 會拿「實際開燈核會不會共鳴」逐一比對）
+    // reso.partners＝能跟這張卡共鳴的對象（武器卡 → 需要的被動；被動卡 → 所有需要它的武器）；reso.held＝其中玩家身上已經有的
+    let hint = '', reso = null;
+    if (isW && RESONANCES[o.id]) {
+      const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
+      reso = { partners: [need], held: have ? [need] : [] };
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」`;
     }
-    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint };
+    if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
+      const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
+      if (ws.length) {
+        reso = { partners: ws, held };
+        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name);
+        hint = held.length ? `★ 可與你的 ${held.map(name).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}` : `可與 ${ws.map(name).join('、')} 共鳴`;
+      }
+    }
+    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
   }
   function rollChoices() {
     const pool = options();
@@ -1534,7 +1556,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   p.hp = p.maxHp;
   p.revives = Math.floor(scaled(0, agg0.revive));
   addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
-  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options };
+  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
 }
 
 return { VW, makeRng, TERRAIN, terrainCell, terrainIn, createSim };
@@ -2258,7 +2280,8 @@ function createRenderer(chapter = CHAPTER1) {
     const clock = s.boss || s.arena ? '燈塔守衛' : `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
     g.font = '700 16px system-ui'; shadowText(g, clock, w / 2, top + 21);
     g.font = '600 10px system-ui'; g.fillStyle = '#9aa3d6'; shadowText(g, s.boss || s.arena ? '' : '距離燈塔守衛', w / 2, top + 33);
-    g.textAlign = 'right'; g.font = '600 13px system-ui'; g.fillStyle = '#e9ecff'; shadowText(g, `擊倒 ${s.kills}`, w - 48, top + 20);
+    // 擊倒次數放在左上、等級旁邊：右上角留給倍速鍵與暫停鍵（M7 以前畫在右上，會被倍速鍵蓋住）
+    g.textAlign = 'left'; g.font = '600 13px system-ui'; g.fillStyle = '#e9ecff'; shadowText(g, `擊倒 ${s.kills}`, 64, top + 20);
 
     // 裝備列
     let x = 8; const y = top + 30, S = 18;
@@ -2325,6 +2348,32 @@ function drawSlot(g, icon, x, y, S, lv) {
 return { createRenderer };
 })();
 
+// ---- clock.js
+const __m_clock_js = (() => {
+// 固定步長時鐘（倍速用）。純邏輯，不碰 DOM。
+// 倍速＝每幀多跑幾步「同樣長度」的模擬步，不是把每一步拉長——拉長步長會改變移動、碰撞、冷卻的結果，
+// 同一個 seed 在 1 倍與 2 倍就會打出不同的局。meta-test 用固定 seed 跑完整一局，逐項比對各檔倍速的最終狀態。
+const STEP = 1 / 60;
+const SPEEDS = [1, 1.5, 2]; // 上限 2 倍：手機幀率還沒有實測數據，不假設跑得動更高
+const MAX_STEPS = 8;        // 一幀最多補幾步；跟不上時放掉多的時間（遊戲變慢），也不拉長步長
+
+function createClock() {
+  let acc = 0;
+  return {
+    // realDt：這一幀真實經過的秒數。回傳這一幀要跑幾步、每步多長（永遠是 STEP）
+    advance(realDt, speed = 1) {
+      acc += Math.min(Math.max(realDt, 0), 0.25) * speed;
+      let n = Math.floor(acc / STEP + 1e-9);
+      if (n > MAX_STEPS) { n = MAX_STEPS; acc = 0; } else acc = Math.max(0, acc - n * STEP);
+      return { steps: n, dt: STEP };
+    },
+    reset() { acc = 0; },
+  };
+}
+
+return { STEP, SPEEDS, MAX_STEPS, createClock };
+})();
+
 // ---- save.js
 const __m_save_js = (() => {
 // 存檔：讀、寫、升級、修復。不直接碰 localStorage——儲存體由 createStore 包起來注入，Node 測試可塞假的。
@@ -2335,9 +2384,10 @@ const __m_save_js = (() => {
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
+const { SPEEDS } = __m_clock_js;
 const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -2356,7 +2406,7 @@ function defaultProfile() {
     // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
     weapons: { owned: [], equipped: null },
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
-    settings: { autoSalvage: -1, skipAnim: false },
+    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（1／1.5／2）
   };
 }
 
@@ -2389,6 +2439,8 @@ const MIGRATIONS = {
     if (Array.isArray(shop?.history)) shop.history = shop.history.filter((h) => !isObj(h) || !gone(h.id));
     return { ...d, shop, gear: isObj(d.gear) ? { ...d.gear, pending: [] } : d.gear, settings: { autoSalvage: -1, skipAnim: false }, v: 4 };
   },
+  // v4 → v5：加入倍速設定（預設 1 倍），原有設定原樣保留
+  4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -2540,6 +2592,8 @@ function sanitize(d) {
     if (Number.isInteger(a) && a >= -1 && a <= AUTO_SALVAGE_MAX) out.settings.autoSalvage = a;
     else if (a !== undefined) fix(`自動分解門檻不合法（${JSON.stringify(a)}），改為關閉`);
     out.settings.skipAnim = d.settings.skipAnim === true;
+    const sp = d.settings.speed;
+    if (SPEEDS.includes(sp)) out.settings.speed = sp; else if (sp !== undefined) fix(`倍速設定不合法（${JSON.stringify(sp)}），改為 1 倍`);
   } else if (d.settings !== undefined) fix('settings 型別不對，重設');
   return { profile: out, notes };
 }
@@ -2890,7 +2944,7 @@ const __m_ui_js = (() => {
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
 const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
-const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel } = __m_meta_js;
+const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } = __m_meta_js;
 const { aggregate } = __m_stats_js;
 const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } = __m_shop_js;
 const { MAX_ITEMS, PENDING_MAX } = __m_save_js;
@@ -2931,13 +2985,17 @@ function createUI(actions) {
   function show(id) {
     for (const o of document.querySelectorAll('.overlay')) o.classList.toggle('show', o.id === id);
     $('#pauseBtn').style.display = id === null ? 'flex' : 'none';
+    $('#speedBtn').style.display = id === null ? 'flex' : 'none';
     if (id && id !== current) lock(); // 只有換面板時才鎖；同一頁重畫（例如連按升級）不鎖，否則連點會被吃掉
     current = id;
   }
+  // 升級卡。o.reso（sim 的 describe 從共鳴資料算出）：partners＝能跟這張卡共鳴的對象、held＝其中玩家身上已有的。
+  // 身上已有對應的就亮「可共鳴」標記；data-reso-* 讓測試直接比對畫面提示與實際共鳴規則。
   function card(o, i) {
-    return `<button class="card" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`} style="--c:${o.color}">
+    const r = o.reso, ready = !!r?.held.length;
+    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"` : ''} style="--c:${o.color}">
       <img src="${iconUrl(o.icon, o.color)}" alt="">
-      <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span></div>
+      <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span>${ready ? '<span class="rb">可共鳴</span>' : ''}</div>
       <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}</div></button>`;
   }
   function buildHtml(p) {
@@ -2965,7 +3023,7 @@ function createUI(actions) {
   function gearTile(it, equipped, sel = null, fx = false) {
     const c = RARITIES[it.rarity].color;
     if (sel) {
-      if (equipped) return `<button class="gear locked" disabled data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
+      if (equipped) return `<button class="gear locked" disabled data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b><span class="main">裝備中，不能批量分解</span></button>`;
       const on = sel.has(it.uid);
       return `<button class="gear pick${on ? ' sel' : ''}" data-act="gearPick" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}"><span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
@@ -3013,7 +3071,7 @@ function createUI(actions) {
     chapters(profile) {
       $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
         const open = chapterUnlocked(profile, c.id), done = profile.chapters.cleared.includes(c.id), best = profile.chapters.best[c.id];
-        return `<button class="chapter ch${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
+        return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
           <b>第${'一二三四五六'[c.id - 1]}章・${esc(c.name)}</b>${done ? '<span class="done">已點亮</span>' : ''}
           <div>${open ? esc(c.tagline) : `通關第${'一二三四五六'[c.id - 2]}章後解鎖`}</div>
           ${best ? `<div class="best">最快 ${clock(best.t)}・擊倒 ${best.kills}</div>` : ''}</button>`;
@@ -3038,13 +3096,13 @@ function createUI(actions) {
       $('#gear .oil-slot').innerHTML = oilTag(profile);
       { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
         const eq = profile.weapons.equipped, owned = profile.weapons.owned;
-        const cur = eq ?? START_WEAPON;
+        // 清單固定是「預設武器 ＋ 全部專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
+        // M4～M6 的錯誤：第一列畫的是「目前裝備的武器」，裝了專屬武器後它出現兩次、預設武器從清單消失。
+        const cur = startWeaponOf(profile);
         $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
-          <div class="wslot${fx?.kind === 'weapon' ? ' fx-flash' : ''}"><img src="${iconUrl(cur, WEAPONS[cur].color)}" alt=""><div><b style="color:${WEAPONS[cur].color}">${esc(WEAPONS[cur].name)}</b>${eq ? '<span class="lim">專屬</span>' : '<span class="lim">預設</span>'}<div class="d">${esc(WEAPONS[cur].desc[0])}</div></div>
-          ${eq ? '<button class="buy" data-act="weaponUnequip">卸下</button>' : ''}</div>
-          ${EXCLUSIVES.map((id) => { const own = owned.includes(id), on = eq === id;
-            return `<div class="wslot ${own ? '' : 'locked'}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
-            ${own && !on ? `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>` : on ? '<span class="max">裝備中</span>' : ''}</div>`; }).join('')}`;
+          ${[START_WEAPON, ...EXCLUSIVES].map((id) => { const def = id === START_WEAPON, own = def || owned.includes(id), on = cur === id;
+            return `<div class="wslot${own ? '' : ' locked'}${on && fx?.kind === 'weapon' ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
+            ${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}</div>`; }).join('')}`;
       }
       const eq = profile.gear.equipped, items = profile.gear.items, pending = profile.gear.pending;
       const isEq = (it) => eq[it.slot] === it.uid;
@@ -3339,6 +3397,7 @@ const { CHAPTERS, CHAPTER1, WEAPON_GACHA } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
 const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
 const { createPerf } = __m_perf_js;
+const { createClock, SPEEDS } = __m_clock_js;
 const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
@@ -3348,6 +3407,7 @@ const DEBUG = params.has('debug');
 const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean)) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
+const clock = createClock(); // 固定步長時鐘：倍速只改每幀跑幾步，不改步長
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
 let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
@@ -3515,6 +3575,12 @@ const ui = createUI({
   quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
+// 倍速鍵：1 → 1.5 → 2 → 1 循環，記在存檔設定裡
+const speed = () => (SPEEDS.includes(profile.settings?.speed) ? profile.settings.speed : 1);
+const speedBtn = document.getElementById('speedBtn');
+const showSpeed = () => { speedBtn.textContent = `${speed()}×`; speedBtn.classList.toggle('fast', speed() > 1); };
+speedBtn.addEventListener('click', () => { profile.settings.speed = SPEEDS[(SPEEDS.indexOf(speed()) + 1) % SPEEDS.length]; persist(); showSpeed(); });
+showSpeed();
 addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' && e.code !== 'KeyP') return;
   if (paused) { paused = false; input.reset(); sync(); } else pause();
@@ -3542,6 +3608,7 @@ function toMenu() {
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
 function newRun(id) {
+  clock.reset();
   chapterId = id;
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
@@ -3591,14 +3658,13 @@ function frame(now) {
   const t0 = performance.now();
   if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
-  else if (!paused) {
-    // 掉幀時（一幀超過 1/30 秒）拆成數個小步補上，最多補到 4 步；否則低幀率時整個遊戲會變慢動作
-    const steps = Math.min(4, Math.max(1, Math.ceil(raw / (1 / 30))));
-    const sdt = Math.min(raw, 4 / 30) / steps;
-    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(steps > 1 ? sdt : dt, input.move);
+  else if (!paused && sim.state.phase === 'play') {
+    // 固定步長：每步永遠 1/60 秒，倍速＝這一幀多跑幾步（見 clock.js）。掉幀時一樣靠多跑幾步補回，最多 MAX_STEPS 步。
+    const { steps, dt: sdt } = clock.advance(raw, speed());
+    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(sdt, input.move);
     sync();
-  }
-  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
+  } else { clock.reset(); if (!paused) sync(); } // 選卡／燈核／暫停時不累積時間，回來不會一口氣補一大段
+  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt * (mode === 'run' ? speed() : 1), W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
   fps.frames++; fps.acc += raw; fps.worst = Math.max(fps.worst, cost);
