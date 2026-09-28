@@ -1532,6 +1532,7 @@ const CREATURE_ART = {
   boss2:    { seed: 83, radius: 40, hue: 95,  eyes: 4, spikes: 6 },
   boss3:    { seed: 47, radius: 44, hue: 250, eyes: 1, spikes: 16 },
 };
+const NONE = new Set();
 const AFFIX_COLOR = { swift: 'rgba(120,255,200,1)', regen: 'rgba(120,255,120,1)', armor: 'rgba(255,200,90,1)' };
 
 function createRenderer(chapter = CHAPTER1) {
@@ -1595,6 +1596,7 @@ function createRenderer(chapter = CHAPTER1) {
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
   function render(g, s, dt, W, H, scale, safeTop = 0, hud = true, prof = null) {
     prof?.start();
+    const OFF = prof?.off ?? NONE; // 效能量測的 A/B：關掉指定的繪製項目，看總時間少多少（平常是空集合）
     consume(s, dt);
     prof?.lap('特效更新');
     const vh = H / scale, p = s.player, T = s.t;
@@ -1605,7 +1607,7 @@ function createRenderer(chapter = CHAPTER1) {
     g.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
-    g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+    g.fillStyle = OFF.has('ground') ? '#101020' : g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
     prof?.lap('地面');
 
     // 泥沼：深色水窪＋一圈反光
@@ -1672,7 +1674,7 @@ function createRenderer(chapter = CHAPTER1) {
 
     // 經驗晶
     g.globalCompositeOperation = 'lighter';
-    for (const gm of s.gems) if (onScreen(gm.x, gm.y)) { const k = gm.big ? 2 : 1; g.drawImage(G.gem, gm.x - 12 * k, gm.y - 12 * k, 24 * k, 24 * k); }
+    if (!OFF.has('glow')) for (const gm of s.gems) if (onScreen(gm.x, gm.y)) { const k = gm.big ? 2 : 1; g.drawImage(G.gem, gm.x - 12 * k, gm.y - 12 * k, 24 * k, 24 * k); }
     g.globalCompositeOperation = 'source-over';
     g.fillStyle = '#bff6ff';
     for (const gm of s.gems) {
@@ -1733,14 +1735,14 @@ function createRenderer(chapter = CHAPTER1) {
       const sp = sprites[e.kind], img = sp.frames[Math.floor(e.frame) % sp.frames.length];
       const k = e.r / ENEMIES[e.kind].r, size = sp.size * k;
       const boss = ENEMIES[e.kind].ai === 'boss';
-      if (e.elite || boss) {
+      if ((e.elite || boss) && !OFF.has('glow')) {
         g.globalCompositeOperation = 'lighter';
         const gl = boss ? G.boss : G['elite_' + e.affix];
         const pr = e.r * (2.2 + Math.sin(T * 5) * 0.15);
         g.globalAlpha = 0.6; g.drawImage(gl, e.x - pr, e.y - pr, pr * 2, pr * 2); g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
       }
-      if (e.slowT > 0) g.filter = 'hue-rotate(40deg)';
+      if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
       if (e.flash > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.8; g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
@@ -1759,13 +1761,13 @@ function createRenderer(chapter = CHAPTER1) {
       if (!onScreen(b.x, b.y)) continue;
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
-      g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
+      if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
       g.strokeStyle = b.big ? 'rgba(255,250,220,0.95)' : 'rgba(255,240,200,0.9)'; g.lineWidth = 3 * k;
       g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.025 * k, b.y - b.vy * 0.025 * k); g.stroke();
     }
     for (const w of p.weapons) if (w.orbs) for (const o of w.orbs) {
       const r = w.evo ? 26 : 20;
-      g.drawImage(G.orb, o.x - r, o.y - r, r * 2, r * 2);
+      if (!OFF.has('glow')) g.drawImage(G.orb, o.x - r, o.y - r, r * 2, r * 2);
       g.fillStyle = w.evo ? '#fff' : '#dffaff'; g.beginPath(); g.arc(o.x, o.y, w.evo ? 6 : 4.5, 0, 7); g.fill();
     }
     for (const a of fx.arcs) {
@@ -1783,7 +1785,7 @@ function createRenderer(chapter = CHAPTER1) {
     g.globalAlpha = 1;
     for (const b of s.ebullets) {
       if (!onScreen(b.x, b.y)) continue;
-      const r = b.r * 2.6; g.drawImage(G.spore, b.x - r, b.y - r, r * 2, r * 2);
+      const r = b.r * 2.6; if (!OFF.has('glow')) g.drawImage(G.spore, b.x - r, b.y - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = 'source-over';
     for (const b of s.ebullets) { if (!onScreen(b.x, b.y)) continue; g.fillStyle = '#ffd6f4'; g.beginPath(); g.arc(b.x, b.y, b.r * 0.6, 0, 7); g.fill(); g.strokeStyle = '#8a1a6a'; g.lineWidth = 1.5; g.stroke(); }
@@ -1793,7 +1795,7 @@ function createRenderer(chapter = CHAPTER1) {
       g.strokeStyle = r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
-    for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
+    if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 
     prof?.lap('子彈與特效');
@@ -1809,7 +1811,7 @@ function createRenderer(chapter = CHAPTER1) {
     prof?.lap('飄字');
     // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
-    if (s.chapter.fog) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
+    if (s.chapter.fog && !OFF.has('fog')) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
       const px = (p.x - camX) * scale, py = (p.y - camY) * scale, R = s.chapter.fog * scale;
       const fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
       fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
@@ -1824,9 +1826,11 @@ function createRenderer(chapter = CHAPTER1) {
       g.globalAlpha = 1;
     }
     prof?.lap('霧');
-    const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
-    vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
-    g.fillStyle = vig; g.fillRect(0, 0, W, H);
+    if (!OFF.has('vignette')) {
+      const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
+      g.fillStyle = vig; g.fillRect(0, 0, W, H);
+    }
     const lowHp = p.hp / p.maxHp < 0.3 ? 0.25 + Math.sin(T * 6) * 0.1 : 0;
     const red = Math.max(fx.hurtFlash, lowHp);
     if (red > 0) {
@@ -2586,18 +2590,20 @@ const __m_perf_js = (() => {
 //   重場面：快轉到第 360 秒（大量怪物、共鳴武器）後再量 600 幀
 // 每一幀記錄：瀏覽器給的幀間隔、邏輯耗時、繪製耗時（再細分各繪製步驟）。量完在畫面上顯示報表，也放在 window.__perf。
 // 手機實機要量就用手機開這個網址；桌面瀏覽器量到的數字不能代表手機。
+// &off=fog,vignette,glow,particles,ground,filter：A/B 量測，關掉指定的繪製項目（看各項佔多少）
+// &dpr=1：把畫布解析度上限改成指定倍率（看解析度佔多少）
 // &sync=1：同步模式——每次 rAF 連續畫多幀，每幀畫完讀回一個像素逼 GPU 做完再計時。
 //   給「頁面不可見、rAF 被節流」的環境用（例如開發環境的隱藏瀏覽器面板）：量得到繪製成本，量不到真實幀間隔。
 const { CHAPTERS } = __m_content_js;
 const pct = (a, p) => (a.length ? a[Math.min(a.length - 1, Math.floor(a.length * p))] : 0);
 const f1 = (x) => x.toFixed(1);
 
-function createPerf(chapterId, sync = false) {
+function createPerf(chapterId, sync = false, off = []) {
   const chapter = CHAPTERS.find((c) => c.id === chapterId) ?? CHAPTERS[0];
   const stages = [{ name: '輕場面（開局）', frames: 300, skipTo: 0 }, { name: '重場面（第 360 秒）', frames: 600, skipTo: 360 }];
   let stage = 0, rec = [], lastNow = null, done = false, report = null, curPhases = null;
   const results = [];
-  const prof = { // render.js 每畫完一個步驟呼叫 lap(名稱)
+  const prof = { off: new Set(off), // render.js 每畫完一個步驟呼叫 lap(名稱)
     start() { curPhases = {}; this.t = performance.now(); },
     lap(name) { const t = performance.now(); curPhases[name] = (curPhases[name] || 0) + (t - this.t); this.t = t; },
   };
@@ -2614,7 +2620,7 @@ function createPerf(chapterId, sync = false) {
       scene: { enemies: s.enemies.length, bullets: s.bullets.length, gems: s.gems.length } };
   }
   function text() {
-    const lines = [`效能量測 第${chapter.id}章 ${chapter.name}｜${sync ? '同步模式' : '一般模式'}｜螢幕 ${innerWidth}×${innerHeight}、DPR ${devicePixelRatio}`];
+    const lines = [`效能量測 第${chapter.id}章 ${chapter.name}｜${sync ? '同步模式' : '一般模式'}${off.length ? `｜關閉：${off.join(',')}` : ''}｜畫布 ${document.getElementById('game').width}×${document.getElementById('game').height}｜螢幕 ${innerWidth}×${innerHeight}、DPR ${devicePixelRatio}`];
     for (const r of results) {
       lines.push('', `【${r.name}】場面：怪 ${r.scene.enemies}、子彈 ${r.scene.bullets}、光屑 ${r.scene.gems}`,
         sync ? '幀間隔：同步模式不量（只量繪製成本）' : `平均 ${f1(r.fps)} fps；幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
@@ -2667,14 +2673,14 @@ const g = canvas.getContext('2d');
 const input = createInput(canvas);
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
-const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync')) : null; // 效能量測模式，見 perf.js
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean)) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
 let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
   const r = canvas.getBoundingClientRect();
   W = canvas.width = Math.round(r.width * dpr);
   H = canvas.height = Math.round(r.height * dpr);

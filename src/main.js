@@ -15,14 +15,14 @@ const g = canvas.getContext('2d');
 const input = createInput(canvas);
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
-const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync')) : null; // 效能量測模式，見 perf.js
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean)) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
 let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
   const r = canvas.getBoundingClientRect();
   W = canvas.width = Math.round(r.width * dpr);
   H = canvas.height = Math.round(r.height * dpr);
