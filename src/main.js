@@ -6,7 +6,7 @@ import { createRenderer } from './render.js';
 import { createUI, gearName, autoSalvageText } from './ui.js';
 import { CHAPTERS, CHAPTER1, WEAPON_GACHA } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
-import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
+import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
 import { createClock, SPEEDS } from './clock.js';
 import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
@@ -171,10 +171,14 @@ const ui = createUI({
   },
   gearBatchAsk: () => { if (gearView.sel?.size) refreshGear({ sheet: 'batch' }); },
   gearBatchBack: () => refreshGear({ sheet: null }),
+  // 進階：裝備突破、專屬武器進階
+  gearAscend: (d) => { const uid = Number(d.uid), r = ascendGear(profile, uid); if (r.ok) { persist(); ui.toast(`突破到 ★${r.star}，解鎖新能力`); } refreshGear({ open: uid, fx: r.ok ? { uid, kind: 'star' } : null }); },
+  wstarOpen: (d) => refreshGear({ open: null, sheet: 'wstar', wid: d.id }),
+  wstarGo: (d) => { const r = ascendWeapon(profile, d.id); if (r.ok) { persist(); ui.toast(`${d.id && r.star ? `進階到 ★${r.star}` : ''}`); } refreshGear({ sheet: 'wstar', wid: d.id, fx: r.ok ? { kind: 'wstar', id: d.id } : null }); },
   gearBatchGo: () => {
     const r = salvageMany(profile, [...(gearView.sel || [])]);
     persist(); refreshGear({ sel: null, sheet: null });
-    ui.toast(`分解 ${r.count} 件，燈油 +${r.oil.toLocaleString('zh-Hant')}${r.skipped.length ? `（${r.skipped.length} 件裝備中，已略過）` : ''}`);
+    ui.toast(`分解 ${r.count} 件，燈油 +${r.oil.toLocaleString('zh-Hant')}、結晶 +${r.crystals}${r.skipped.length ? `（${r.skipped.length} 件裝備中，已略過）` : ''}`);
   },
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
@@ -225,7 +229,7 @@ function newRun(id) {
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
-  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile) }); // 只有「已裝備」的專屬武器會生效
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
   renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
 }

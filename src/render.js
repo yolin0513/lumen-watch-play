@@ -6,6 +6,7 @@ import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePi
 // shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
   mite:     { seed: 11, radius: 11, hue: 290, eyes: 1, shared: true },
+  swarm:    { seed: 17, radius: 9,  hue: 45,  eyes: 1, spikes: 2, shared: true }, // 菌潮的潮孢：偏金色，一眼看得出是「送經驗的」
   moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3, shared: true },
   brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7, shared: true },
   spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3, shared: true },

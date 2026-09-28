@@ -1,6 +1,6 @@
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } from './content.js';
 import { aggregate } from './stats.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
 
@@ -11,16 +11,40 @@ export function talentMods(profile) {
   return out;
 }
 // 裝備主屬性：稀有度基礎值 × (1 + 0.1 × (強化等級 − 1))；副詞條不受強化影響
-export function gearMods(item) {
+export function baseGearMods(item) {
   const main = GEAR_SLOTS[item.slot].main, k = 1 + 0.1 * (item.lv - 1);
   const m = { stat: main.stat };
   if (main.pct) m.pct = main.pct[item.rarity] * k; else m.flat = main.flat[item.rarity] * k;
   return [m, ...item.affixes.map((a) => ({ stat: a.stat, [a.type]: a.value }))];
 }
+// 突破能力：第 s 星解鎖 GEAR_ASCEND.perks[部位][s-1]，數值乘上稀有度的 scale。all＝true 時連還沒解鎖的也列出（給畫面顯示）
+export function ascendPerks(item, all = false) {
+  const k = GEAR_ASCEND.scale[item.rarity];
+  return GEAR_ASCEND.perks[item.slot].slice(0, all ? GEAR_ASCEND.max : (item.star || 0))
+    .map((m) => ({ stat: m.stat, ...(m.pct ? { pct: m.pct * k } : { flat: m.flat * k }) }));
+}
+export function gearMods(item) { return [...baseGearMods(item), ...ascendPerks(item)]; }
 export function equippedItems(profile) {
   return Object.values(profile.gear.equipped).filter((u) => u != null).map((u) => profile.gear.items.find((i) => i.uid === u)).filter(Boolean);
 }
-export function profileMods(profile) { return [...talentMods(profile), ...equippedItems(profile).flatMap(gearMods)]; }
+// 專屬武器的進階加成：只有「已裝備而且確實擁有」的那把生效（擁有≠生效，和 startWeaponOf 同一條規則）
+export function weaponStarMods(profile) {
+  const id = startWeaponOf(profile);
+  if (id === START_WEAPON) return [];
+  const star = profile.weapons.stars?.[id] || 0;
+  return WEAPON_ASCEND.perks.slice(0, star).filter((pk) => pk.mod).map((pk) => pk.mod);
+}
+export function profileMods(profile) { return [...talentMods(profile), ...equippedItems(profile).flatMap(gearMods), ...weaponStarMods(profile)]; }
+// 開局加成（交給 createSim）：開局武器等級、開局帶的共鳴增幅
+export function startBonusOf(profile) {
+  const id = startWeaponOf(profile), out = { lv: 1, passive: null };
+  if (id === START_WEAPON) return out;
+  for (const pk of WEAPON_ASCEND.perks.slice(0, profile.weapons.stars?.[id] || 0)) {
+    if (pk.startLv) out.lv = Math.max(out.lv, pk.startLv);
+    if (pk.startPassive) out.passive = RESONANCES[id]?.needs ?? null;
+  }
+  return out;
+}
 export const oilBonus = (profile) => aggregate(profileMods(profile)).oil.pct;
 
 // ---- 天賦 ----
@@ -63,7 +87,30 @@ export function upgradeGear(profile, uid) {
   profile.oil -= cost; it.lv++;
   return { ok: true, cost };
 }
+// ---- 裝備突破（強化滿級之後的路）：結晶＋燈油 → ★+1，解鎖下一項能力 ----
+export function ascendCost(it) {
+  const s = (it.star || 0) + 1;
+  return s > GEAR_ASCEND.max ? null : { star: s, crystals: GEAR_ASCEND.crystal[it.rarity] * s, oil: GEAR_ASCEND.oil(it.rarity, s) };
+}
+export function ascendGear(profile, uid) {
+  const it = profile.gear.items.find((i) => i.uid === uid);
+  if (!it) return { ok: false, reason: 'missing' };
+  if (it.lv < GEAR_MAX_LV) return { ok: false, reason: 'lv' };
+  const c = ascendCost(it);
+  if (!c) return { ok: false, reason: 'max' };
+  if ((profile.crystals || 0) < c.crystals) return { ok: false, reason: 'crystals' };
+  if (profile.oil < c.oil) return { ok: false, reason: 'oil' };
+  profile.crystals -= c.crystals; profile.oil -= c.oil; it.star = c.star;
+  return { ok: true, ...c };
+}
 export const salvageValue = (it) => Math.round(RARITIES[it.rarity].salvage * (1 + 0.25 * (it.lv - 1)));
+export const crystalValue = (it) => CRYSTALS[it.rarity];
+// 分解一件裝備的收入：全遊戲唯一一處（單件、批量、自動分解、放不下）。燈油＋結晶（進階材料）一起入帳。
+function disposeGear(profile, it) {
+  const oil = salvageValue(it), crystals = crystalValue(it);
+  profile.oil += oil; profile.crystals = (profile.crystals || 0) + crystals;
+  return { oil, crystals };
+}
 // 找一件裝備在哪裡：背包（items）或暫存區（pending）
 function locate(profile, uid) {
   for (const list of [profile.gear.items, profile.gear.pending]) { const i = list.findIndex((x) => x.uid === uid); if (i >= 0) return { list, i, it: list[i] }; }
@@ -76,21 +123,20 @@ export function salvage(profile, uid) {
   const it = at.it;
   if (profile.gear.equipped[it.slot] === uid) profile.gear.equipped[it.slot] = null;
   at.list.splice(at.i, 1);
-  const v = salvageValue(it); profile.oil += v;
-  return { ok: true, oil: v };
+  const got = disposeGear(profile, it);
+  return { ok: true, ...got };
 }
 // 批量分解：已裝備的一律跳過（批量勾選很容易順手勾到，裝備中的不可以這樣被分解掉）
 export function salvageMany(profile, uids) {
-  let oil = 0, count = 0; const skipped = [];
+  let oil = 0, crystals = 0, count = 0; const skipped = [];
   for (const uid of new Set(uids)) {
     const at = locate(profile, uid);
     if (!at) continue;
     if (profile.gear.equipped[at.it.slot] === uid) { skipped.push(uid); continue; }
     at.list.splice(at.i, 1);
-    oil += salvageValue(at.it); count++;
+    const got = disposeGear(profile, at.it); oil += got.oil; crystals += got.crystals; count++;
   }
-  profile.oil += oil;
-  return { ok: true, count, oil, skipped };
+  return { ok: true, count, oil, crystals, skipped };
 }
 // 暫存區 → 背包（背包有空位才行）
 export function claimPending(profile, uid) {
@@ -118,7 +164,7 @@ export function storeGear(profile, it) {
   else if (profile.gear.items.length < MAX_ITEMS) { profile.gear.items.push(it); return 'bag'; }
   else if (profile.gear.pending.length < PENDING_MAX) { profile.gear.pending.push(it); return 'pending'; }
   else where = 'overflow';
-  it.salvaged = salvageValue(it); profile.oil += it.salvaged;
+  const got = disposeGear(profile, it); it.salvaged = got.oil; it.crystals = got.crystals; // 分解的不是消失：換成燈油＋結晶
   return where;
 }
 export function setAutoSalvage(profile, level) {
@@ -178,5 +224,18 @@ export function equipWeapon(profile, id) {
   profile.weapons.equipped = id; return { ok: true };
 }
 export function unequipWeapon(profile) { profile.weapons.equipped = null; return { ok: true }; }
+// ---- 專屬武器進階：星核 → ★+1（只有擁有的才能進階；生效與否看有沒有裝備）----
+export function weaponAscendCost(profile, id) {
+  const s = (profile.weapons.stars?.[id] || 0) + 1;
+  return s > WEAPON_ASCEND.max ? null : { star: s, shards: WEAPON_ASCEND.shards[s - 1] };
+}
+export function ascendWeapon(profile, id) {
+  if (!profile.weapons.owned.includes(id)) return { ok: false, reason: 'not-owned' };
+  const c = weaponAscendCost(profile, id);
+  if (!c) return { ok: false, reason: 'max' };
+  if ((profile.weapons.shards[id] || 0) < c.shards) return { ok: false, reason: 'shards' };
+  profile.weapons.shards[id] -= c.shards; profile.weapons.stars[id] = c.star;
+  return { ok: true, ...c };
+}
 
 export const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);

@@ -18,11 +18,11 @@ export const WEAPONS = {
     name: '環燈', color: '#8fe8ff',
     desc: ['光球環繞身邊，撞到敵人造成傷害', '光球 +1', '傷害 +50%、半徑變大', '光球 +1、轉速加快', '光球 +1、傷害 +30%'],
     lv: [
-      { dmg: 15, count: 2, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 15, count: 3, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 22, count: 3, radius: 56, spin: 3.0, size: 9 },
-      { dmg: 22, count: 4, radius: 56, spin: 3.8, size: 9 },
-      { dmg: 30, count: 5, radius: 60, spin: 3.8, size: 10 },
+      { dmg: 17, count: 2, radius: 46, spin: 3.2, size: 8 },
+      { dmg: 17, count: 3, radius: 48, spin: 3.2, size: 8 },
+      { dmg: 25, count: 3, radius: 58, spin: 3.2, size: 9 },
+      { dmg: 25, count: 4, radius: 58, spin: 4.0, size: 9 },
+      { dmg: 34, count: 5, radius: 62, spin: 4.0, size: 10 },
     ],
   },
   aura: {
@@ -184,6 +184,7 @@ export const RESONANCES = {
 // 其他旗標：split 死後分裂、armor 受傷倍率（越小越硬）、oil 擊倒給的燈油
 export const ENEMIES = {
   mite:     { name: '菌蟎',   r: 11, hp: 10,  speed: 60,  dmg: 6,  xp: 1, oil: 1, ai: 'chase' },
+  swarm:    { name: '潮孢',   r: 9,  hp: 6,   speed: 78,  dmg: 4,  xp: 6, oil: 1, ai: 'chase' }, // 菌潮專用：很脆、經驗多
   moth:     { name: '孢蛾',   r: 9,  hp: 7,   speed: 105, dmg: 5,  xp: 1, oil: 1, ai: 'weave' },
   brute:    { name: '刺囊',   r: 20, hp: 70,  speed: 36,  dmg: 14, xp: 5, oil: 4, ai: 'chase', mass: 4 },
   spitter:  { name: '吐孢菇', r: 13, hp: 24,  speed: 50,  dmg: 6,  xp: 3, oil: 2, ai: 'spit', keep: 150, fireCd: 3.2, shotDmg: 7 },
@@ -280,6 +281,14 @@ export const CHAPTERS = [
 ];
 export const CHAPTER1 = CHAPTERS[0];
 
+// ---- 菌潮（週期性的怪物海）----
+// 從 first 秒開始每 every 秒一波，到守衛出現前 beforeBoss 秒為止；第 k 波（0 起算）共 base＋grow×k 隻潮孢，分 bursts 批從四周湧入。
+// 目的（擁有者回饋）：一局之內升不滿。量測（tools/level-report.mjs）：M7 前過關局結束時組建完成度 81～90%、全滿 0 局。
+// cap：場上「菌潮怪」的上限，和一般怪的上限（章節的 maxEnemies）分開算——若共用同一個上限，菌潮滿場會擠掉本章的招牌怪
+//      （量過：第二章脹孢囊的引信從 136 次掉到 1 次）。實際同屏總數見 tools/level-report 旁的量測與回報。
+//      依據：擁有者手機（第 2 章、DPR 3）重場面 89 隻怪時繪製 p95 2ms、平均 59.5fps；怪物繪製大致隨數量線性增加（推論，要請擁有者重量）。
+export const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3 };
+
 // ---- 燈油（局外貨幣）結算 ----
 // 一局的燈油 ＝ floor( (floor(Σ擊倒×該怪 oil × perKill) ＋ 精英數×elite ＋ 擊敗守衛×boss ＋ 通關獎勵 ＋ 首通獎勵) × (1 + 燈油加成) )
 // 陣亡或放棄：只有擊倒與精英兩項。由 tools/meta-test.mjs 用「從事件逐筆重算」的母體檢查釘住。
@@ -327,6 +336,37 @@ export const GEAR_AFFIXES = [
 ];
 export const GEAR_MAX_LV = 10;
 export const gearUpgradeCost = (rarity, lv) => Math.round((36 + rarity * 36) * lv * (1 + lv * 0.15));
+
+// ---- 進階（M7 第二批）----
+// 燈芯結晶：進階材料。任何一件裝備被分解（手動、批量、自動分解、背包與暫存區都滿）都會給「燈油＋結晶」，
+// 所以自動分解不會吃掉材料，而是把裝備換成材料。每個稀有度給的結晶數：
+export const CRYSTALS = [1, 2, 3, 5, 8];
+// 裝備突破：強化到 GEAR_MAX_LV 之後，用結晶＋燈油突破 ★1～★5，每一星解鎖一項能力（能力數值依稀有度乘上 scale）。
+// 第 s 星（1 起算）要 crystal[稀有度] × s 個結晶、oil(稀有度, s) 燈油。
+export const GEAR_ASCEND = {
+  max: 5,
+  crystal: [1, 2, 3, 5, 8],
+  oil: (rarity, star) => 300 * star * (rarity + 1),
+  scale: [0.5, 0.6, 0.75, 0.9, 1],
+  perks: {
+    lamp:  [{ stat: 'dmg', pct: 0.04 }, { stat: 'cdr', pct: 0.02 }, { stat: 'dmg', pct: 0.05 }, { stat: 'armor', pct: 0.03 }, { stat: 'dmg', pct: 0.07 }],
+    cloak: [{ stat: 'maxHp', flat: 15 }, { stat: 'regen', flat: 0.3 }, { stat: 'armor', pct: 0.03 }, { stat: 'maxHp', flat: 25 }, { stat: 'armor', pct: 0.05 }],
+    charm: [{ stat: 'cdr', pct: 0.02 }, { stat: 'dmg', pct: 0.03 }, { stat: 'cdr', pct: 0.03 }, { stat: 'oil', pct: 0.05 }, { stat: 'cdr', pct: 0.04 }],
+    boots: [{ stat: 'speed', pct: 0.03 }, { stat: 'magnet', pct: 0.15 }, { stat: 'speed', pct: 0.03 }, { stat: 'regen', flat: 0.3 }, { stat: 'speed', pct: 0.05 }],
+  },
+};
+// 專屬武器進階：武器祈燈抽到已擁有的專屬武器 → 那把的「星核」+1。星核升 ★1～★5，只有「已裝備」的那把生效（擁有≠生效）。
+export const WEAPON_ASCEND = {
+  max: 5,
+  shards: [1, 1, 2, 2, 3], // 第 s 星要幾個星核
+  perks: [
+    { startLv: 2, text: '開局武器直接 2 級' },
+    { mod: { stat: 'dmg', pct: 0.08 }, text: '所有傷害 +8%' },
+    { startLv: 3, text: '開局武器直接 3 級' },
+    { startPassive: true, text: '開局就帶著它的共鳴增幅（1 級）' },
+    { mod: { stat: 'dmg', pct: 0.12 }, text: '所有傷害再 +12%' },
+  ],
+};
 export const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magnet: '拾取範圍', cdr: '冷卻', regen: '每秒回復', oil: '燈油獲得', armor: '受到傷害', revive: '復活' };
 
 export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
@@ -361,7 +401,7 @@ export const GACHA = {
 
 // ---- 武器祈燈（第二個抽獎池）：專屬起始武器只能從這裡抽到 ----
 // outcomes 與 rates 一一對應，最後一項（專屬武器）是最高獎項，保底也是它。
-// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就改給 dupRefund。
+// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就從三把中平均抽一把，變成那把的「星核」（進階材料）。
 // 抽獎用的星砂與祈燈券都能靠遊玩取得（通關、每日補給），不涉及任何真實付款。
 export const WEAPON_GACHA = {
   outcomes: [
@@ -372,6 +412,5 @@ export const WEAPON_GACHA = {
   ],
   rates: [58, 27, 13, 2],
   pity: 50,
-  dupRefund: { stardust: 150 },
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };

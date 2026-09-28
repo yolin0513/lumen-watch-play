@@ -86,7 +86,7 @@ export function drawWeaponGacha(profile, rand, count, pay) {
     if (o.id === 'weapon') {
       const left = EXCLUSIVES.filter((w) => !profile.weapons.owned.includes(w));
       if (left.length) { r.weapon = left[Math.floor(rand() * left.length)]; profile.weapons.owned.push(r.weapon); }
-      else { r.refund = { ...WEAPON_GACHA.dupRefund }; for (const [k, v] of Object.entries(r.refund)) profile[k] += v; }
+      else { r.shard = EXCLUSIVES[Math.floor(rand() * EXCLUSIVES.length)]; profile.weapons.shards[r.shard] = (profile.weapons.shards[r.shard] || 0) + 1; } // 全部都有了：變成那把的星核（進階材料）
     } else { r.gives = { ...o.gives }; for (const [k, v] of Object.entries(o.gives)) profile[k] += v; }
     results.push(r);
   }

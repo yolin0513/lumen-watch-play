@@ -2,7 +2,7 @@
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE } from './content.js';
 import { aggregate, scaled, reduction, CAPS } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
@@ -45,7 +45,8 @@ export function terrainIn(kind, seed, x0, y0, x1, y1) {
 }
 
 // startWeapon：開局武器（預設螢火連弩；裝備了專屬武器就換成它——由 main.js 依存檔的「已裝備」決定，不是「已擁有」）
-export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWeapon = START_WEAPON } = {}) {
+// startBonus：專屬武器進階給的開局加成 { lv：開局武器等級, passive：開局帶的被動 }（由 meta.js 的 startBonusOf 依「已裝備」算出）
+export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWeapon = START_WEAPON, startBonus = null } = {}) {
   const rand = makeRng(seed);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
   const s = {
@@ -59,6 +60,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
     spawnAcc: 0, eventIdx: 0, boss: null, arena: null, winT: 0,
+    surge: { idx: 0, queue: [] }, // 菌潮：idx＝已開始幾波；queue＝還沒湧入的批次 [時間, 隻數]
+    surgeAlive: 0, // 場上的菌潮怪數（上限 SURGE.cap，和一般怪的上限分開算）
+    surgeOn: true, // 量測用：false＝關掉菌潮（tools/level-report.mjs --no-surge 做前後對照）
     autoSpawn: true, god: false, // 測試用
   };
   const p = s.player;
@@ -177,7 +181,10 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const t = ENEMIES[kind];
     const a = angle ?? rand() * TAU;
     const d = dist ?? spawnDist();
-    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
+    // 菌潮之後菌群變強：每過一波，一般怪（不含菌潮怪本身、不含守衛）血量 × (1 + SURGE.hpPerWave × 已過波數)。
+    // 理由：菌潮給的經驗讓玩家提早變強，若怪不跟著變強，各章的招牌威脅會在靠近前就被打死（量過：第二章脹孢囊引信從 136 次掉到 1 次）。
+    const waveMul = kind === SURGE.kind || isBoss(kind) ? 1 : 1 + SURGE.hpPerWave * s.surge.idx;
+    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
@@ -207,6 +214,20 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       s.events.push({ type: 'announce', text: `精英出現：${ELITE_AFFIXES[affix].name}${ENEMIES[ev.kind].name}` });
     } else if (ev.type === 'boss') startBoss(ev.kind);
     s.events.push({ type: 'wave', kind: ev.type });
+  }
+  // 菌潮：時間到就排好這一波的幾個批次，批次到了從四周一圈湧入；場上怪物到 SURGE.cap 就不再生（這批剩下的不補）
+  function updateSurge() {
+    const sg = s.surge, next = SURGE.first + sg.idx * SURGE.every;
+    if (!s.boss && s.t >= next && next <= s.chapter.bossAt - SURGE.beforeBoss) {
+      const n = SURGE.base + SURGE.grow * sg.idx, per = Math.ceil(n / SURGE.bursts);
+      for (let b = 0; b < SURGE.bursts; b++) sg.queue.push([s.t + b * SURGE.burstGap, Math.min(per, n - b * per)]);
+      sg.idx++;
+      s.events.push({ type: 'announce', text: `菌潮來襲！（第 ${sg.idx} 波）` }, { type: 'surge', n });
+    }
+    while (sg.queue.length && s.t >= sg.queue[0][0]) {
+      const [, cnt] = sg.queue.shift(), off = rand() * TAU;
+      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && !s.boss; i++) { spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }).surge = true; s.surgeAlive++; }
+    }
   }
   function startBoss(kind) {
     s.arena = { x: p.x, y: p.y, r: s.chapter.arenaR };
@@ -627,9 +648,12 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
 
     // 生怪與時間軸事件
     while (s.eventIdx < ch.events.length && s.t >= ch.events[s.eventIdx].at) runEvent(ch.events[s.eventIdx++]);
+    s.surgeAlive = 0; for (const e of s.enemies) if (e.surge) s.surgeAlive++; // 每次都重數，不靠加減（怪有很多種離場方式）
+    if (s.autoSpawn && s.surgeOn) updateSurge();
     if (s.autoSpawn && !s.boss) {
       s.spawnAcc += dt * ch.spawnRate(s.t);
-      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length < ch.maxEnemies) spawnEnemy(rosterPick()); }
+      // 一般生怪只看「非菌潮」的怪數：菌潮滿場時照樣出本章的怪，否則每章的招牌怪（脹孢囊、沼蛭…）會被菌潮擠掉（M7 量過：第二章脹孢囊引信從 136 次掉到 1 次）
+      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies) spawnEnemy(rosterPick()); }
     }
 
     buildGrid();
@@ -785,6 +809,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   const agg0 = recalc();
   p.hp = p.maxHp;
   p.revives = Math.floor(scaled(0, agg0.revive));
-  addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
+  const w0 = addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
+  if (startBonus?.lv > 1) w0.lv = Math.min(MAX_LV, startBonus.lv);
+  if (startBonus?.passive && PASSIVES[startBonus.passive]) { p.passives[startBonus.passive] = 1; recalc(); p.hp = p.maxHp; }
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
 }

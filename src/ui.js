@@ -1,9 +1,9 @@
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, gearUpgradeCost } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, gearUpgradeCost } from './content.js';
 import { makeIcon } from './art.js';
-import { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
+import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
 import { aggregate } from './stats.js';
 import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } from './shop.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
@@ -27,8 +27,9 @@ export const autoSalvageText = (lv) => lv < 0 ? '關閉' : lv === 0 ? RARITIES[0
 // 裝備這次放到哪裡（storeGear 的回傳）→ 給玩家看的說明
 export function whereText(it) {
   if (it.where === 'pending') return '背包已滿，放進暫存區';
-  if (it.where === 'auto') return `依你的設定自動分解 +${num(it.salvaged)} 燈油`;
-  if (it.where === 'overflow' || (!it.where && it.salvaged)) return `背包與暫存區都滿，已分解 +${num(it.salvaged)} 燈油`;
+  const got = `+${num(it.salvaged)} 燈油${it.crystals ? `、+${it.crystals} 結晶` : ''}`;
+  if (it.where === 'auto') return `依你的設定自動分解 ${got}`;
+  if (it.where === 'overflow' || (!it.where && it.salvaged)) return `背包與暫存區都滿，已分解 ${got}`;
   return '';
 }
 
@@ -89,8 +90,21 @@ export function createUI(actions) {
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
     }
     return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}">
-      <span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
+      <span class="slot">${GEAR_SLOTS[it.slot].name}${it.star ? ` <span class="stars">${'★'.repeat(it.star)}</span>` : ''}</span><b>${esc(gearName(it))}</b>
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
+  }
+
+  // 突破區塊：全部五項能力都列出來（已解鎖 ✓、未解鎖 🔒），再寫下一階要什麼材料、現在有多少——擁有者的抱怨是「看不出還有什麼、也不知道怎麼拿到」
+  function ascendSection(it, profile, fx) {
+    const star = it.star || 0, all = ascendPerks(it, true), c = ascendCost(it);
+    const need = it.lv < GEAR_MAX_LV ? `強化到 ${GEAR_MAX_LV} 級後可以突破（目前 ${it.lv} 級）`
+      : c ? `下一階（★${c.star}）需要結晶 ×${c.crystals}（你有 ${profile.crystals || 0}）＋燈油 ×${num(c.oil)}` : '已經突破到最高階';
+    const can = it.lv >= GEAR_MAX_LV && c && (profile.crystals || 0) >= c.crystals && profile.oil >= c.oil;
+    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span></div>
+      <ul class="perks">${all.map((m, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(fmtMod(m))}</li>`).join('')}</ul>
+      <div class="asc-need">${need}</div>
+      ${it.lv >= GEAR_MAX_LV && c ? `<button class="btn small" data-act="gearAscend" data-uid="${it.uid}" ${can ? '' : 'disabled'}>突破</button>` : ''}
+      <div class="asc-hint">結晶從分解裝備得到（重複的裝備、自動分解都會給）。</div></div>`;
   }
 
   // 祈燈結果：先亮一盞燈（顏色＝這次最高的稀有度），再一張張翻開；可跳過
@@ -152,8 +166,8 @@ export function createUI(actions) {
     },
     // v：{ open: 打開詳細頁的 uid, sel: 批量分解模式的勾選（Set）或 null, sheet: 'auto' | 'batch' | null, fx: { uid, kind } }
     gear(profile, v = {}) {
-      const { open = null, sel = null, sheet: sheetKind = null, fx = null } = v;
-      $('#gear .oil-slot').innerHTML = oilTag(profile);
+      const { open = null, sel = null, sheet: sheetKind = null, fx = null, wid = null } = v;
+      $('#gear .oil-slot').innerHTML = `${oilTag(profile)}<div class="oil">結晶 ${money('crystals', profile.crystals || 0)}</div>`;
       { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
         const eq = profile.weapons.equipped, owned = profile.weapons.owned;
         // 清單固定是「預設武器 ＋ 全部專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
@@ -161,8 +175,9 @@ export function createUI(actions) {
         const cur = startWeaponOf(profile);
         $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
           ${[START_WEAPON, ...EXCLUSIVES].map((id) => { const def = id === START_WEAPON, own = def || owned.includes(id), on = cur === id;
-            return `<div class="wslot${own ? '' : ' locked'}${on && fx?.kind === 'weapon' ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
-            ${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}</div>`; }).join('')}`;
+            const star = def ? 0 : profile.weapons.stars?.[id] || 0, shards = def ? 0 : profile.weapons.shards?.[id] || 0;
+            return `<div class="wslot${own ? '' : ' locked'}${(on && fx?.kind === 'weapon') || (fx?.kind === 'wstar' && fx.id === id) ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span>${def ? '' : `<span class="stars">${'★'.repeat(star)}${'☆'.repeat(WEAPON_ASCEND.max - star)}</span>`}<div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}${!def && (own || shards) ? `<br>星核 ${shards}` : ''}</div></div>
+            <div class="wbtns">${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}${!def && own ? `<button class="buy ghostbuy" data-act="wstarOpen" data-id="${id}">進階</button>` : ''}</div></div>`; }).join('')}`;
       }
       const eq = profile.gear.equipped, items = profile.gear.items, pending = profile.gear.pending;
       const isEq = (it) => eq[it.slot] === it.uid;
@@ -175,7 +190,7 @@ export function createUI(actions) {
       $('#gear .summary').textContent = lines.length ? `天賦＋裝備合計：${lines.join('、')}` : '還沒有任何局外加成';
       const auto = autoSalvageLevel(profile);
       $('#gear .autosalv').innerHTML = `<div class="shop-row${fx?.kind === 'auto' ? ' fx-flash' : ''}"><div><b>新裝備自動分解</b><span class="lim">${esc(autoSalvageText(auto))}</span>
-        <div class="d">${auto < 0 ? '目前關閉：所有新裝備都會留下，背包滿了就放暫存區。' : `新得到的「${esc(autoSalvageText(auto))}」裝備會直接變成燈油，不進背包。`}</div></div>
+        <div class="d">${auto < 0 ? '目前關閉：所有新裝備都會留下，背包滿了就放暫存區。' : `新得到的「${esc(autoSalvageText(auto))}」裝備會直接分解成燈油＋結晶（進階材料），不進背包。`}</div></div>
         <button class="buy" data-act="autoSalvOpen">設定</button></div>`;
       const sorted = (list) => [...list].sort((a, b) => b.rarity - a.rarity || b.lv - a.lv || a.uid - b.uid);
       const space = gearSpace(profile);
@@ -190,17 +205,26 @@ export function createUI(actions) {
       $('#gear .bag-list').innerHTML = sorted(items).map((it) => gearTile(it, isEq(it), sel, fx?.uid === it.uid)).join('') || '<div class="empty-bag">還沒有裝備。打完一章（或撐過 4 分鐘）會掉落。</div>';
       if (sel) {
         const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
-        const oil = picked.reduce((a, it) => a + salvageValue(it), 0);
-        $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・可得燈油 <b>+${num(oil)}</b></span>
+        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0);
+        $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・燈油 <b>+${num(oil)}</b>・結晶 <b>+${cry}</b></span>
           <button class="btn small" data-act="gearBatchAsk" ${picked.length ? '' : 'disabled'}>分解</button><button class="btn small ghost" data-act="gearBatchCancel">取消</button></div>`;
         $('#gear .batch-bar').classList.add('show');
       } else { $('#gear .batch-bar').innerHTML = ''; $('#gear .batch-bar').classList.remove('show'); }
 
       const sheet = $('#gear .sheet');
       const bagIt = items.find((i) => i.uid === open), penIt = pending.find((i) => i.uid === open);
-      if (sheetKind === 'auto') {
+      if (sheetKind === 'wstar' && wid && WEAPONS[wid]?.exclusive) {
+        const star = profile.weapons.stars?.[wid] || 0, shards = profile.weapons.shards?.[wid] || 0, c = weaponAscendCost(profile, wid);
+        sheet.innerHTML = `<div class="sheet-card" style="--c:${WEAPONS[wid].color}"><b class="name">${esc(WEAPONS[wid].name)} 進階 ${star} / ${WEAPON_ASCEND.max}</b>
+          <p class="sheet-p">材料：武器祈燈抽到已擁有的專屬武器，會變成那把的「星核」。進階的能力只有<b>裝備這把當起始武器時</b>才生效。</p>
+          <ul class="perks">${WEAPON_ASCEND.perks.map((pk, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(pk.text)}</li>`).join('')}</ul>
+          <p class="sheet-p">${c ? `下一階（★${c.star}）需要星核 ×${c.shards}（你有 ${shards}）` : '已經是最高階'}</p>
+          <div class="acts">${c ? `<button class="btn small" data-act="wstarGo" data-id="${wid}" ${shards >= c.shards ? '' : 'disabled'}>進階</button>` : ''}<button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
+        sheet.classList.add('show');
+      } else if (sheetKind === 'auto') {
         sheet.innerHTML = `<div class="sheet-card" style="--c:var(--gold)"><b class="name">新裝備自動分解</b>
-          <p class="sheet-p">開啟後，之後新得到的裝備（關卡掉落、祈燈、禮包都算）只要在門檻以下，就直接分解成燈油，不進背包也不進暫存區。</p>
+          <p class="sheet-p">開啟後，之後新得到的裝備（關卡掉落、祈燈、禮包都算）只要在門檻以下，就直接分解，不進背包也不進暫存區。</p>
+          <p class="sheet-p">分解一定會給<b>燈油＋燈芯結晶</b>；結晶是裝備突破的材料，所以自動分解不會浪費進階材料。</p>
           <p class="sheet-p">已經在背包裡的裝備不受影響。<b>史詩與傳說永遠不會被自動分解。</b>預設是關閉。</p>
           <div class="opts">${[-1, ...Array.from({ length: AUTO_SALVAGE_MAX + 1 }, (_, i) => i)].map((lv) => `<button class="opt${lv === auto ? ' on' : ''}" data-act="autoSalvSet" data-r="${lv}">${esc(autoSalvageText(lv))}${lv === -1 ? '（預設）' : ''}${lv === auto ? '<span>目前</span>' : ''}</button>`).join('')}</div>
           <div class="acts"><button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
@@ -208,9 +232,9 @@ export function createUI(actions) {
       } else if (sheetKind === 'batch' && sel) {
         const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
         const byR = RARITIES.map((r, i) => [r, picked.filter((it) => it.rarity === i).length]).filter(([, n]) => n);
-        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), high = picked.some((it) => it.rarity >= 3);
+        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0), high = picked.some((it) => it.rarity >= 3);
         sheet.innerHTML = `<div class="sheet-card" style="--c:${high ? RARITIES[4].color : 'var(--gold)'}"><b class="name">分解 ${picked.length} 件裝備？</b>
-          <p class="sheet-p">${byR.map(([r, n]) => `<span style="color:${r.color}">${r.name} ${n}</span>`).join('・')}　→ 燈油 +${num(oil)}</p>
+          <p class="sheet-p">${byR.map(([r, n]) => `<span style="color:${r.color}">${r.name} ${n}</span>`).join('・')}　→ 燈油 +${num(oil)}、結晶 +${cry}</p>
           ${high ? '<p class="sheet-p warn">包含史詩或傳說裝備，分解後無法復原。</p>' : '<p class="sheet-p">分解後無法復原。裝備中的不會被分解。</p>'}
           <div class="acts"><button class="btn small" data-act="gearBatchGo">確定分解</button><button class="btn small ghost" data-act="gearBatchBack">再想想</button></div></div>`;
         sheet.classList.add('show');
@@ -218,21 +242,22 @@ export function createUI(actions) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
         sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
-          <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${ascendSection(it, profile, f && fx.kind === 'star')}
           <div class="acts">
             <button class="btn small" data-act="${on ? 'gearUnequip' : 'gearEquip'}" data-uid="${it.uid}">${on ? '卸下' : '裝備'}</button>
-            ${cost === null ? '<button class="btn small ghost" disabled>已滿級</button>' : `<button class="btn small" data-act="gearUpgrade" data-uid="${it.uid}" ${profile.oil < cost ? 'disabled' : ''}>強化（${num(cost)}）</button>`}
-            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))}）</button>
+            ${cost === null ? '' : `<button class="btn small" data-act="gearUpgrade" data-uid="${it.uid}" ${profile.oil < cost ? 'disabled' : ''}>強化（${num(cost)}）</button>`}
+            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
             <button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
         sheet.classList.add('show');
       } else if (penIt) {
         const it = penIt;
         sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
-          <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
             <button class="btn small" data-act="pendingClaim" data-uid="${it.uid}" ${space.bag ? '' : 'disabled'}>${space.bag ? '收進背包' : '背包已滿'}</button>
-            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))}）</button>
+            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
             <button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
         sheet.classList.add('show');
       } else sheet.classList.remove('show');
@@ -279,7 +304,7 @@ export function createUI(actions) {
           <table class="odds"><tr><th>獎項</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
           ${WEAPON_GACHA.outcomes.map((o, i) => `<tr data-rarity="${i}"><td${i === w.top ? ' style="color:#ffc85a"' : ''}>${esc(o.name)}</td><td class="odds-base">${fmtPct(w.base[i])}</td><td class="odds-comp">${fmtPct(w.composite[i])}</td></tr>`).join('')}</table>
           <div class="pity">保底：第 <b>${w.pity}</b> 抽必得專屬武器。目前已累積 <b>${profile.gacha.wpity}</b> 抽，再 <b>${left}</b> 抽必得。</div>
-          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就改給 ${num(WEAPON_GACHA.dupRefund.stardust)} 星砂。抽到後要到「裝備」畫面裝上才會生效。武器祈燈不會給裝備，不佔背包。</div>
+          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就從三把中平均選一把，變成那把的「星核」（專屬武器的進階材料）。抽到後要到「裝備」畫面裝上才會生效。武器祈燈不會給裝備，不佔背包。</div>
           <div class="gacha-btns">${wbtn(1)}${wbtn(10)}</div>`;
       }
       const packRow = (it) => {
@@ -321,10 +346,10 @@ export function createUI(actions) {
           ${auto.length ? `<p>依你的自動分解設定，${auto.length} 件變成燈油 +${num(auto.reduce((a, r) => a + r.salvaged, 0))}。</p>` : ''}
           <div class="acts"><button class="btn small ghost reveal-skip" data-act="revealSkip">跳過動畫</button>${toPending ? '<button class="btn small ghost after-reveal" data-act="gotoGear">前往裝備</button>' : ''}<button class="btn small after-reveal" data-act="shopClose">收下</button></div>`;
       } else if (m.type === 'wgacha') {
-        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
-        const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.refund);
-        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
-        const rv = reveal(cards, hit ? 4 : 0, hit ? (hit.weapon ? WEAPONS[hit.weapon].color : '#ffc85a') : '#c9cfe6', m.skip);
+        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.shard ? `「${WEAPONS[r.shard].name}」星核 +1（已擁有，變成進階材料）` : WEAPON_GACHA.outcomes[r.idx].name;
+        const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.shard), col = (r) => WEAPONS[r.weapon || r.shard]?.color;
+        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.shard ? 'r4' : 'r0'}" style="--c:${col(r) ?? '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
+        const rv = reveal(cards, hit ? 4 : 0, hit ? col(hit) : '#c9cfe6', m.skip);
         html = `<h3>武器祈燈結果</h3>${rv.html}
           ${got.length ? '<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>' : ''}
           <div class="acts"><button class="btn small ghost reveal-skip" data-act="revealSkip">跳過動畫</button>${got.length ? '<button class="btn small ghost after-reveal" data-act="gotoGear">前往裝備</button>' : ''}<button class="btn small after-reveal" data-act="shopClose">收下</button></div>`;

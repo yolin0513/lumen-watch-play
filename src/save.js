@@ -7,10 +7,10 @@
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
 import { SPEEDS } from './clock.js';
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -27,9 +27,10 @@ export function defaultProfile() {
     shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
     // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
-    weapons: { owned: [], equipped: null },
+    weapons: { owned: [], equipped: null, shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
+    crystals: 0, // v6：燈芯結晶（進階材料，分解裝備取得）
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
-    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（1／1.5／2）
+    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）
   };
 }
 
@@ -64,6 +65,8 @@ export const MIGRATIONS = {
   },
   // v4 → v5：加入倍速設定（預設 1 倍），原有設定原樣保留
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
+  // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
+  5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -206,9 +209,17 @@ export function sanitize(d) {
       if (out.weapons.owned.includes(id)) { fix(`擁有清單裡的 ${id} 重複，移除`); continue; }
       out.weapons.owned.push(id);
     } else if (d.weapons.owned !== undefined) fix('武器擁有清單型別不對，重設');
+    for (const k of ['shards', 'stars']) if (isObj(d.weapons[k])) for (const [id, n] of Object.entries(d.weapons[k])) {
+      const v = nonNegInt(n), cap = k === 'stars' ? WEAPON_ASCEND.max : Infinity;
+      if (!WEAPONS[id]?.exclusive || v === null) { fix(`${k === 'stars' ? '武器星數' : '星核'} ${id} 不合法，移除`); continue; }
+      if (v > cap) fix(`武器星數 ${id} 超過上限，改為 ${cap}`);
+      if (v > 0) out.weapons[k][id] = Math.min(v, cap);
+    } else if (d.weapons[k] !== undefined) fix(`weapons.${k} 型別不對，重設`);
     const eq = d.weapons.equipped;
     if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
   } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
+  // ---- v6 進階材料 ----
+  { const n = nonNegInt(d.crystals); if (n === null) { if (d.crystals !== undefined) fix(`結晶數量不合法（${JSON.stringify(d.crystals)}），歸零`); } else out.crystals = n; }
   // ---- v4 設定 ----
   if (isObj(d.settings)) {
     const a = d.settings.autoSalvage;
@@ -226,5 +237,6 @@ function sanitizeItem(it) {
   const uid = nonNegInt(it.uid), rarity = nonNegInt(it.rarity), lv = nonNegInt(it.lv);
   if (!uid || !GEAR_SLOTS[it.slot] || rarity === null || rarity >= RARITIES.length || !lv) return null;
   const affixes = Array.isArray(it.affixes) ? it.affixes.filter((a) => isObj(a) && AFFIX_STATS.get(a.stat) === a.type && Number.isFinite(a.value)).slice(0, 4) : [];
-  return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes };
+  const star = Math.min(nonNegInt(it.star) ?? 0, GEAR_ASCEND.max, lv >= GEAR_MAX_LV ? GEAR_ASCEND.max : 0); // 突破星數：沒強化滿級就不可能有星
+  return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes, ...(star ? { star } : {}) };
 }

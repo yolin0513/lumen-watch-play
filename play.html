@@ -110,6 +110,15 @@
   .opts { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
   .opt { display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(160, 170, 255, 0.25); background: var(--panel); text-align: left; font-size: 14px; }
   .opt.on { border-color: var(--gold); color: var(--gold); } .opt span { font-size: 11px; color: var(--gold); }
+  /* 進階（突破／專屬武器星級）：全部能力列出，已解鎖亮、未解鎖暗 */
+  .stars { color: #ffd27a; letter-spacing: 1px; font-size: 11px; margin-left: 4px; }
+  .ascend { position: relative; margin: 8px 0; padding: 8px 10px; border-radius: 12px; background: rgba(255, 210, 122, 0.07); border: 1px solid rgba(255, 210, 122, 0.25); }
+  .asc-title { font-weight: 800; color: var(--gold); font-size: 14px; }
+  .perks { list-style: none; padding: 0 !important; margin: 6px 0 !important; font-size: 13px !important; line-height: 1.6 !important; }
+  .perks li.on { color: #ffe9a8; } .perks li.off { color: var(--dim); opacity: 0.8; }
+  .asc-need { font-size: 12px; color: #cfd6ff; margin: 4px 0; } .asc-hint { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .wbtns { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .wslot .ghostbuy { background: rgba(20, 16, 44, 0.8); color: var(--ink); border-color: rgba(160, 170, 255, 0.3); font-size: 12px; }
   .empty-bag { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 12px; }
   .sheet { position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.5); z-index: 5; }
   .sheet.show { display: flex; }
@@ -374,11 +383,11 @@ const WEAPONS = {
     name: '環燈', color: '#8fe8ff',
     desc: ['光球環繞身邊，撞到敵人造成傷害', '光球 +1', '傷害 +50%、半徑變大', '光球 +1、轉速加快', '光球 +1、傷害 +30%'],
     lv: [
-      { dmg: 15, count: 2, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 15, count: 3, radius: 46, spin: 3.0, size: 8 },
-      { dmg: 22, count: 3, radius: 56, spin: 3.0, size: 9 },
-      { dmg: 22, count: 4, radius: 56, spin: 3.8, size: 9 },
-      { dmg: 30, count: 5, radius: 60, spin: 3.8, size: 10 },
+      { dmg: 17, count: 2, radius: 46, spin: 3.2, size: 8 },
+      { dmg: 17, count: 3, radius: 48, spin: 3.2, size: 8 },
+      { dmg: 25, count: 3, radius: 58, spin: 3.2, size: 9 },
+      { dmg: 25, count: 4, radius: 58, spin: 4.0, size: 9 },
+      { dmg: 34, count: 5, radius: 62, spin: 4.0, size: 10 },
     ],
   },
   aura: {
@@ -540,6 +549,7 @@ const RESONANCES = {
 // 其他旗標：split 死後分裂、armor 受傷倍率（越小越硬）、oil 擊倒給的燈油
 const ENEMIES = {
   mite:     { name: '菌蟎',   r: 11, hp: 10,  speed: 60,  dmg: 6,  xp: 1, oil: 1, ai: 'chase' },
+  swarm:    { name: '潮孢',   r: 9,  hp: 6,   speed: 78,  dmg: 4,  xp: 6, oil: 1, ai: 'chase' }, // 菌潮專用：很脆、經驗多
   moth:     { name: '孢蛾',   r: 9,  hp: 7,   speed: 105, dmg: 5,  xp: 1, oil: 1, ai: 'weave' },
   brute:    { name: '刺囊',   r: 20, hp: 70,  speed: 36,  dmg: 14, xp: 5, oil: 4, ai: 'chase', mass: 4 },
   spitter:  { name: '吐孢菇', r: 13, hp: 24,  speed: 50,  dmg: 6,  xp: 3, oil: 2, ai: 'spit', keep: 150, fireCd: 3.2, shotDmg: 7 },
@@ -636,6 +646,14 @@ const CHAPTERS = [
 ];
 const CHAPTER1 = CHAPTERS[0];
 
+// ---- 菌潮（週期性的怪物海）----
+// 從 first 秒開始每 every 秒一波，到守衛出現前 beforeBoss 秒為止；第 k 波（0 起算）共 base＋grow×k 隻潮孢，分 bursts 批從四周湧入。
+// 目的（擁有者回饋）：一局之內升不滿。量測（tools/level-report.mjs）：M7 前過關局結束時組建完成度 81～90%、全滿 0 局。
+// cap：場上「菌潮怪」的上限，和一般怪的上限（章節的 maxEnemies）分開算——若共用同一個上限，菌潮滿場會擠掉本章的招牌怪
+//      （量過：第二章脹孢囊的引信從 136 次掉到 1 次）。實際同屏總數見 tools/level-report 旁的量測與回報。
+//      依據：擁有者手機（第 2 章、DPR 3）重場面 89 隻怪時繪製 p95 2ms、平均 59.5fps；怪物繪製大致隨數量線性增加（推論，要請擁有者重量）。
+const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3 };
+
 // ---- 燈油（局外貨幣）結算 ----
 // 一局的燈油 ＝ floor( (floor(Σ擊倒×該怪 oil × perKill) ＋ 精英數×elite ＋ 擊敗守衛×boss ＋ 通關獎勵 ＋ 首通獎勵) × (1 + 燈油加成) )
 // 陣亡或放棄：只有擊倒與精英兩項。由 tools/meta-test.mjs 用「從事件逐筆重算」的母體檢查釘住。
@@ -683,6 +701,37 @@ const GEAR_AFFIXES = [
 ];
 const GEAR_MAX_LV = 10;
 const gearUpgradeCost = (rarity, lv) => Math.round((36 + rarity * 36) * lv * (1 + lv * 0.15));
+
+// ---- 進階（M7 第二批）----
+// 燈芯結晶：進階材料。任何一件裝備被分解（手動、批量、自動分解、背包與暫存區都滿）都會給「燈油＋結晶」，
+// 所以自動分解不會吃掉材料，而是把裝備換成材料。每個稀有度給的結晶數：
+const CRYSTALS = [1, 2, 3, 5, 8];
+// 裝備突破：強化到 GEAR_MAX_LV 之後，用結晶＋燈油突破 ★1～★5，每一星解鎖一項能力（能力數值依稀有度乘上 scale）。
+// 第 s 星（1 起算）要 crystal[稀有度] × s 個結晶、oil(稀有度, s) 燈油。
+const GEAR_ASCEND = {
+  max: 5,
+  crystal: [1, 2, 3, 5, 8],
+  oil: (rarity, star) => 300 * star * (rarity + 1),
+  scale: [0.5, 0.6, 0.75, 0.9, 1],
+  perks: {
+    lamp:  [{ stat: 'dmg', pct: 0.04 }, { stat: 'cdr', pct: 0.02 }, { stat: 'dmg', pct: 0.05 }, { stat: 'armor', pct: 0.03 }, { stat: 'dmg', pct: 0.07 }],
+    cloak: [{ stat: 'maxHp', flat: 15 }, { stat: 'regen', flat: 0.3 }, { stat: 'armor', pct: 0.03 }, { stat: 'maxHp', flat: 25 }, { stat: 'armor', pct: 0.05 }],
+    charm: [{ stat: 'cdr', pct: 0.02 }, { stat: 'dmg', pct: 0.03 }, { stat: 'cdr', pct: 0.03 }, { stat: 'oil', pct: 0.05 }, { stat: 'cdr', pct: 0.04 }],
+    boots: [{ stat: 'speed', pct: 0.03 }, { stat: 'magnet', pct: 0.15 }, { stat: 'speed', pct: 0.03 }, { stat: 'regen', flat: 0.3 }, { stat: 'speed', pct: 0.05 }],
+  },
+};
+// 專屬武器進階：武器祈燈抽到已擁有的專屬武器 → 那把的「星核」+1。星核升 ★1～★5，只有「已裝備」的那把生效（擁有≠生效）。
+const WEAPON_ASCEND = {
+  max: 5,
+  shards: [1, 1, 2, 2, 3], // 第 s 星要幾個星核
+  perks: [
+    { startLv: 2, text: '開局武器直接 2 級' },
+    { mod: { stat: 'dmg', pct: 0.08 }, text: '所有傷害 +8%' },
+    { startLv: 3, text: '開局武器直接 3 級' },
+    { startPassive: true, text: '開局就帶著它的共鳴增幅（1 級）' },
+    { mod: { stat: 'dmg', pct: 0.12 }, text: '所有傷害再 +12%' },
+  ],
+};
 const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magnet: '拾取範圍', cdr: '冷卻', regen: '每秒回復', oil: '燈油獲得', armor: '受到傷害', revive: '復活' };
 
 const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
@@ -717,7 +766,7 @@ const GACHA = {
 
 // ---- 武器祈燈（第二個抽獎池）：專屬起始武器只能從這裡抽到 ----
 // outcomes 與 rates 一一對應，最後一項（專屬武器）是最高獎項，保底也是它。
-// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就改給 dupRefund。
+// 抽中「專屬武器」時，從尚未擁有的專屬武器中平均抽一把；三把都有了就從三把中平均抽一把，變成那把的「星核」（進階材料）。
 // 抽獎用的星砂與祈燈券都能靠遊玩取得（通關、每日補給），不涉及任何真實付款。
 const WEAPON_GACHA = {
   outcomes: [
@@ -728,11 +777,10 @@ const WEAPON_GACHA = {
   ],
   rates: [58, 27, 13, 2],
   pity: 50,
-  dupRefund: { stardust: 150 },
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
+return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -773,7 +821,7 @@ const __m_sim_js = (() => {
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE } = __m_content_js;
 const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -815,7 +863,8 @@ function terrainIn(kind, seed, x0, y0, x1, y1) {
 }
 
 // startWeapon：開局武器（預設螢火連弩；裝備了專屬武器就換成它——由 main.js 依存檔的「已裝備」決定，不是「已擁有」）
-function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWeapon = START_WEAPON } = {}) {
+// startBonus：專屬武器進階給的開局加成 { lv：開局武器等級, passive：開局帶的被動 }（由 meta.js 的 startBonusOf 依「已裝備」算出）
+function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWeapon = START_WEAPON, startBonus = null } = {}) {
   const rand = makeRng(seed);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
   const s = {
@@ -829,6 +878,9 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
     spawnAcc: 0, eventIdx: 0, boss: null, arena: null, winT: 0,
+    surge: { idx: 0, queue: [] }, // 菌潮：idx＝已開始幾波；queue＝還沒湧入的批次 [時間, 隻數]
+    surgeAlive: 0, // 場上的菌潮怪數（上限 SURGE.cap，和一般怪的上限分開算）
+    surgeOn: true, // 量測用：false＝關掉菌潮（tools/level-report.mjs --no-surge 做前後對照）
     autoSpawn: true, god: false, // 測試用
   };
   const p = s.player;
@@ -947,7 +999,10 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const t = ENEMIES[kind];
     const a = angle ?? rand() * TAU;
     const d = dist ?? spawnDist();
-    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
+    // 菌潮之後菌群變強：每過一波，一般怪（不含菌潮怪本身、不含守衛）血量 × (1 + SURGE.hpPerWave × 已過波數)。
+    // 理由：菌潮給的經驗讓玩家提早變強，若怪不跟著變強，各章的招牌威脅會在靠近前就被打死（量過：第二章脹孢囊引信從 136 次掉到 1 次）。
+    const waveMul = kind === SURGE.kind || isBoss(kind) ? 1 : 1 + SURGE.hpPerWave * s.surge.idx;
+    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
@@ -977,6 +1032,20 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       s.events.push({ type: 'announce', text: `精英出現：${ELITE_AFFIXES[affix].name}${ENEMIES[ev.kind].name}` });
     } else if (ev.type === 'boss') startBoss(ev.kind);
     s.events.push({ type: 'wave', kind: ev.type });
+  }
+  // 菌潮：時間到就排好這一波的幾個批次，批次到了從四周一圈湧入；場上怪物到 SURGE.cap 就不再生（這批剩下的不補）
+  function updateSurge() {
+    const sg = s.surge, next = SURGE.first + sg.idx * SURGE.every;
+    if (!s.boss && s.t >= next && next <= s.chapter.bossAt - SURGE.beforeBoss) {
+      const n = SURGE.base + SURGE.grow * sg.idx, per = Math.ceil(n / SURGE.bursts);
+      for (let b = 0; b < SURGE.bursts; b++) sg.queue.push([s.t + b * SURGE.burstGap, Math.min(per, n - b * per)]);
+      sg.idx++;
+      s.events.push({ type: 'announce', text: `菌潮來襲！（第 ${sg.idx} 波）` }, { type: 'surge', n });
+    }
+    while (sg.queue.length && s.t >= sg.queue[0][0]) {
+      const [, cnt] = sg.queue.shift(), off = rand() * TAU;
+      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && !s.boss; i++) { spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }).surge = true; s.surgeAlive++; }
+    }
   }
   function startBoss(kind) {
     s.arena = { x: p.x, y: p.y, r: s.chapter.arenaR };
@@ -1397,9 +1466,12 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
 
     // 生怪與時間軸事件
     while (s.eventIdx < ch.events.length && s.t >= ch.events[s.eventIdx].at) runEvent(ch.events[s.eventIdx++]);
+    s.surgeAlive = 0; for (const e of s.enemies) if (e.surge) s.surgeAlive++; // 每次都重數，不靠加減（怪有很多種離場方式）
+    if (s.autoSpawn && s.surgeOn) updateSurge();
     if (s.autoSpawn && !s.boss) {
       s.spawnAcc += dt * ch.spawnRate(s.t);
-      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length < ch.maxEnemies) spawnEnemy(rosterPick()); }
+      // 一般生怪只看「非菌潮」的怪數：菌潮滿場時照樣出本章的怪，否則每章的招牌怪（脹孢囊、沼蛭…）會被菌潮擠掉（M7 量過：第二章脹孢囊引信從 136 次掉到 1 次）
+      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies) spawnEnemy(rosterPick()); }
     }
 
     buildGrid();
@@ -1555,7 +1627,9 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   const agg0 = recalc();
   p.hp = p.maxHp;
   p.revives = Math.floor(scaled(0, agg0.revive));
-  addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
+  const w0 = addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
+  if (startBonus?.lv > 1) w0.lv = Math.min(MAX_LV, startBonus.lv);
+  if (startBonus?.passive && PASSIVES[startBonus.passive]) { p.passives[startBonus.passive] = 1; recalc(); p.hp = p.maxHp; }
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
 }
 
@@ -1869,6 +1943,7 @@ const { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePil
 // shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
   mite:     { seed: 11, radius: 11, hue: 290, eyes: 1, shared: true },
+  swarm:    { seed: 17, radius: 9,  hue: 45,  eyes: 1, spikes: 2, shared: true }, // 菌潮的潮孢：偏金色，一眼看得出是「送經驗的」
   moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3, shared: true },
   brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7, shared: true },
   spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3, shared: true },
@@ -2354,7 +2429,9 @@ const __m_clock_js = (() => {
 // 倍速＝每幀多跑幾步「同樣長度」的模擬步，不是把每一步拉長——拉長步長會改變移動、碰撞、冷卻的結果，
 // 同一個 seed 在 1 倍與 2 倍就會打出不同的局。meta-test 用固定 seed 跑完整一局，逐項比對各檔倍速的最終狀態。
 const STEP = 1 / 60;
-const SPEEDS = [1, 1.5, 2]; // 上限 2 倍：手機幀率還沒有實測數據，不假設跑得動更高
+// 上限 3 倍。依據：擁有者手機（iPhone、第 2 章、DPR 3）一次量測，重場面 89 隻怪時邏輯 p99 1ms、繪製 p99 2ms（一幀預算 16.7ms）；
+// 3 倍＝每幀邏輯跑 3 次、繪製仍 1 次，估計約 5ms。這是單一裝置、單一次量測的推論，不代表所有手機。
+const SPEEDS = [1, 1.5, 2, 3];
 const MAX_STEPS = 8;        // 一幀最多補幾步；跟不上時放掉多的時間（遊戲變慢），也不拉長步長
 
 function createClock() {
@@ -2385,9 +2462,9 @@ const __m_save_js = (() => {
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
 const { SPEEDS } = __m_clock_js;
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -2404,9 +2481,10 @@ function defaultProfile() {
     shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
     // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
-    weapons: { owned: [], equipped: null },
+    weapons: { owned: [], equipped: null, shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
+    crystals: 0, // v6：燈芯結晶（進階材料，分解裝備取得）
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
-    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（1／1.5／2）
+    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）
   };
 }
 
@@ -2441,6 +2519,8 @@ const MIGRATIONS = {
   },
   // v4 → v5：加入倍速設定（預設 1 倍），原有設定原樣保留
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
+  // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
+  5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -2583,9 +2663,17 @@ function sanitize(d) {
       if (out.weapons.owned.includes(id)) { fix(`擁有清單裡的 ${id} 重複，移除`); continue; }
       out.weapons.owned.push(id);
     } else if (d.weapons.owned !== undefined) fix('武器擁有清單型別不對，重設');
+    for (const k of ['shards', 'stars']) if (isObj(d.weapons[k])) for (const [id, n] of Object.entries(d.weapons[k])) {
+      const v = nonNegInt(n), cap = k === 'stars' ? WEAPON_ASCEND.max : Infinity;
+      if (!WEAPONS[id]?.exclusive || v === null) { fix(`${k === 'stars' ? '武器星數' : '星核'} ${id} 不合法，移除`); continue; }
+      if (v > cap) fix(`武器星數 ${id} 超過上限，改為 ${cap}`);
+      if (v > 0) out.weapons[k][id] = Math.min(v, cap);
+    } else if (d.weapons[k] !== undefined) fix(`weapons.${k} 型別不對，重設`);
     const eq = d.weapons.equipped;
     if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
   } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
+  // ---- v6 進階材料 ----
+  { const n = nonNegInt(d.crystals); if (n === null) { if (d.crystals !== undefined) fix(`結晶數量不合法（${JSON.stringify(d.crystals)}），歸零`); } else out.crystals = n; }
   // ---- v4 設定 ----
   if (isObj(d.settings)) {
     const a = d.settings.autoSalvage;
@@ -2603,7 +2691,8 @@ function sanitizeItem(it) {
   const uid = nonNegInt(it.uid), rarity = nonNegInt(it.rarity), lv = nonNegInt(it.lv);
   if (!uid || !GEAR_SLOTS[it.slot] || rarity === null || rarity >= RARITIES.length || !lv) return null;
   const affixes = Array.isArray(it.affixes) ? it.affixes.filter((a) => isObj(a) && AFFIX_STATS.get(a.stat) === a.type && Number.isFinite(a.value)).slice(0, 4) : [];
-  return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes };
+  const star = Math.min(nonNegInt(it.star) ?? 0, GEAR_ASCEND.max, lv >= GEAR_MAX_LV ? GEAR_ASCEND.max : 0); // 突破星數：沒強化滿級就不可能有星
+  return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes, ...(star ? { star } : {}) };
 }
 
 return { SAVE_KEY, SAVE_VERSION, MAX_HISTORY, MAX_ITEMS, PENDING_MAX, defaultProfile, createStore, MIGRATIONS, loadProfile, saveProfile, sanitize };
@@ -2613,7 +2702,7 @@ return { SAVE_KEY, SAVE_VERSION, MAX_HISTORY, MAX_ITEMS, PENDING_MAX, defaultPro
 const __m_meta_js = (() => {
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } = __m_content_js;
 const { aggregate } = __m_stats_js;
 const { MAX_ITEMS, PENDING_MAX } = __m_save_js;
 // ---- 加成：天賦＋已裝備的裝備 → modifier 陣列（交給 createSim 的 meta） ----
@@ -2623,16 +2712,40 @@ function talentMods(profile) {
   return out;
 }
 // 裝備主屬性：稀有度基礎值 × (1 + 0.1 × (強化等級 − 1))；副詞條不受強化影響
-function gearMods(item) {
+function baseGearMods(item) {
   const main = GEAR_SLOTS[item.slot].main, k = 1 + 0.1 * (item.lv - 1);
   const m = { stat: main.stat };
   if (main.pct) m.pct = main.pct[item.rarity] * k; else m.flat = main.flat[item.rarity] * k;
   return [m, ...item.affixes.map((a) => ({ stat: a.stat, [a.type]: a.value }))];
 }
+// 突破能力：第 s 星解鎖 GEAR_ASCEND.perks[部位][s-1]，數值乘上稀有度的 scale。all＝true 時連還沒解鎖的也列出（給畫面顯示）
+function ascendPerks(item, all = false) {
+  const k = GEAR_ASCEND.scale[item.rarity];
+  return GEAR_ASCEND.perks[item.slot].slice(0, all ? GEAR_ASCEND.max : (item.star || 0))
+    .map((m) => ({ stat: m.stat, ...(m.pct ? { pct: m.pct * k } : { flat: m.flat * k }) }));
+}
+function gearMods(item) { return [...baseGearMods(item), ...ascendPerks(item)]; }
 function equippedItems(profile) {
   return Object.values(profile.gear.equipped).filter((u) => u != null).map((u) => profile.gear.items.find((i) => i.uid === u)).filter(Boolean);
 }
-function profileMods(profile) { return [...talentMods(profile), ...equippedItems(profile).flatMap(gearMods)]; }
+// 專屬武器的進階加成：只有「已裝備而且確實擁有」的那把生效（擁有≠生效，和 startWeaponOf 同一條規則）
+function weaponStarMods(profile) {
+  const id = startWeaponOf(profile);
+  if (id === START_WEAPON) return [];
+  const star = profile.weapons.stars?.[id] || 0;
+  return WEAPON_ASCEND.perks.slice(0, star).filter((pk) => pk.mod).map((pk) => pk.mod);
+}
+function profileMods(profile) { return [...talentMods(profile), ...equippedItems(profile).flatMap(gearMods), ...weaponStarMods(profile)]; }
+// 開局加成（交給 createSim）：開局武器等級、開局帶的共鳴增幅
+function startBonusOf(profile) {
+  const id = startWeaponOf(profile), out = { lv: 1, passive: null };
+  if (id === START_WEAPON) return out;
+  for (const pk of WEAPON_ASCEND.perks.slice(0, profile.weapons.stars?.[id] || 0)) {
+    if (pk.startLv) out.lv = Math.max(out.lv, pk.startLv);
+    if (pk.startPassive) out.passive = RESONANCES[id]?.needs ?? null;
+  }
+  return out;
+}
 const oilBonus = (profile) => aggregate(profileMods(profile)).oil.pct;
 
 // ---- 天賦 ----
@@ -2675,7 +2788,30 @@ function upgradeGear(profile, uid) {
   profile.oil -= cost; it.lv++;
   return { ok: true, cost };
 }
+// ---- 裝備突破（強化滿級之後的路）：結晶＋燈油 → ★+1，解鎖下一項能力 ----
+function ascendCost(it) {
+  const s = (it.star || 0) + 1;
+  return s > GEAR_ASCEND.max ? null : { star: s, crystals: GEAR_ASCEND.crystal[it.rarity] * s, oil: GEAR_ASCEND.oil(it.rarity, s) };
+}
+function ascendGear(profile, uid) {
+  const it = profile.gear.items.find((i) => i.uid === uid);
+  if (!it) return { ok: false, reason: 'missing' };
+  if (it.lv < GEAR_MAX_LV) return { ok: false, reason: 'lv' };
+  const c = ascendCost(it);
+  if (!c) return { ok: false, reason: 'max' };
+  if ((profile.crystals || 0) < c.crystals) return { ok: false, reason: 'crystals' };
+  if (profile.oil < c.oil) return { ok: false, reason: 'oil' };
+  profile.crystals -= c.crystals; profile.oil -= c.oil; it.star = c.star;
+  return { ok: true, ...c };
+}
 const salvageValue = (it) => Math.round(RARITIES[it.rarity].salvage * (1 + 0.25 * (it.lv - 1)));
+const crystalValue = (it) => CRYSTALS[it.rarity];
+// 分解一件裝備的收入：全遊戲唯一一處（單件、批量、自動分解、放不下）。燈油＋結晶（進階材料）一起入帳。
+function disposeGear(profile, it) {
+  const oil = salvageValue(it), crystals = crystalValue(it);
+  profile.oil += oil; profile.crystals = (profile.crystals || 0) + crystals;
+  return { oil, crystals };
+}
 // 找一件裝備在哪裡：背包（items）或暫存區（pending）
 function locate(profile, uid) {
   for (const list of [profile.gear.items, profile.gear.pending]) { const i = list.findIndex((x) => x.uid === uid); if (i >= 0) return { list, i, it: list[i] }; }
@@ -2688,21 +2824,20 @@ function salvage(profile, uid) {
   const it = at.it;
   if (profile.gear.equipped[it.slot] === uid) profile.gear.equipped[it.slot] = null;
   at.list.splice(at.i, 1);
-  const v = salvageValue(it); profile.oil += v;
-  return { ok: true, oil: v };
+  const got = disposeGear(profile, it);
+  return { ok: true, ...got };
 }
 // 批量分解：已裝備的一律跳過（批量勾選很容易順手勾到，裝備中的不可以這樣被分解掉）
 function salvageMany(profile, uids) {
-  let oil = 0, count = 0; const skipped = [];
+  let oil = 0, crystals = 0, count = 0; const skipped = [];
   for (const uid of new Set(uids)) {
     const at = locate(profile, uid);
     if (!at) continue;
     if (profile.gear.equipped[at.it.slot] === uid) { skipped.push(uid); continue; }
     at.list.splice(at.i, 1);
-    oil += salvageValue(at.it); count++;
+    const got = disposeGear(profile, at.it); oil += got.oil; crystals += got.crystals; count++;
   }
-  profile.oil += oil;
-  return { ok: true, count, oil, skipped };
+  return { ok: true, count, oil, crystals, skipped };
 }
 // 暫存區 → 背包（背包有空位才行）
 function claimPending(profile, uid) {
@@ -2730,7 +2865,7 @@ function storeGear(profile, it) {
   else if (profile.gear.items.length < MAX_ITEMS) { profile.gear.items.push(it); return 'bag'; }
   else if (profile.gear.pending.length < PENDING_MAX) { profile.gear.pending.push(it); return 'pending'; }
   else where = 'overflow';
-  it.salvaged = salvageValue(it); profile.oil += it.salvaged;
+  const got = disposeGear(profile, it); it.salvaged = got.oil; it.crystals = got.crystals; // 分解的不是消失：換成燈油＋結晶
   return where;
 }
 function setAutoSalvage(profile, level) {
@@ -2790,10 +2925,23 @@ function equipWeapon(profile, id) {
   profile.weapons.equipped = id; return { ok: true };
 }
 function unequipWeapon(profile) { profile.weapons.equipped = null; return { ok: true }; }
+// ---- 專屬武器進階：星核 → ★+1（只有擁有的才能進階；生效與否看有沒有裝備）----
+function weaponAscendCost(profile, id) {
+  const s = (profile.weapons.stars?.[id] || 0) + 1;
+  return s > WEAPON_ASCEND.max ? null : { star: s, shards: WEAPON_ASCEND.shards[s - 1] };
+}
+function ascendWeapon(profile, id) {
+  if (!profile.weapons.owned.includes(id)) return { ok: false, reason: 'not-owned' };
+  const c = weaponAscendCost(profile, id);
+  if (!c) return { ok: false, reason: 'max' };
+  if ((profile.weapons.shards[id] || 0) < c.shards) return { ok: false, reason: 'shards' };
+  profile.weapons.shards[id] -= c.shards; profile.weapons.stars[id] = c.star;
+  return { ok: true, ...c };
+}
 
 const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
 
-return { talentMods, gearMods, equippedItems, profileMods, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, salvageValue, salvage, salvageMany, claimPending, autoSalvageLevel, gearSpace, storeGear, setAutoSalvage, computeOil, settleRun, startWeaponOf, equipWeapon, unequipWeapon, chapterUnlocked };
+return { talentMods, baseGearMods, ascendPerks, gearMods, equippedItems, weaponStarMods, profileMods, startBonusOf, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, ascendCost, ascendGear, salvageValue, crystalValue, salvage, salvageMany, claimPending, autoSalvageLevel, gearSpace, storeGear, setAutoSalvage, computeOil, settleRun, startWeaponOf, equipWeapon, unequipWeapon, weaponAscendCost, ascendWeapon, chapterUnlocked };
 })();
 
 // ---- shop.js
@@ -2885,7 +3033,7 @@ function drawWeaponGacha(profile, rand, count, pay) {
     if (o.id === 'weapon') {
       const left = EXCLUSIVES.filter((w) => !profile.weapons.owned.includes(w));
       if (left.length) { r.weapon = left[Math.floor(rand() * left.length)]; profile.weapons.owned.push(r.weapon); }
-      else { r.refund = { ...WEAPON_GACHA.dupRefund }; for (const [k, v] of Object.entries(r.refund)) profile[k] += v; }
+      else { r.shard = EXCLUSIVES[Math.floor(rand() * EXCLUSIVES.length)]; profile.weapons.shards[r.shard] = (profile.weapons.shards[r.shard] || 0) + 1; } // 全部都有了：變成那把的星核（進階材料）
     } else { r.gives = { ...o.gives }; for (const [k, v] of Object.entries(o.gives)) profile[k] += v; }
     results.push(r);
   }
@@ -2942,9 +3090,9 @@ const __m_ui_js = (() => {
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, gearUpgradeCost } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
-const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } = __m_meta_js;
+const { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } = __m_meta_js;
 const { aggregate } = __m_stats_js;
 const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } = __m_shop_js;
 const { MAX_ITEMS, PENDING_MAX } = __m_save_js;
@@ -2967,8 +3115,9 @@ const autoSalvageText = (lv) => lv < 0 ? '關閉' : lv === 0 ? RARITIES[0].name 
 // 裝備這次放到哪裡（storeGear 的回傳）→ 給玩家看的說明
 function whereText(it) {
   if (it.where === 'pending') return '背包已滿，放進暫存區';
-  if (it.where === 'auto') return `依你的設定自動分解 +${num(it.salvaged)} 燈油`;
-  if (it.where === 'overflow' || (!it.where && it.salvaged)) return `背包與暫存區都滿，已分解 +${num(it.salvaged)} 燈油`;
+  const got = `+${num(it.salvaged)} 燈油${it.crystals ? `、+${it.crystals} 結晶` : ''}`;
+  if (it.where === 'auto') return `依你的設定自動分解 ${got}`;
+  if (it.where === 'overflow' || (!it.where && it.salvaged)) return `背包與暫存區都滿，已分解 ${got}`;
   return '';
 }
 
@@ -3029,8 +3178,21 @@ function createUI(actions) {
         <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span><span class="tick">${on ? '✓' : ''}</span></button>`;
     }
     return `<button class="gear${fx ? ' fx-flash' : ''}" data-act="gearOpen" data-uid="${it.uid}" data-rar="${it.rarity}" style="--c:${c}">
-      <span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
+      <span class="slot">${GEAR_SLOTS[it.slot].name}${it.star ? ` <span class="stars">${'★'.repeat(it.star)}</span>` : ''}</span><b>${esc(gearName(it))}</b>
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
+  }
+
+  // 突破區塊：全部五項能力都列出來（已解鎖 ✓、未解鎖 🔒），再寫下一階要什麼材料、現在有多少——擁有者的抱怨是「看不出還有什麼、也不知道怎麼拿到」
+  function ascendSection(it, profile, fx) {
+    const star = it.star || 0, all = ascendPerks(it, true), c = ascendCost(it);
+    const need = it.lv < GEAR_MAX_LV ? `強化到 ${GEAR_MAX_LV} 級後可以突破（目前 ${it.lv} 級）`
+      : c ? `下一階（★${c.star}）需要結晶 ×${c.crystals}（你有 ${profile.crystals || 0}）＋燈油 ×${num(c.oil)}` : '已經突破到最高階';
+    const can = it.lv >= GEAR_MAX_LV && c && (profile.crystals || 0) >= c.crystals && profile.oil >= c.oil;
+    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span></div>
+      <ul class="perks">${all.map((m, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(fmtMod(m))}</li>`).join('')}</ul>
+      <div class="asc-need">${need}</div>
+      ${it.lv >= GEAR_MAX_LV && c ? `<button class="btn small" data-act="gearAscend" data-uid="${it.uid}" ${can ? '' : 'disabled'}>突破</button>` : ''}
+      <div class="asc-hint">結晶從分解裝備得到（重複的裝備、自動分解都會給）。</div></div>`;
   }
 
   // 祈燈結果：先亮一盞燈（顏色＝這次最高的稀有度），再一張張翻開；可跳過
@@ -3092,8 +3254,8 @@ function createUI(actions) {
     },
     // v：{ open: 打開詳細頁的 uid, sel: 批量分解模式的勾選（Set）或 null, sheet: 'auto' | 'batch' | null, fx: { uid, kind } }
     gear(profile, v = {}) {
-      const { open = null, sel = null, sheet: sheetKind = null, fx = null } = v;
-      $('#gear .oil-slot').innerHTML = oilTag(profile);
+      const { open = null, sel = null, sheet: sheetKind = null, fx = null, wid = null } = v;
+      $('#gear .oil-slot').innerHTML = `${oilTag(profile)}<div class="oil">結晶 ${money('crystals', profile.crystals || 0)}</div>`;
       { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
         const eq = profile.weapons.equipped, owned = profile.weapons.owned;
         // 清單固定是「預設武器 ＋ 全部專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
@@ -3101,8 +3263,9 @@ function createUI(actions) {
         const cur = startWeaponOf(profile);
         $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
           ${[START_WEAPON, ...EXCLUSIVES].map((id) => { const def = id === START_WEAPON, own = def || owned.includes(id), on = cur === id;
-            return `<div class="wslot${own ? '' : ' locked'}${on && fx?.kind === 'weapon' ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span><div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}</div></div>
-            ${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}</div>`; }).join('')}`;
+            const star = def ? 0 : profile.weapons.stars?.[id] || 0, shards = def ? 0 : profile.weapons.shards?.[id] || 0;
+            return `<div class="wslot${own ? '' : ' locked'}${(on && fx?.kind === 'weapon') || (fx?.kind === 'wstar' && fx.id === id) ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span>${def ? '' : `<span class="stars">${'★'.repeat(star)}${'☆'.repeat(WEAPON_ASCEND.max - star)}</span>`}<div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}${!def && (own || shards) ? `<br>星核 ${shards}` : ''}</div></div>
+            <div class="wbtns">${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}${!def && own ? `<button class="buy ghostbuy" data-act="wstarOpen" data-id="${id}">進階</button>` : ''}</div></div>`; }).join('')}`;
       }
       const eq = profile.gear.equipped, items = profile.gear.items, pending = profile.gear.pending;
       const isEq = (it) => eq[it.slot] === it.uid;
@@ -3115,7 +3278,7 @@ function createUI(actions) {
       $('#gear .summary').textContent = lines.length ? `天賦＋裝備合計：${lines.join('、')}` : '還沒有任何局外加成';
       const auto = autoSalvageLevel(profile);
       $('#gear .autosalv').innerHTML = `<div class="shop-row${fx?.kind === 'auto' ? ' fx-flash' : ''}"><div><b>新裝備自動分解</b><span class="lim">${esc(autoSalvageText(auto))}</span>
-        <div class="d">${auto < 0 ? '目前關閉：所有新裝備都會留下，背包滿了就放暫存區。' : `新得到的「${esc(autoSalvageText(auto))}」裝備會直接變成燈油，不進背包。`}</div></div>
+        <div class="d">${auto < 0 ? '目前關閉：所有新裝備都會留下，背包滿了就放暫存區。' : `新得到的「${esc(autoSalvageText(auto))}」裝備會直接分解成燈油＋結晶（進階材料），不進背包。`}</div></div>
         <button class="buy" data-act="autoSalvOpen">設定</button></div>`;
       const sorted = (list) => [...list].sort((a, b) => b.rarity - a.rarity || b.lv - a.lv || a.uid - b.uid);
       const space = gearSpace(profile);
@@ -3130,17 +3293,26 @@ function createUI(actions) {
       $('#gear .bag-list').innerHTML = sorted(items).map((it) => gearTile(it, isEq(it), sel, fx?.uid === it.uid)).join('') || '<div class="empty-bag">還沒有裝備。打完一章（或撐過 4 分鐘）會掉落。</div>';
       if (sel) {
         const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
-        const oil = picked.reduce((a, it) => a + salvageValue(it), 0);
-        $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・可得燈油 <b>+${num(oil)}</b></span>
+        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0);
+        $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・燈油 <b>+${num(oil)}</b>・結晶 <b>+${cry}</b></span>
           <button class="btn small" data-act="gearBatchAsk" ${picked.length ? '' : 'disabled'}>分解</button><button class="btn small ghost" data-act="gearBatchCancel">取消</button></div>`;
         $('#gear .batch-bar').classList.add('show');
       } else { $('#gear .batch-bar').innerHTML = ''; $('#gear .batch-bar').classList.remove('show'); }
 
       const sheet = $('#gear .sheet');
       const bagIt = items.find((i) => i.uid === open), penIt = pending.find((i) => i.uid === open);
-      if (sheetKind === 'auto') {
+      if (sheetKind === 'wstar' && wid && WEAPONS[wid]?.exclusive) {
+        const star = profile.weapons.stars?.[wid] || 0, shards = profile.weapons.shards?.[wid] || 0, c = weaponAscendCost(profile, wid);
+        sheet.innerHTML = `<div class="sheet-card" style="--c:${WEAPONS[wid].color}"><b class="name">${esc(WEAPONS[wid].name)} 進階 ${star} / ${WEAPON_ASCEND.max}</b>
+          <p class="sheet-p">材料：武器祈燈抽到已擁有的專屬武器，會變成那把的「星核」。進階的能力只有<b>裝備這把當起始武器時</b>才生效。</p>
+          <ul class="perks">${WEAPON_ASCEND.perks.map((pk, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(pk.text)}</li>`).join('')}</ul>
+          <p class="sheet-p">${c ? `下一階（★${c.star}）需要星核 ×${c.shards}（你有 ${shards}）` : '已經是最高階'}</p>
+          <div class="acts">${c ? `<button class="btn small" data-act="wstarGo" data-id="${wid}" ${shards >= c.shards ? '' : 'disabled'}>進階</button>` : ''}<button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
+        sheet.classList.add('show');
+      } else if (sheetKind === 'auto') {
         sheet.innerHTML = `<div class="sheet-card" style="--c:var(--gold)"><b class="name">新裝備自動分解</b>
-          <p class="sheet-p">開啟後，之後新得到的裝備（關卡掉落、祈燈、禮包都算）只要在門檻以下，就直接分解成燈油，不進背包也不進暫存區。</p>
+          <p class="sheet-p">開啟後，之後新得到的裝備（關卡掉落、祈燈、禮包都算）只要在門檻以下，就直接分解，不進背包也不進暫存區。</p>
+          <p class="sheet-p">分解一定會給<b>燈油＋燈芯結晶</b>；結晶是裝備突破的材料，所以自動分解不會浪費進階材料。</p>
           <p class="sheet-p">已經在背包裡的裝備不受影響。<b>史詩與傳說永遠不會被自動分解。</b>預設是關閉。</p>
           <div class="opts">${[-1, ...Array.from({ length: AUTO_SALVAGE_MAX + 1 }, (_, i) => i)].map((lv) => `<button class="opt${lv === auto ? ' on' : ''}" data-act="autoSalvSet" data-r="${lv}">${esc(autoSalvageText(lv))}${lv === -1 ? '（預設）' : ''}${lv === auto ? '<span>目前</span>' : ''}</button>`).join('')}</div>
           <div class="acts"><button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
@@ -3148,9 +3320,9 @@ function createUI(actions) {
       } else if (sheetKind === 'batch' && sel) {
         const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
         const byR = RARITIES.map((r, i) => [r, picked.filter((it) => it.rarity === i).length]).filter(([, n]) => n);
-        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), high = picked.some((it) => it.rarity >= 3);
+        const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0), high = picked.some((it) => it.rarity >= 3);
         sheet.innerHTML = `<div class="sheet-card" style="--c:${high ? RARITIES[4].color : 'var(--gold)'}"><b class="name">分解 ${picked.length} 件裝備？</b>
-          <p class="sheet-p">${byR.map(([r, n]) => `<span style="color:${r.color}">${r.name} ${n}</span>`).join('・')}　→ 燈油 +${num(oil)}</p>
+          <p class="sheet-p">${byR.map(([r, n]) => `<span style="color:${r.color}">${r.name} ${n}</span>`).join('・')}　→ 燈油 +${num(oil)}、結晶 +${cry}</p>
           ${high ? '<p class="sheet-p warn">包含史詩或傳說裝備，分解後無法復原。</p>' : '<p class="sheet-p">分解後無法復原。裝備中的不會被分解。</p>'}
           <div class="acts"><button class="btn small" data-act="gearBatchGo">確定分解</button><button class="btn small ghost" data-act="gearBatchBack">再想想</button></div></div>`;
         sheet.classList.add('show');
@@ -3158,21 +3330,22 @@ function createUI(actions) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
         sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
-          <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${ascendSection(it, profile, f && fx.kind === 'star')}
           <div class="acts">
             <button class="btn small" data-act="${on ? 'gearUnequip' : 'gearEquip'}" data-uid="${it.uid}">${on ? '卸下' : '裝備'}</button>
-            ${cost === null ? '<button class="btn small ghost" disabled>已滿級</button>' : `<button class="btn small" data-act="gearUpgrade" data-uid="${it.uid}" ${profile.oil < cost ? 'disabled' : ''}>強化（${num(cost)}）</button>`}
-            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))}）</button>
+            ${cost === null ? '' : `<button class="btn small" data-act="gearUpgrade" data-uid="${it.uid}" ${profile.oil < cost ? 'disabled' : ''}>強化（${num(cost)}）</button>`}
+            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
             <button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
         sheet.classList.add('show');
       } else if (penIt) {
         const it = penIt;
         sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
-          <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
           <div class="acts">
             <button class="btn small" data-act="pendingClaim" data-uid="${it.uid}" ${space.bag ? '' : 'disabled'}>${space.bag ? '收進背包' : '背包已滿'}</button>
-            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))}）</button>
+            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
             <button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
         sheet.classList.add('show');
       } else sheet.classList.remove('show');
@@ -3219,7 +3392,7 @@ function createUI(actions) {
           <table class="odds"><tr><th>獎項</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
           ${WEAPON_GACHA.outcomes.map((o, i) => `<tr data-rarity="${i}"><td${i === w.top ? ' style="color:#ffc85a"' : ''}>${esc(o.name)}</td><td class="odds-base">${fmtPct(w.base[i])}</td><td class="odds-comp">${fmtPct(w.composite[i])}</td></tr>`).join('')}</table>
           <div class="pity">保底：第 <b>${w.pity}</b> 抽必得專屬武器。目前已累積 <b>${profile.gacha.wpity}</b> 抽，再 <b>${left}</b> 抽必得。</div>
-          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就改給 ${num(WEAPON_GACHA.dupRefund.stardust)} 星砂。抽到後要到「裝備」畫面裝上才會生效。武器祈燈不會給裝備，不佔背包。</div>
+          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就從三把中平均選一把，變成那把的「星核」（專屬武器的進階材料）。抽到後要到「裝備」畫面裝上才會生效。武器祈燈不會給裝備，不佔背包。</div>
           <div class="gacha-btns">${wbtn(1)}${wbtn(10)}</div>`;
       }
       const packRow = (it) => {
@@ -3261,10 +3434,10 @@ function createUI(actions) {
           ${auto.length ? `<p>依你的自動分解設定，${auto.length} 件變成燈油 +${num(auto.reduce((a, r) => a + r.salvaged, 0))}。</p>` : ''}
           <div class="acts"><button class="btn small ghost reveal-skip" data-act="revealSkip">跳過動畫</button>${toPending ? '<button class="btn small ghost after-reveal" data-act="gotoGear">前往裝備</button>' : ''}<button class="btn small after-reveal" data-act="shopClose">收下</button></div>`;
       } else if (m.type === 'wgacha') {
-        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.refund ? `專屬武器（已全部擁有，改給 ${num(r.refund.stardust)} 星砂）` : WEAPON_GACHA.outcomes[r.idx].name;
-        const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.refund);
-        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.refund ? 'r4' : 'r0'}" style="--c:${r.weapon ? WEAPONS[r.weapon].color : r.refund ? '#ffc85a' : '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
-        const rv = reveal(cards, hit ? 4 : 0, hit ? (hit.weapon ? WEAPONS[hit.weapon].color : '#ffc85a') : '#c9cfe6', m.skip);
+        const txt = (r) => r.weapon ? `專屬武器「${WEAPONS[r.weapon].name}」` : r.shard ? `「${WEAPONS[r.shard].name}」星核 +1（已擁有，變成進階材料）` : WEAPON_GACHA.outcomes[r.idx].name;
+        const got = m.results.filter((r) => r.weapon), hit = m.results.find((r) => r.weapon || r.shard), col = (r) => WEAPONS[r.weapon || r.shard]?.color;
+        const cards = m.results.map((r, i) => `<div class="gcard ${r.weapon || r.shard ? 'r4' : 'r0'}" style="--c:${col(r) ?? '#c9cfe6'};--i:${i}"><span class="rn">${r.pity ? '保底' : ''}</span><b>${esc(txt(r))}</b></div>`);
+        const rv = reveal(cards, hit ? 4 : 0, hit ? col(hit) : '#c9cfe6', m.skip);
         html = `<h3>武器祈燈結果</h3>${rv.html}
           ${got.length ? '<p>抽到的專屬武器已放進收藏，<b>到「裝備」畫面裝上才會成為開局武器</b>。</p>' : ''}
           <div class="acts"><button class="btn small ghost reveal-skip" data-act="revealSkip">跳過動畫</button>${got.length ? '<button class="btn small ghost after-reveal" data-act="gotoGear">前往裝備</button>' : ''}<button class="btn small after-reveal" data-act="shopClose">收下</button></div>`;
@@ -3395,7 +3568,7 @@ const { createRenderer } = __m_render_js;
 const { createUI, gearName, autoSalvageText } = __m_ui_js;
 const { CHAPTERS, CHAPTER1, WEAPON_GACHA } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
-const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
+const { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
 const { createPerf } = __m_perf_js;
 const { createClock, SPEEDS } = __m_clock_js;
 const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
@@ -3559,10 +3732,14 @@ const ui = createUI({
   },
   gearBatchAsk: () => { if (gearView.sel?.size) refreshGear({ sheet: 'batch' }); },
   gearBatchBack: () => refreshGear({ sheet: null }),
+  // 進階：裝備突破、專屬武器進階
+  gearAscend: (d) => { const uid = Number(d.uid), r = ascendGear(profile, uid); if (r.ok) { persist(); ui.toast(`突破到 ★${r.star}，解鎖新能力`); } refreshGear({ open: uid, fx: r.ok ? { uid, kind: 'star' } : null }); },
+  wstarOpen: (d) => refreshGear({ open: null, sheet: 'wstar', wid: d.id }),
+  wstarGo: (d) => { const r = ascendWeapon(profile, d.id); if (r.ok) { persist(); ui.toast(`${d.id && r.star ? `進階到 ★${r.star}` : ''}`); } refreshGear({ sheet: 'wstar', wid: d.id, fx: r.ok ? { kind: 'wstar', id: d.id } : null }); },
   gearBatchGo: () => {
     const r = salvageMany(profile, [...(gearView.sel || [])]);
     persist(); refreshGear({ sel: null, sheet: null });
-    ui.toast(`分解 ${r.count} 件，燈油 +${r.oil.toLocaleString('zh-Hant')}${r.skipped.length ? `（${r.skipped.length} 件裝備中，已略過）` : ''}`);
+    ui.toast(`分解 ${r.count} 件，燈油 +${r.oil.toLocaleString('zh-Hant')}、結晶 +${r.crystals}${r.skipped.length ? `（${r.skipped.length} 件裝備中，已略過）` : ''}`);
   },
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
@@ -3613,7 +3790,7 @@ function newRun(id) {
   const chapter = CHAPTERS.find((c) => c.id === id);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
-  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile) }); // 只有「已裝備」的專屬武器會生效
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
   renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
 }
