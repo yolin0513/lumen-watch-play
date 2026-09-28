@@ -226,6 +226,14 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// 逼 GPU 做完主畫布的繪製：把主畫布縮畫到 1×1 小畫布再讀回。
+// 不能直接對主畫布 getImageData——Chrome 會把常被讀回的畫布降級成 CPU 繪圖，量到的就不是實際情況（先前踩過）。
+let flushCtx = null;
+function flushGPU() {
+  flushCtx ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+  flushCtx.drawImage(canvas, 0, 0, 1, 1); flushCtx.getImageData(0, 0, 1, 1);
+}
+
 // 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
 function perfFrame(now, dt) {
   const s = sim.state;
@@ -236,7 +244,7 @@ function perfFrame(now, dt) {
     const step = perf.sync ? 1 / 60 : dt;
     const t0 = performance.now(); sim.update(step, perf.move(s)); const t1 = performance.now();
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
-    if (perf.sync) g.getImageData(0, 0, 1, 1); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
+    if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
     perf.record(now, t1 - t0, t2 - t1, s);
   }

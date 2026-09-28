@@ -125,6 +125,7 @@ export function createRenderer(chapter = CHAPTER1) {
 
     const C = screenCache(W, H, scale);
     if (OFF.has('ground')) { g.fillStyle = '#101020'; g.fillRect(camX, camY, VW, vh); }
+    else if (OFF.has('cache')) { g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh); } // 優化前的舊做法（A/B 對照用）
     else { // 螢幕空間平鋪預先放大的地面磚（通常 4～6 次 drawImage）
       g.setTransform(1, 0, 0, 1, 0, 0);
       const T = C.T, ox = -((((camX * scale) % T) + T) % T), oy = -((((camY * scale) % T) + T) % T);
@@ -336,7 +337,11 @@ export function createRenderer(chapter = CHAPTER1) {
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (s.chapter.fog && !OFF.has('fog')) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
       const px = (p.x - camX) * scale, py = (p.y - camY) * scale;
-      g.drawImage(C.fog, px - W / 2 - C.fogM, py - H / 2 - C.fogM);
+      if (OFF.has('cache')) { // 優化前的舊做法（A/B 對照用）
+        const R = s.chapter.fog * scale, fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
+        fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
+        g.fillStyle = fg; g.fillRect(0, 0, W, H);
+      } else g.drawImage(C.fog, px - W / 2 - C.fogM, py - H / 2 - C.fogM);
       g.globalAlpha = 0.18;
       const br = C.blob.width / 2;
       for (let i = 0; i < 5; i++) { // 緩慢飄動的霧團
@@ -346,7 +351,11 @@ export function createRenderer(chapter = CHAPTER1) {
       g.globalAlpha = 1;
     }
     prof?.lap('霧');
-    if (!OFF.has('vignette')) g.drawImage(C.vig, 0, 0);
+    if (OFF.has('cache')) { // 優化前的舊做法（A/B 對照用）
+      const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
+      g.fillStyle = vig; g.fillRect(0, 0, W, H);
+    } else if (!OFF.has('vignette')) g.drawImage(C.vig, 0, 0);
     const lowHp = p.hp / p.maxHp < 0.3 ? 0.25 + Math.sin(T * 6) * 0.1 : 0;
     const red = Math.max(fx.hurtFlash, lowHp);
     if (red > 0) {

@@ -1638,6 +1638,7 @@ function createRenderer(chapter = CHAPTER1) {
 
     const C = screenCache(W, H, scale);
     if (OFF.has('ground')) { g.fillStyle = '#101020'; g.fillRect(camX, camY, VW, vh); }
+    else if (OFF.has('cache')) { g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh); } // 優化前的舊做法（A/B 對照用）
     else { // 螢幕空間平鋪預先放大的地面磚（通常 4～6 次 drawImage）
       g.setTransform(1, 0, 0, 1, 0, 0);
       const T = C.T, ox = -((((camX * scale) % T) + T) % T), oy = -((((camY * scale) % T) + T) % T);
@@ -1849,7 +1850,11 @@ function createRenderer(chapter = CHAPTER1) {
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (s.chapter.fog && !OFF.has('fog')) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
       const px = (p.x - camX) * scale, py = (p.y - camY) * scale;
-      g.drawImage(C.fog, px - W / 2 - C.fogM, py - H / 2 - C.fogM);
+      if (OFF.has('cache')) { // 優化前的舊做法（A/B 對照用）
+        const R = s.chapter.fog * scale, fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
+        fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
+        g.fillStyle = fg; g.fillRect(0, 0, W, H);
+      } else g.drawImage(C.fog, px - W / 2 - C.fogM, py - H / 2 - C.fogM);
       g.globalAlpha = 0.18;
       const br = C.blob.width / 2;
       for (let i = 0; i < 5; i++) { // 緩慢飄動的霧團
@@ -1859,7 +1864,11 @@ function createRenderer(chapter = CHAPTER1) {
       g.globalAlpha = 1;
     }
     prof?.lap('霧');
-    if (!OFF.has('vignette')) g.drawImage(C.vig, 0, 0);
+    if (OFF.has('cache')) { // 優化前的舊做法（A/B 對照用）
+      const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
+      g.fillStyle = vig; g.fillRect(0, 0, W, H);
+    } else if (!OFF.has('vignette')) g.drawImage(C.vig, 0, 0);
     const lowHp = p.hp / p.maxHp < 0.3 ? 0.25 + Math.sin(T * 6) * 0.1 : 0;
     const red = Math.max(fx.hurtFlash, lowHp);
     if (red > 0) {
@@ -2618,8 +2627,9 @@ const __m_perf_js = (() => {
 // 每一幀記錄：瀏覽器給的幀間隔、邏輯耗時、繪製耗時（再細分各繪製步驟）。量完在畫面上顯示報表，也放在 window.__perf。
 // 手機實機要量就用手機開這個網址；桌面瀏覽器量到的數字不能代表手機。
 // &off=fog,vignette,glow,particles,ground,filter：A/B 量測，關掉指定的繪製項目（看各項佔多少）
+//   &off=cache：地面／霧／暗角改走優化前的舊做法（每幀重建圖樣與漸層），用來做前後對照
 // &dpr=1：把畫布解析度上限改成指定倍率（看解析度佔多少）
-// &sync=1：同步模式——每次 rAF 連續畫多幀，每幀畫完讀回一個像素逼 GPU 做完再計時。
+// &sync=1：同步模式——連續畫多幀，每幀畫完把主畫布縮到 1×1 小畫布讀回，逼 GPU 做完再計時（不直接讀主畫布，見 main.js flushGPU）。
 //   給「頁面不可見、rAF 被節流」的環境用（例如開發環境的隱藏瀏覽器面板）：量得到繪製成本，量不到真實幀間隔。
 const { CHAPTERS } = __m_content_js;
 const pct = (a, p) => (a.length ? a[Math.min(a.length - 1, Math.floor(a.length * p))] : 0);
@@ -2912,6 +2922,14 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// 逼 GPU 做完主畫布的繪製：把主畫布縮畫到 1×1 小畫布再讀回。
+// 不能直接對主畫布 getImageData——Chrome 會把常被讀回的畫布降級成 CPU 繪圖，量到的就不是實際情況（先前踩過）。
+let flushCtx = null;
+function flushGPU() {
+  flushCtx ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+  flushCtx.drawImage(canvas, 0, 0, 1, 1); flushCtx.getImageData(0, 0, 1, 1);
+}
+
 // 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
 function perfFrame(now, dt) {
   const s = sim.state;
@@ -2922,7 +2940,7 @@ function perfFrame(now, dt) {
     const step = perf.sync ? 1 / 60 : dt;
     const t0 = performance.now(); sim.update(step, perf.move(s)); const t1 = performance.now();
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
-    if (perf.sync) g.getImageData(0, 0, 1, 1); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
+    if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
     perf.record(now, t1 - t0, t2 - t1, s);
   }
