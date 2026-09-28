@@ -99,6 +99,36 @@
   .win h1 { font-size: 36px; } .lose h1 { font-size: 36px; color: #c9b8ff; text-shadow: 0 0 18px rgba(150, 120, 255, 0.7); }
   .hint { font-size: 12px; color: var(--dim); margin-top: 14px; line-height: 1.6; }
   .linkish { background: none; border: none; color: var(--dim); font-size: 12px; text-decoration: underline; margin-top: 10px; }
+  .row2 .btn { position: relative; }
+  .shop-dot { display: none; position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #ff7a8a; box-shadow: 0 0 8px #ff7a8a; }
+  .wallet { display: flex; gap: 12px; justify-content: center; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+  .wallet b { color: var(--gold); font-size: 15px; margin-left: 3px; }
+  .sim-banner { width: min(380px, 100%); box-sizing: border-box; padding: 8px 10px; margin: 6px 0 10px; border-radius: 10px; font-size: 13px;
+    background: rgba(120, 200, 255, 0.1); border: 1px dashed rgba(143, 232, 255, 0.6); color: #bfeaff; }
+  .shop-sec { width: min(380px, 100%); margin-bottom: 12px; text-align: left; }
+  .sec-title { font-size: 15px; font-weight: 800; color: var(--gold); margin: 4px 0 6px; }
+  .shop-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: var(--panel); border: 1px solid rgba(160, 170, 255, 0.18); }
+  .shop-row > div { flex: 1; } .shop-row .d, .shop-sec .d { color: #cfd6ff; font-size: 12px; margin-top: 2px; line-height: 1.45; }
+  .shop-sec .small { font-size: 11px; color: var(--dim); margin: 4px 0 8px; }
+  .shop-row .buy { min-width: 76px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--edge); background: #2a1e0c; color: var(--gold); font-weight: 700; line-height: 1.2; }
+  .shop-row .max { color: var(--dim); font-size: 12px; } .lim { font-size: 11px; color: #ffcf8a; margin-left: 6px; }
+  .odds { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  .odds th { font-weight: 600; color: var(--dim); font-size: 11px; padding: 6px; } .odds td { padding: 5px 8px; border-top: 1px solid rgba(160, 170, 255, 0.12); }
+  .odds td:nth-child(n+2), .odds th:nth-child(n+2) { text-align: right; }
+  .pity { font-size: 12px; color: #ffe9a8; margin: 8px 0 2px; line-height: 1.5; } .pity b { color: #fff; }
+  .gacha-btns { display: flex; gap: 8px; } .gacha-btns .btn { flex: 1; margin: 6px 0; line-height: 1.3; }
+  .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); z-index: 6; padding: 16px; box-sizing: border-box; }
+  .modal.show { display: flex; }
+  .modal-card { width: min(380px, 100%); max-height: 88vh; overflow-y: auto; touch-action: pan-y; padding: 16px; border-radius: 18px; background: #141032; border: 1px solid var(--edge); text-align: center; }
+  .modal-card h3 { margin: 0 0 8px; color: var(--gold); } .modal-card p { font-size: 14px; color: #cfd6ff; margin: 6px 0; line-height: 1.5; }
+  .sim-note { color: #bfeaff !important; font-weight: 700; }
+  .gacha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+  .gcard { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--c); font-size: 12px; text-align: left; animation: pop .35s ease-out both; }
+  .gcard b { color: var(--c); font-size: 13px; } .gcard .rn { font-size: 10px; color: var(--c); } .gcard .sv { color: var(--dim); font-size: 10px; }
+  .gcard.r3 { box-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); } .gcard.r4 { box-shadow: 0 0 22px var(--c); }
+  @keyframes pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .hist { list-style: none; padding: 0; margin: 6px 0; text-align: left; font-size: 12px; } .hist li { padding: 5px 0; border-bottom: 1px solid rgba(160, 170, 255, 0.12); display: flex; gap: 8px; flex-wrap: wrap; }
+  .hist span { color: var(--dim); } .hist i { color: #bfeaff; font-style: normal; }
   #toast { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%); max-width: 86%; z-index: 10;
     padding: 10px 14px; border-radius: 12px; background: rgba(20, 16, 44, 0.95); border: 1px solid var(--edge); font-size: 13px; line-height: 1.5;
     opacity: 0; pointer-events: none; transition: opacity .3s; text-align: center; }
@@ -117,7 +147,7 @@
     <div class="oil-slot"></div>
     <div class="progress"></div>
     <button class="btn" data-act="openChapters">點燈出發</button>
-    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button></div>
+    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button><button class="btn ghost" data-act="openShop">商城<span class="shop-dot"></span></button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
     <button class="linkish" data-act="resetSave">清除進度</button>
   </div>
@@ -142,6 +172,20 @@
     <div class="bag"></div>
     <button class="btn ghost" data-act="menu">返回</button>
     <div class="sheet"></div>
+  </div>
+
+  <!-- 商城：全部模擬，沒有任何輸入欄位、不連外 -->
+  <div id="shop" class="overlay scroll">
+    <div class="topbar"><h2>商城</h2></div>
+    <div class="wallet-slot"></div>
+    <div class="sim-banner">本遊戲所有購買皆為模擬，不會產生任何費用。</div>
+    <div class="shop-sec daily"></div>
+    <div class="shop-sec gacha"></div>
+    <div class="shop-sec packs"></div>
+    <div class="shop-sec simbuy"></div>
+    <button class="linkish" data-act="shopHistory">交易紀錄</button>
+    <button class="btn ghost" data-act="menu">返回</button>
+    <div class="modal"></div>
   </div>
 
   <div id="levelup" class="overlay"><h2>選擇強化</h2><div class="cards"></div></div>
@@ -334,7 +378,7 @@ const CHAPTERS = [
       { at: 390, type: 'ring',  kind: 'mite', n: 40 },
       { at: 420, type: 'boss',  kind: 'boss1' },
     ],
-    reward: { clear: 300, firstClear: 300, gear: [60, 30, 10, 0, 0] },
+    reward: { clear: 300, firstClear: 300, gear: [60, 30, 10, 0, 0], stardust: 10, firstStardust: 60 },
   },
   {
     id: 2, name: '霧沼', tagline: '濃霧縮短了瞄準距離，泥沼拖慢腳步，沼蛭會蓄力撲來', palette: 'marsh', hue: 60,
@@ -355,7 +399,7 @@ const CHAPTERS = [
       { at: 395, type: 'ring',  kind: 'mite', n: 44 },
       { at: 420, type: 'boss',  kind: 'boss2' },
     ],
-    reward: { clear: 500, firstClear: 500, gear: [35, 40, 20, 5, 0] },
+    reward: { clear: 500, firstClear: 500, gear: [35, 40, 20, 5, 0], stardust: 15, firstStardust: 90 },
   },
   {
     id: 3, name: '晶窟', tagline: '晶柱擋路也擋子彈，晶刺在遠處架起火線，閃晶蛾會突然出現在身邊', palette: 'crystal', hue: 170,
@@ -376,7 +420,7 @@ const CHAPTERS = [
       { at: 395, type: 'ring',  kind: 'blinker', n: 30 },
       { at: 420, type: 'boss',  kind: 'boss3' },
     ],
-    reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2] },
+    reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2], stardust: 20, firstStardust: 120 },
   },
 ];
 const CHAPTER1 = CHAPTERS[0];
@@ -432,7 +476,30 @@ const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 const SLOTS = { weapon: 4, passive: 4 };
 const MAX_LV = 5;
 
-return { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV };
+// ---- 商城（全部模擬，不接任何付款） ----
+// 貨幣：燈油（局內賺）、星砂（通關與每日補給賺，也可「模擬購買」取得）、祈燈券（每日補給、禮包）。
+// 商城賣的每一樣東西，玩遊戲都拿得到：星砂靠通關＋每日補給，祈燈券靠每日補給，裝備靠通關掉落。
+// 價格標示：模擬購買的項目寫「模擬 N 點」（虛構單位，不對應任何真實幣值）；其他項目用遊戲內貨幣標價。
+const DAILY = { oil: 150, stardust: 15, tickets: 1 };
+const SHOP = [
+  // kind: sim＝模擬購買（不花任何遊戲內貨幣，按下只走模擬流程）；game＝用遊戲內貨幣買
+  { id: 'dust_s', kind: 'sim', name: '一小袋星砂', desc: '星砂 ×60', simPoints: 30, gives: { stardust: 60 } },
+  { id: 'dust_m', kind: 'sim', name: '一瓶星砂',   desc: '星砂 ×330', simPoints: 150, gives: { stardust: 330 } },
+  { id: 'dust_l', kind: 'sim', name: '一箱星砂',   desc: '星砂 ×1400', simPoints: 600, gives: { stardust: 1400 } },
+  { id: 'starter', kind: 'game', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
+  { id: 'oilbox',  kind: 'game', name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
+];
+
+// ---- 祈燈（抽獎）----
+// rates：單抽時各稀有度的機率（百分比，順序同 RARITIES）。這是唯一一份機率表：抽獎邏輯與商城畫面都從這裡算。
+// pity：第 pity 抽必得最高稀有度（計數＝距離上次抽到最高稀有度的抽數；抽到就歸零）。
+const GACHA = {
+  rates: [45, 33, 16, 5, 1],
+  pity: 40,
+  cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
+};
+
+return { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA };
 })();
 
 // ---- stats.js
@@ -1738,7 +1805,7 @@ function createRenderer(chapter = CHAPTER1) {
     g.fillStyle = xg; g.fillRect(0, safeTop, w * (p.xp / p.xpNext), 7);
     g.font = '700 14px system-ui'; g.fillStyle = '#e9ecff'; g.textAlign = 'left';
     shadowText(g, `Lv ${p.level}`, 10, top + 20);
-    // 時間：Boss 前倒數到燈塔守衛
+    // 時間：顯示距離燈塔守衛出現還有多久
     g.textAlign = 'center';
     const left = Math.max(0, s.chapter.bossAt - T);
     const clock = s.boss || s.arena ? '燈塔守衛' : `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
@@ -1821,9 +1888,10 @@ const __m_save_js = (() => {
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
+const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 
 function defaultProfile() {
@@ -1832,6 +1900,11 @@ function defaultProfile() {
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null } },
     chapters: { cleared: [], best: {} },
     stats: { runs: 0, kills: 0 },
+    // v2（M3 商城）
+    stardust: 0, tickets: 0,
+    gacha: { pity: 0, total: 0 },          // pity：距離上次抽到最高稀有度的抽數（0 ~ GACHA.pity-1）
+    shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
+    daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
   };
 }
 
@@ -1852,6 +1925,8 @@ function createStore(getStorage) {
 // v0＝沒有版本號的存檔（本作沒有正式發行過 v0；這是給「缺版本號」的資料一條升級路，而不是直接丟棄）。
 const MIGRATIONS = {
   0: (d) => ({ ...defaultProfile(), oil: d.oil, talents: d.talents, v: 1 }),
+  // v1 → v2：加入商城欄位（星砂、祈燈券、保底計數、購買紀錄、每日補給），原有進度原樣保留
+  1: (d) => ({ ...d, stardust: 0, tickets: 0, gacha: { pity: 0, total: 0 }, shop: { bought: {}, history: [] }, daily: { last: null }, v: 2 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -1954,6 +2029,29 @@ function sanitize(d) {
   } else if (d.chapters !== undefined) fix('chapters 型別不對，重設');
 
   if (isObj(d.stats)) { out.stats.runs = nonNegInt(d.stats.runs) ?? 0; out.stats.kills = nonNegInt(d.stats.kills) ?? 0; }
+
+  // ---- v2 商城欄位 ----
+  for (const k of ['stardust', 'tickets']) {
+    const n = nonNegInt(d[k]);
+    if (n === null) { if (d[k] !== undefined) fix(`${k} 不合法（${JSON.stringify(d[k])}），歸零`); } else out[k] = n;
+  }
+  if (isObj(d.gacha)) {
+    const pity = nonNegInt(d.gacha.pity);
+    if (pity === null) { if (d.gacha.pity !== undefined) fix(`保底計數不合法（${JSON.stringify(d.gacha.pity)}），歸零`); }
+    else if (pity > GACHA.pity - 1) { fix(`保底計數 ${pity} 超過上限，改為 ${GACHA.pity - 1}`); out.gacha.pity = GACHA.pity - 1; }
+    else out.gacha.pity = pity;
+    out.gacha.total = nonNegInt(d.gacha.total) ?? 0;
+  } else if (d.gacha !== undefined) fix('gacha 型別不對，重設');
+  if (isObj(d.shop)) {
+    if (isObj(d.shop.bought)) for (const [id, n] of Object.entries(d.shop.bought)) {
+      const item = SHOP.find((x) => x.id === id), c = nonNegInt(n);
+      if (!item || c === null) { fix(`購買紀錄 ${id} 不合法，移除`); continue; }
+      if (c > 0) out.shop.bought[id] = item.limit ? Math.min(c, item.limit) : c;
+    }
+    if (Array.isArray(d.shop.history)) out.shop.history = d.shop.history.filter((h) => isObj(h) && Number.isFinite(h.t) && SHOP.some((x) => x.id === h.id)).slice(-MAX_HISTORY).map((h) => ({ t: h.t, id: h.id }));
+  } else if (d.shop !== undefined) fix('shop 型別不對，重設');
+  if (isObj(d.daily) && typeof d.daily.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.daily.last)) out.daily.last = d.daily.last;
+  else if (d.daily !== undefined && d.daily?.last != null) fix('每日補給日期不合法，重設');
   return { profile: out, notes };
 }
 const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));
@@ -1965,7 +2063,7 @@ function sanitizeItem(it) {
   return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes };
 }
 
-return { SAVE_KEY, SAVE_VERSION, MAX_ITEMS, defaultProfile, createStore, MIGRATIONS, loadProfile, saveProfile, sanitize };
+return { SAVE_KEY, SAVE_VERSION, MAX_HISTORY, MAX_ITEMS, defaultProfile, createStore, MIGRATIONS, loadProfile, saveProfile, sanitize };
 })();
 
 // ---- meta.js
@@ -2069,6 +2167,9 @@ function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   const firstClear = won && !profile.chapters.cleared.includes(chapterId);
   const oil = computeOil(ledger, chapter, { won, firstClear }, oilBonus(profile));
   profile.oil += oil.total;
+  // 星砂：只有通關才給（首通另加），讓商城的星砂靠正常遊玩就拿得到
+  const stardust = won ? chapter.reward.stardust + (firstClear ? chapter.reward.firstStardust : 0) : 0;
+  profile.stardust += stardust;
 
   const drops = [];
   const n = won ? 2 : t >= 240 ? 1 : 0;
@@ -2085,7 +2186,7 @@ function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   const best = profile.chapters.best[chapterId];
   if (won && (!best || t < best.t)) profile.chapters.best[chapterId] = { t: Math.round(t), kills };
   profile.stats.runs++; profile.stats.kills += kills;
-  return { oil, drops, autoSalvage, firstClear, won };
+  return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
 
 const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
@@ -2093,14 +2194,133 @@ const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.in
 return { talentMods, gearMods, equippedItems, profileMods, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, salvageValue, salvage, computeOil, settleRun, chapterUnlocked };
 })();
 
+// ---- shop.js
+const __m_shop_js = (() => {
+// 商城與祈燈（抽獎）：純邏輯。存檔物件（profile）由呼叫端傳入並就地修改；亂數與時間由呼叫端注入。
+// 🔴 全部是模擬：不接任何付款、不收任何資料、不連外。「模擬購買」的項目只走流程，不扣任何東西。
+// 機率只有一份來源：content.js 的 GACHA。抽獎（rollRarity）與商城畫面（gachaOdds → ui.js）都從它算；
+// tools/shop-test.mjs 會把「畫面上的百分比」和「實際抽 N 次量到的分布」這兩個獨立來源拿來比對。
+const { SHOP, GACHA, DAILY, RARITIES } = __m_content_js;
+const { rollGear, salvageValue } = __m_meta_js;
+const { MAX_ITEMS, MAX_HISTORY } = __m_save_js;
+// ---- 機率（給畫面顯示）----
+// base：單抽機率（照表）。composite：長期下每一抽的實際機率（含保底）。
+// 保底推導：設最高稀有度單抽機率 p、保底抽數 N。距離上次最高稀有度的抽數在 N 抽內一定結束，
+// 平均間隔 E = Σ_{k=0}^{N-1} (1-p)^k；每個間隔有 (1-p)^{N-1} 的機率是靠保底結束，
+// 所以長期下「被保底強制」的抽數比例 f = (1-p)^{N-1} / E；其餘 (1-f) 的抽照表抽。
+function gachaOdds(table = GACHA) {
+  const total = table.rates.reduce((a, b) => a + b, 0);
+  const base = table.rates.map((r) => r / total);
+  const top = base.length - 1, p = base[top], N = table.pity;
+  let E = 0;
+  for (let k = 0; k < N; k++) E += (1 - p) ** k;
+  const forced = (1 - p) ** (N - 1) / E;
+  const composite = base.map((b, i) => (1 - forced) * b + (i === top ? forced : 0));
+  return { base, composite, pity: N, top, forced };
+}
+const fmtPct = (x) => `${(x * 100).toFixed(2)}%`;
+
+// ---- 抽一次的稀有度（保底在這裡）----
+function rollRarity(profile, rand, table = GACHA) {
+  const rates = table.rates;
+  const top = rates.length - 1, n = profile.gacha.pity + 1; // n：這是距離上次最高稀有度的第幾抽
+  let rarity = top, pity = false;
+  if (n >= table.pity) pity = true;
+  else {
+    const total = rates.reduce((a, b) => a + b, 0);
+    let x = rand() * total;
+    for (let i = 0; i < rates.length; i++) { x -= rates[i]; if (x < 0) { rarity = i; break; } }
+  }
+  profile.gacha.pity = rarity === top ? 0 : n;
+  profile.gacha.total++;
+  return { rarity, pity };
+}
+
+function gachaCost(count) { return GACHA.cost[count === 10 ? 'ten' : 'single']; }
+// 付款方式：祈燈券夠就用券，不夠用星砂；都不夠回 null
+function gachaPay(profile, count) {
+  const c = gachaCost(count);
+  if (profile.tickets >= c.tickets) return 'tickets';
+  if (profile.stardust >= c.stardust) return 'stardust';
+  return null;
+}
+
+// 祈燈：count 抽（1 或 10），pay＝'tickets' | 'stardust'（遊戲內貨幣）。
+// 抽到的裝備進背包；背包滿就自動分解成燈油（另列）。
+function drawGacha(profile, rand, count, pay) {
+  if (count !== 1 && count !== 10) return { ok: false, reason: 'count' };
+  const cost = gachaCost(count)[pay];
+  if (cost === undefined) return { ok: false, reason: 'pay' };
+  if (profile[pay] < cost) return { ok: false, reason: pay };
+  profile[pay] -= cost;
+  const results = [];
+  let autoSalvage = 0;
+  for (let i = 0; i < count; i++) {
+    const { rarity, pity } = rollRarity(profile, rand);
+    const item = rollGear(profile, rand, RARITIES.map((_, j) => (j === rarity ? 1 : 0)), rarity);
+    let salvaged = 0;
+    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(item);
+    else { salvaged = salvageValue(item); autoSalvage += salvaged; }
+    results.push({ rarity, pity, item, salvaged });
+  }
+  profile.oil += autoSalvage;
+  return { ok: true, results, cost: { [pay]: cost }, autoSalvage };
+}
+
+// ---- 每日補給（本地日期，一天一次）----
+function localDate(now) {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const canClaimDaily = (profile, now) => profile.daily.last !== localDate(now);
+function claimDaily(profile, now) {
+  if (!canClaimDaily(profile, now)) return { ok: false, reason: 'claimed' };
+  profile.oil += DAILY.oil; profile.stardust += DAILY.stardust; profile.tickets += DAILY.tickets;
+  profile.daily.last = localDate(now);
+  return { ok: true, got: { ...DAILY } };
+}
+
+// ---- 商城購買 ----
+// kind 'sim'：模擬購買——不收任何東西，只走流程並記錄；kind 'game'：用遊戲內貨幣（星砂／燈油）買。
+function shopItem(id) { return SHOP.find((x) => x.id === id); }
+function canBuy(profile, id) {
+  const item = shopItem(id);
+  if (!item) return { ok: false, reason: 'missing' };
+  if (item.limit && (profile.shop.bought[id] || 0) >= item.limit) return { ok: false, reason: 'limit' };
+  if (item.kind === 'game') for (const [cur, n] of Object.entries(item.price)) if (profile[cur] < n) return { ok: false, reason: cur };
+  return { ok: true, item };
+}
+function buyItem(profile, id, rand, now) {
+  const chk = canBuy(profile, id);
+  if (!chk.ok) return chk;
+  const item = chk.item;
+  if (item.kind === 'game') for (const [cur, n] of Object.entries(item.price)) profile[cur] -= n;
+  const g = item.gives, gear = [];
+  profile.oil += g.oil || 0; profile.stardust += g.stardust || 0; profile.tickets += g.tickets || 0;
+  if (g.gear !== undefined) {
+    const it = rollGear(profile, rand, RARITIES.map((_, j) => (j === g.gear ? 1 : 0)), g.gear);
+    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(it);
+    else { it.salvaged = salvageValue(it); profile.oil += it.salvaged; }
+    gear.push(it);
+  }
+  profile.shop.bought[id] = (profile.shop.bought[id] || 0) + 1;
+  profile.shop.history.push({ t: now, id });
+  if (profile.shop.history.length > MAX_HISTORY) profile.shop.history.splice(0, profile.shop.history.length - MAX_HISTORY);
+  return { ok: true, simulated: item.kind === 'sim', item, gear };
+}
+
+return { gachaOdds, fmtPct, rollRarity, gachaCost, gachaPay, drawGacha, localDate, canClaimDaily, claimDaily, shopItem, canBuy, buyItem };
+})();
+
 // ---- ui.js
 const __m_ui_js = (() => {
 // HTML 介面層：主選單、章節、天賦、裝備、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
-const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, gearUpgradeCost } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, DAILY, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
 const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods } = __m_meta_js;
 const { aggregate } = __m_stats_js;
+const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily } = __m_shop_js;
 const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2141,6 +2361,13 @@ function createUI(actions) {
     return w.concat(ps).join('');
   }
   const oilTag = (profile) => `<div class="oil">燈油 <b>${num(profile.oil)}</b></div>`;
+  const wallet = (p) => `<div class="wallet"><span>燈油 <b>${num(p.oil)}</b></span><span>星砂 <b>${num(p.stardust)}</b></span><span>祈燈券 <b>${num(p.tickets)}</b></span></div>`;
+  const CUR = { stardust: '星砂', oil: '燈油', tickets: '祈燈券' };
+  const priceText = (price) => Object.entries(price).map(([k, v]) => `${num(v)} ${CUR[k]}`).join('＋');
+  const givesText = (g) => [g.oil && `燈油 ×${num(g.oil)}`, g.stardust && `星砂 ×${num(g.stardust)}`, g.tickets && `祈燈券 ×${g.tickets}`].filter(Boolean).join('、');
+  function gearLine(it) {
+    return `<div class="drop" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${it.salvaged ? `（背包已滿，分解 +${num(it.salvaged)} 燈油）` : ''}</span></div>`;
+  }
   function gearTile(it, equipped) {
     const c = RARITIES[it.rarity].color;
     return `<button class="gear" data-act="gearOpen" data-uid="${it.uid}" style="--c:${c}">
@@ -2156,8 +2383,9 @@ function createUI(actions) {
       clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
     },
 
-    menu(profile) {
-      $('#menu .oil-slot').innerHTML = oilTag(profile);
+    menu(profile, dailyReady = false) {
+      $('#menu .oil-slot').innerHTML = wallet(profile);
+      $('#menu .shop-dot').style.display = dailyReady ? 'inline-block' : 'none';
       const cleared = profile.chapters.cleared.length;
       $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length} 座燈塔` : '尚未點亮任何燈塔';
       show('menu');
@@ -2214,6 +2442,64 @@ function createUI(actions) {
       show('gear');
     },
 
+    // ---- 商城 ----
+    // 機率表的每個數字都由 gachaOdds(GACHA) 算出，這裡不准手寫任何百分比（tools/shop-test.mjs 會拿畫面數字和實抽分布比對）。
+    shop(profile, now) {
+      $('#shop .wallet-slot').innerHTML = wallet(profile);
+      const ready = canClaimDaily(profile, now);
+      $('#shop .daily').innerHTML = `<div class="sec-title">每日補給</div>
+        <div class="shop-row"><div><b>今日補給</b><div class="d">${esc(givesText(DAILY))}（每天一次，免費）</div></div>
+        ${ready ? '<button class="buy" data-act="claimDaily">領取</button>' : '<span class="max">今天已領，明天再來</span>'}</div>`;
+      const o = gachaOdds(GACHA), top = RARITIES[o.top].name, left = o.pity - profile.gacha.pity;
+      const btn = (n) => {
+        const pay = gachaPay(profile, n), c = gachaCost(n);
+        const label = pay === 'tickets' ? `用 ${c.tickets} 張祈燈券` : `花 ${num(c.stardust)} 星砂`;
+        return `<button class="btn small" data-act="gachaAsk" data-n="${n}" ${pay ? '' : 'disabled'}>模擬抽獎 ×${n}<br><small>${pay ? label : `需要 ${num(c.stardust)} 星砂或 ${c.tickets} 張券`}</small></button>`;
+      };
+      $('#shop .gacha').innerHTML = `<div class="sec-title">祈燈（抽裝備）</div>
+        <table class="odds"><tr><th>稀有度</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
+        ${RARITIES.map((r, i) => `<tr data-rarity="${i}"><td style="color:${r.color}">${r.name}</td><td class="odds-base">${fmtPct(o.base[i])}</td><td class="odds-comp">${fmtPct(o.composite[i])}</td></tr>`).join('')}</table>
+        <div class="pity">保底：第 <b>${o.pity}</b> 抽必得「${top}」。目前已累積 <b>${profile.gacha.pity}</b> 抽，再 <b>${left}</b> 抽必得。抽到「${top}」後重新計算。</div>
+        <div class="d small">機率由遊戲內的機率表直接計算；「綜合機率」是把保底算進去後，長期每一抽的實際機率。</div>
+        <div class="gacha-btns">${btn(1)}${btn(10)}</div>`;
+      const packRow = (it) => {
+        const chk = canBuy(profile, it.id), bought = profile.shop.bought[it.id] || 0;
+        const tag = it.kind === 'sim' ? `模擬 ${num(it.simPoints)} 點` : priceText(it.price);
+        const soldOut = chk.reason === 'limit';
+        return `<div class="shop-row"><div><b>${esc(it.name)}</b>${it.limit ? `<span class="lim">限購 ${it.limit}（已買 ${bought}）</span>` : ''}<div class="d">${esc(it.desc)}</div></div>
+          ${soldOut ? '<span class="max">已購買</span>' : `<button class="buy" data-act="buyAsk" data-id="${it.id}" ${chk.ok ? '' : 'disabled'}>${it.kind === 'sim' ? '模擬購買' : '購買'}<br><small>${esc(tag)}</small></button>`}</div>`;
+      };
+      $('#shop .packs').innerHTML = `<div class="sec-title">禮包（用遊戲內貨幣）</div>${SHOP.filter((x) => x.kind === 'game').map(packRow).join('')}`;
+      $('#shop .simbuy').innerHTML = `<div class="sec-title">星砂（模擬購買）</div>
+        <div class="d small">「模擬 N 點」是虛構的標示，不對應任何真實貨幣；按下只會跑一次模擬流程，不會產生任何費用。星砂也能靠通關與每日補給取得。</div>
+        ${SHOP.filter((x) => x.kind === 'sim').map(packRow).join('')}`;
+      if (!$('#shop').classList.contains('show')) show('shop');
+    },
+    // m：null / {type:'confirm', title, lines[], act, data} / {type:'processing'} / {type:'done', lines[], gear[]} / {type:'gacha', results} / {type:'history', entries}
+    shopModal(m) {
+      const box = $('#shop .modal');
+      if (!m) { box.classList.remove('show'); box.innerHTML = ''; return; }
+      let html = '';
+      if (m.type === 'confirm') html = `<h3>${esc(m.title)}</h3>${m.lines.map((l) => `<p>${esc(l)}</p>`).join('')}
+        <div class="acts"><button class="btn small" data-act="${m.act}" ${Object.entries(m.data || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}>${esc(m.ok)}</button><button class="btn small ghost" data-act="shopClose">取消</button></div>`;
+      else if (m.type === 'processing') html = `<h3>處理中（模擬）…</h3><p>沒有連到任何地方，也不會產生任何費用。</p>`;
+      else if (m.type === 'done') html = `<h3>完成</h3><p class="sim-note">這是模擬交易，沒有實際付款。</p>${m.lines.map((l) => `<p>${esc(l)}</p>`).join('')}${(m.gear || []).map(gearLine).join('')}
+        <div class="acts"><button class="btn small" data-act="shopClose">好</button></div>`;
+      else if (m.type === 'gacha') {
+        const pityHit = m.results.some((r) => r.pity);
+        html = `<h3>祈燈結果</h3><div class="gacha-grid">${m.results.map((r) => `<div class="gcard r${r.rarity}" style="--c:${RARITIES[r.rarity].color}">
+          <span class="rn">${RARITIES[r.rarity].name}${r.pity ? '・保底' : ''}</span><b>${esc(gearName(r.item))}</b><span>${esc(fmtMod(gearMods(r.item)[0]))}</span>${r.salvaged ? `<span class="sv">背包滿，分解 +${num(r.salvaged)} 燈油</span>` : ''}</div>`).join('')}</div>
+          ${pityHit ? `<p>觸發保底，已重新計算。</p>` : ''}
+          <p class="sim-note">這是模擬交易，沒有實際付款（使用的是遊戲內的星砂或祈燈券）。</p>
+          <div class="acts"><button class="btn small" data-act="shopClose">收下</button></div>`;
+      } else if (m.type === 'history') html = `<h3>交易紀錄</h3><p class="sim-note">所有交易皆為模擬，沒有實際付款。</p>
+        ${m.entries.length ? `<ul class="hist">${m.entries.slice().reverse().map((h) => `<li><span>${new Date(h.t).toLocaleString('zh-Hant')}</span><b>${esc(SHOP.find((x) => x.id === h.id)?.name ?? h.id)}</b>${SHOP.find((x) => x.id === h.id)?.kind === 'sim' ? '<i>模擬購買</i>' : ''}</li>`).join('')}</ul>` : '<p>還沒有任何交易。</p>'}
+        <div class="acts"><button class="btn small" data-act="shopClose">關閉</button></div>`;
+      box.innerHTML = `<div class="modal-card">${html}</div>`;
+      box.classList.add('show');
+      lock();
+    },
+
     levelUp(choices) { $('#levelup .cards').innerHTML = choices.map(card).join(''); show('levelup'); },
     chest(result) {
       $('#chest h2').textContent = result.type === 'evo' ? '共鳴覺醒！' : '燈核開啟';
@@ -2231,6 +2517,7 @@ function createUI(actions) {
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       r.querySelector('.ledger').innerHTML = summary.oil.lines.map((l) => `<div><span>${esc(l.label)}</span><b>+${num(l.amount)}</b></div>`).join('')
         + `<div class="total"><span>本局燈油</span><b>+${num(summary.oil.total)}</b></div>`
+        + (summary.stardust ? `<div class="total"><span>星砂${summary.firstClear ? '（含首次通關）' : ''}</span><b>+${num(summary.stardust)}</b></div>` : '')
         + (summary.autoSalvage ? `<div class="note"><span>背包已滿，新裝備自動分解</span><b>+${num(summary.autoSalvage)}</b></div>` : '')
         + `<div class="note"><span>目前持有</span><b>${num(profile.oil)}</b></div>`;
       r.querySelector('.drops').innerHTML = summary.drops.length
@@ -2255,6 +2542,7 @@ const { createUI, gearName } = __m_ui_js;
 const { CHAPTERS, CHAPTER1 } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
 const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } = __m_meta_js;
+const { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
@@ -2300,10 +2588,53 @@ function persist() {
 
 // ---------- 介面動作 ----------
 const refreshGear = (uid) => ui.gear(profile, uid);
+// 商城：抽獎與購買用獨立亂數（不影響關卡的 seed）；busy 期間忽略重複點擊，避免連點買兩次
+const shopRand = makeRng((Date.now() ^ 0x5bd1e995) >>> 0);
+let shopBusy = false;
+const refreshShop = () => ui.shop(profile, Date.now());
+const CUR = { stardust: '星砂', tickets: '祈燈券', oil: '燈油' };
 const ui = createUI({
   openChapters: () => ui.chapters(profile),
   openTalents: () => ui.talents(profile),
   openGear: () => ui.gear(profile),
+  openShop: () => refreshShop(),
+  claimDaily: () => { if (claimDaily(profile, Date.now()).ok) { persist(); ui.toast('已領取今日補給'); } refreshShop(); },
+  gachaAsk: (d) => {
+    const n = Number(d.n), pay = gachaPay(profile, n);
+    if (!pay) return;
+    ui.shopModal({ type: 'confirm', title: `模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'gachaGo', data: { n }, ok: '確認（模擬）' });
+  },
+  gachaGo: (d) => {
+    if (shopBusy) return;
+    const n = Number(d.n), pay = gachaPay(profile, n);
+    const r = pay && drawGacha(profile, shopRand, n, pay);
+    if (!r?.ok) { ui.shopModal(null); return; }
+    persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results });
+  },
+  buyAsk: (d) => {
+    const it = shopItem(d.id), chk = canBuy(profile, d.id);
+    if (!it || !chk.ok) return;
+    const lines = it.kind === 'sim'
+      ? [`「${it.name}」：${it.desc}`, `標示「模擬 ${it.simPoints} 點」為虛構單位。`, '這是模擬交易，不會扣款，也不需要填寫任何資料。']
+      : [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}（遊戲內貨幣）。`];
+    ui.shopModal({ type: 'confirm', title: it.kind === 'sim' ? '確認模擬購買？' : '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: it.kind === 'sim' ? '確認（模擬）' : '購買' });
+  },
+  buyGo: (d) => {
+    if (shopBusy) return;
+    const it = shopItem(d.id);
+    if (!it) return;
+    const finish = () => {
+      const r = buyItem(profile, it.id, shopRand, Date.now());
+      shopBusy = false;
+      if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
+      persist(); refreshShop();
+      ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
+    };
+    if (it.kind === 'sim') { shopBusy = true; ui.shopModal({ type: 'processing' }); setTimeout(finish, 900); } // 模擬流程的「處理中」畫面
+    else finish();
+  },
+  shopClose: () => { if (!shopBusy) ui.shopModal(null); },
+  shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
   menu: () => toMenu(),
   startChapter: (d) => { const id = Number(d.id); if (chapterUnlocked(profile, id)) newRun(id); },
   retry: () => newRun(chapterId),
@@ -2321,7 +2652,7 @@ const ui = createUI({
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
     store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
-    profile = defaultProfile(); persist(); ui.menu(profile);
+    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now()));
   },
   choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
@@ -2353,7 +2684,7 @@ function toMenu() {
     sim.state.god = true;
     renderer = createRenderer(CHAPTER1);
   }
-  shown = null; ui.menu(profile);
+  shown = null; ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
 function newRun(id) {
   chapterId = id;

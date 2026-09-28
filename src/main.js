@@ -7,6 +7,7 @@ import { createUI, gearName } from './ui.js';
 import { CHAPTERS, CHAPTER1 } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
 import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } from './meta.js';
+import { drawGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
@@ -53,10 +54,53 @@ function persist() {
 
 // ---------- 介面動作 ----------
 const refreshGear = (uid) => ui.gear(profile, uid);
+// 商城：抽獎與購買用獨立亂數（不影響關卡的 seed）；busy 期間忽略重複點擊，避免連點買兩次
+const shopRand = makeRng((Date.now() ^ 0x5bd1e995) >>> 0);
+let shopBusy = false;
+const refreshShop = () => ui.shop(profile, Date.now());
+const CUR = { stardust: '星砂', tickets: '祈燈券', oil: '燈油' };
 const ui = createUI({
   openChapters: () => ui.chapters(profile),
   openTalents: () => ui.talents(profile),
   openGear: () => ui.gear(profile),
+  openShop: () => refreshShop(),
+  claimDaily: () => { if (claimDaily(profile, Date.now()).ok) { persist(); ui.toast('已領取今日補給'); } refreshShop(); },
+  gachaAsk: (d) => {
+    const n = Number(d.n), pay = gachaPay(profile, n);
+    if (!pay) return;
+    ui.shopModal({ type: 'confirm', title: `模擬抽獎 ×${n}`, lines: [`使用 ${gachaCost(n)[pay]} ${CUR[pay]}（遊戲內貨幣）抽 ${n} 次。`, '這是模擬交易，不會產生任何費用。'], act: 'gachaGo', data: { n }, ok: '確認（模擬）' });
+  },
+  gachaGo: (d) => {
+    if (shopBusy) return;
+    const n = Number(d.n), pay = gachaPay(profile, n);
+    const r = pay && drawGacha(profile, shopRand, n, pay);
+    if (!r?.ok) { ui.shopModal(null); return; }
+    persist(); refreshShop(); ui.shopModal({ type: 'gacha', results: r.results });
+  },
+  buyAsk: (d) => {
+    const it = shopItem(d.id), chk = canBuy(profile, d.id);
+    if (!it || !chk.ok) return;
+    const lines = it.kind === 'sim'
+      ? [`「${it.name}」：${it.desc}`, `標示「模擬 ${it.simPoints} 點」為虛構單位。`, '這是模擬交易，不會扣款，也不需要填寫任何資料。']
+      : [`「${it.name}」：${it.desc}`, `花費 ${Object.entries(it.price).map(([k, v]) => `${v} ${CUR[k]}`).join('＋')}（遊戲內貨幣）。`];
+    ui.shopModal({ type: 'confirm', title: it.kind === 'sim' ? '確認模擬購買？' : '確認購買？', lines, act: 'buyGo', data: { id: it.id }, ok: it.kind === 'sim' ? '確認（模擬）' : '購買' });
+  },
+  buyGo: (d) => {
+    if (shopBusy) return;
+    const it = shopItem(d.id);
+    if (!it) return;
+    const finish = () => {
+      const r = buyItem(profile, it.id, shopRand, Date.now());
+      shopBusy = false;
+      if (!r.ok) { ui.shopModal(null); refreshShop(); return; }
+      persist(); refreshShop();
+      ui.shopModal({ type: 'done', lines: [`獲得：${it.desc}`], gear: r.gear });
+    };
+    if (it.kind === 'sim') { shopBusy = true; ui.shopModal({ type: 'processing' }); setTimeout(finish, 900); } // 模擬流程的「處理中」畫面
+    else finish();
+  },
+  shopClose: () => { if (!shopBusy) ui.shopModal(null); },
+  shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
   menu: () => toMenu(),
   startChapter: (d) => { const id = Number(d.id); if (chapterUnlocked(profile, id)) newRun(id); },
   retry: () => newRun(chapterId),
@@ -74,7 +118,7 @@ const ui = createUI({
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
     store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
-    profile = defaultProfile(); persist(); ui.menu(profile);
+    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now()));
   },
   choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
@@ -106,7 +150,7 @@ function toMenu() {
     sim.state.god = true;
     renderer = createRenderer(CHAPTER1);
   }
-  shown = null; ui.menu(profile);
+  shown = null; ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
 function newRun(id) {
   chapterId = id;

@@ -98,6 +98,9 @@ export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   const firstClear = won && !profile.chapters.cleared.includes(chapterId);
   const oil = computeOil(ledger, chapter, { won, firstClear }, oilBonus(profile));
   profile.oil += oil.total;
+  // 星砂：只有通關才給（首通另加），讓商城的星砂靠正常遊玩就拿得到
+  const stardust = won ? chapter.reward.stardust + (firstClear ? chapter.reward.firstStardust : 0) : 0;
+  profile.stardust += stardust;
 
   const drops = [];
   const n = won ? 2 : t >= 240 ? 1 : 0;
@@ -114,7 +117,7 @@ export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   const best = profile.chapters.best[chapterId];
   if (won && (!best || t < best.t)) profile.chapters.best[chapterId] = { t: Math.round(t), kills };
   profile.stats.runs++; profile.stats.kills += kills;
-  return { oil, drops, autoSalvage, firstClear, won };
+  return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
 
 export const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);

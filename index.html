@@ -101,6 +101,36 @@
   .win h1 { font-size: 36px; } .lose h1 { font-size: 36px; color: #c9b8ff; text-shadow: 0 0 18px rgba(150, 120, 255, 0.7); }
   .hint { font-size: 12px; color: var(--dim); margin-top: 14px; line-height: 1.6; }
   .linkish { background: none; border: none; color: var(--dim); font-size: 12px; text-decoration: underline; margin-top: 10px; }
+  .row2 .btn { position: relative; }
+  .shop-dot { display: none; position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #ff7a8a; box-shadow: 0 0 8px #ff7a8a; }
+  .wallet { display: flex; gap: 12px; justify-content: center; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+  .wallet b { color: var(--gold); font-size: 15px; margin-left: 3px; }
+  .sim-banner { width: min(380px, 100%); box-sizing: border-box; padding: 8px 10px; margin: 6px 0 10px; border-radius: 10px; font-size: 13px;
+    background: rgba(120, 200, 255, 0.1); border: 1px dashed rgba(143, 232, 255, 0.6); color: #bfeaff; }
+  .shop-sec { width: min(380px, 100%); margin-bottom: 12px; text-align: left; }
+  .sec-title { font-size: 15px; font-weight: 800; color: var(--gold); margin: 4px 0 6px; }
+  .shop-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: var(--panel); border: 1px solid rgba(160, 170, 255, 0.18); }
+  .shop-row > div { flex: 1; } .shop-row .d, .shop-sec .d { color: #cfd6ff; font-size: 12px; margin-top: 2px; line-height: 1.45; }
+  .shop-sec .small { font-size: 11px; color: var(--dim); margin: 4px 0 8px; }
+  .shop-row .buy { min-width: 76px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--edge); background: #2a1e0c; color: var(--gold); font-weight: 700; line-height: 1.2; }
+  .shop-row .max { color: var(--dim); font-size: 12px; } .lim { font-size: 11px; color: #ffcf8a; margin-left: 6px; }
+  .odds { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  .odds th { font-weight: 600; color: var(--dim); font-size: 11px; padding: 6px; } .odds td { padding: 5px 8px; border-top: 1px solid rgba(160, 170, 255, 0.12); }
+  .odds td:nth-child(n+2), .odds th:nth-child(n+2) { text-align: right; }
+  .pity { font-size: 12px; color: #ffe9a8; margin: 8px 0 2px; line-height: 1.5; } .pity b { color: #fff; }
+  .gacha-btns { display: flex; gap: 8px; } .gacha-btns .btn { flex: 1; margin: 6px 0; line-height: 1.3; }
+  .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); z-index: 6; padding: 16px; box-sizing: border-box; }
+  .modal.show { display: flex; }
+  .modal-card { width: min(380px, 100%); max-height: 88vh; overflow-y: auto; touch-action: pan-y; padding: 16px; border-radius: 18px; background: #141032; border: 1px solid var(--edge); text-align: center; }
+  .modal-card h3 { margin: 0 0 8px; color: var(--gold); } .modal-card p { font-size: 14px; color: #cfd6ff; margin: 6px 0; line-height: 1.5; }
+  .sim-note { color: #bfeaff !important; font-weight: 700; }
+  .gacha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+  .gcard { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--c); font-size: 12px; text-align: left; animation: pop .35s ease-out both; }
+  .gcard b { color: var(--c); font-size: 13px; } .gcard .rn { font-size: 10px; color: var(--c); } .gcard .sv { color: var(--dim); font-size: 10px; }
+  .gcard.r3 { box-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); } .gcard.r4 { box-shadow: 0 0 22px var(--c); }
+  @keyframes pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .hist { list-style: none; padding: 0; margin: 6px 0; text-align: left; font-size: 12px; } .hist li { padding: 5px 0; border-bottom: 1px solid rgba(160, 170, 255, 0.12); display: flex; gap: 8px; flex-wrap: wrap; }
+  .hist span { color: var(--dim); } .hist i { color: #bfeaff; font-style: normal; }
   #toast { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%); max-width: 86%; z-index: 10;
     padding: 10px 14px; border-radius: 12px; background: rgba(20, 16, 44, 0.95); border: 1px solid var(--edge); font-size: 13px; line-height: 1.5;
     opacity: 0; pointer-events: none; transition: opacity .3s; text-align: center; }
@@ -119,7 +149,7 @@
     <div class="oil-slot"></div>
     <div class="progress"></div>
     <button class="btn" data-act="openChapters">點燈出發</button>
-    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button></div>
+    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button><button class="btn ghost" data-act="openShop">商城<span class="shop-dot"></span></button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
     <button class="linkish" data-act="resetSave">清除進度</button>
   </div>
@@ -144,6 +174,20 @@
     <div class="bag"></div>
     <button class="btn ghost" data-act="menu">返回</button>
     <div class="sheet"></div>
+  </div>
+
+  <!-- 商城：全部模擬，沒有任何輸入欄位、不連外 -->
+  <div id="shop" class="overlay scroll">
+    <div class="topbar"><h2>商城</h2></div>
+    <div class="wallet-slot"></div>
+    <div class="sim-banner">本遊戲所有購買皆為模擬，不會產生任何費用。</div>
+    <div class="shop-sec daily"></div>
+    <div class="shop-sec gacha"></div>
+    <div class="shop-sec packs"></div>
+    <div class="shop-sec simbuy"></div>
+    <button class="linkish" data-act="shopHistory">交易紀錄</button>
+    <button class="btn ghost" data-act="menu">返回</button>
+    <div class="modal"></div>
   </div>
 
   <div id="levelup" class="overlay"><h2>選擇強化</h2><div class="cards"></div></div>

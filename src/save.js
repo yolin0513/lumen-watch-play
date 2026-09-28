@@ -6,10 +6,11 @@
 // 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 
 export function defaultProfile() {
@@ -18,6 +19,11 @@ export function defaultProfile() {
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null } },
     chapters: { cleared: [], best: {} },
     stats: { runs: 0, kills: 0 },
+    // v2（M3 商城）
+    stardust: 0, tickets: 0,
+    gacha: { pity: 0, total: 0 },          // pity：距離上次抽到最高稀有度的抽數（0 ~ GACHA.pity-1）
+    shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
+    daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
   };
 }
 
@@ -38,6 +44,8 @@ export function createStore(getStorage) {
 // v0＝沒有版本號的存檔（本作沒有正式發行過 v0；這是給「缺版本號」的資料一條升級路，而不是直接丟棄）。
 export const MIGRATIONS = {
   0: (d) => ({ ...defaultProfile(), oil: d.oil, talents: d.talents, v: 1 }),
+  // v1 → v2：加入商城欄位（星砂、祈燈券、保底計數、購買紀錄、每日補給），原有進度原樣保留
+  1: (d) => ({ ...d, stardust: 0, tickets: 0, gacha: { pity: 0, total: 0 }, shop: { bought: {}, history: [] }, daily: { last: null }, v: 2 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -140,6 +148,29 @@ export function sanitize(d) {
   } else if (d.chapters !== undefined) fix('chapters 型別不對，重設');
 
   if (isObj(d.stats)) { out.stats.runs = nonNegInt(d.stats.runs) ?? 0; out.stats.kills = nonNegInt(d.stats.kills) ?? 0; }
+
+  // ---- v2 商城欄位 ----
+  for (const k of ['stardust', 'tickets']) {
+    const n = nonNegInt(d[k]);
+    if (n === null) { if (d[k] !== undefined) fix(`${k} 不合法（${JSON.stringify(d[k])}），歸零`); } else out[k] = n;
+  }
+  if (isObj(d.gacha)) {
+    const pity = nonNegInt(d.gacha.pity);
+    if (pity === null) { if (d.gacha.pity !== undefined) fix(`保底計數不合法（${JSON.stringify(d.gacha.pity)}），歸零`); }
+    else if (pity > GACHA.pity - 1) { fix(`保底計數 ${pity} 超過上限，改為 ${GACHA.pity - 1}`); out.gacha.pity = GACHA.pity - 1; }
+    else out.gacha.pity = pity;
+    out.gacha.total = nonNegInt(d.gacha.total) ?? 0;
+  } else if (d.gacha !== undefined) fix('gacha 型別不對，重設');
+  if (isObj(d.shop)) {
+    if (isObj(d.shop.bought)) for (const [id, n] of Object.entries(d.shop.bought)) {
+      const item = SHOP.find((x) => x.id === id), c = nonNegInt(n);
+      if (!item || c === null) { fix(`購買紀錄 ${id} 不合法，移除`); continue; }
+      if (c > 0) out.shop.bought[id] = item.limit ? Math.min(c, item.limit) : c;
+    }
+    if (Array.isArray(d.shop.history)) out.shop.history = d.shop.history.filter((h) => isObj(h) && Number.isFinite(h.t) && SHOP.some((x) => x.id === h.id)).slice(-MAX_HISTORY).map((h) => ({ t: h.t, id: h.id }));
+  } else if (d.shop !== undefined) fix('shop 型別不對，重設');
+  if (isObj(d.daily) && typeof d.daily.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.daily.last)) out.daily.last = d.daily.last;
+  else if (d.daily !== undefined && d.daily?.last != null) fix('每日補給日期不合法，重設');
   return { profile: out, notes };
 }
 const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));

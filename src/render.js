@@ -326,7 +326,7 @@ export function createRenderer(chapter = CHAPTER1) {
     g.fillStyle = xg; g.fillRect(0, safeTop, w * (p.xp / p.xpNext), 7);
     g.font = '700 14px system-ui'; g.fillStyle = '#e9ecff'; g.textAlign = 'left';
     shadowText(g, `Lv ${p.level}`, 10, top + 20);
-    // 時間：Boss 前倒數到燈塔守衛
+    // 時間：顯示距離燈塔守衛出現還有多久
     g.textAlign = 'center';
     const left = Math.max(0, s.chapter.bossAt - T);
     const clock = s.boss || s.arena ? '燈塔守衛' : `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(Math.floor(left % 60)).padStart(2, '0')}`;

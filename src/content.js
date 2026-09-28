@@ -119,7 +119,7 @@ export const CHAPTERS = [
       { at: 390, type: 'ring',  kind: 'mite', n: 40 },
       { at: 420, type: 'boss',  kind: 'boss1' },
     ],
-    reward: { clear: 300, firstClear: 300, gear: [60, 30, 10, 0, 0] },
+    reward: { clear: 300, firstClear: 300, gear: [60, 30, 10, 0, 0], stardust: 10, firstStardust: 60 },
   },
   {
     id: 2, name: '霧沼', tagline: '濃霧縮短了瞄準距離，泥沼拖慢腳步，沼蛭會蓄力撲來', palette: 'marsh', hue: 60,
@@ -140,7 +140,7 @@ export const CHAPTERS = [
       { at: 395, type: 'ring',  kind: 'mite', n: 44 },
       { at: 420, type: 'boss',  kind: 'boss2' },
     ],
-    reward: { clear: 500, firstClear: 500, gear: [35, 40, 20, 5, 0] },
+    reward: { clear: 500, firstClear: 500, gear: [35, 40, 20, 5, 0], stardust: 15, firstStardust: 90 },
   },
   {
     id: 3, name: '晶窟', tagline: '晶柱擋路也擋子彈，晶刺在遠處架起火線，閃晶蛾會突然出現在身邊', palette: 'crystal', hue: 170,
@@ -161,7 +161,7 @@ export const CHAPTERS = [
       { at: 395, type: 'ring',  kind: 'blinker', n: 30 },
       { at: 420, type: 'boss',  kind: 'boss3' },
     ],
-    reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2] },
+    reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2], stardust: 20, firstStardust: 120 },
   },
 ];
 export const CHAPTER1 = CHAPTERS[0];
@@ -216,3 +216,26 @@ export const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速
 export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 export const SLOTS = { weapon: 4, passive: 4 };
 export const MAX_LV = 5;
+
+// ---- 商城（全部模擬，不接任何付款） ----
+// 貨幣：燈油（局內賺）、星砂（通關與每日補給賺，也可「模擬購買」取得）、祈燈券（每日補給、禮包）。
+// 商城賣的每一樣東西，玩遊戲都拿得到：星砂靠通關＋每日補給，祈燈券靠每日補給，裝備靠通關掉落。
+// 價格標示：模擬購買的項目寫「模擬 N 點」（虛構單位，不對應任何真實幣值）；其他項目用遊戲內貨幣標價。
+export const DAILY = { oil: 150, stardust: 15, tickets: 1 };
+export const SHOP = [
+  // kind: sim＝模擬購買（不花任何遊戲內貨幣，按下只走模擬流程）；game＝用遊戲內貨幣買
+  { id: 'dust_s', kind: 'sim', name: '一小袋星砂', desc: '星砂 ×60', simPoints: 30, gives: { stardust: 60 } },
+  { id: 'dust_m', kind: 'sim', name: '一瓶星砂',   desc: '星砂 ×330', simPoints: 150, gives: { stardust: 330 } },
+  { id: 'dust_l', kind: 'sim', name: '一箱星砂',   desc: '星砂 ×1400', simPoints: 600, gives: { stardust: 1400 } },
+  { id: 'starter', kind: 'game', name: '新手守燈人禮包', desc: '燈油 ×1200、祈燈券 ×3、稀有裝備 ×1（限購一次）', price: { stardust: 60 }, limit: 1, gives: { oil: 1200, tickets: 3, gear: 2 } },
+  { id: 'oilbox',  kind: 'game', name: '燈油補給箱', desc: '燈油 ×1000', price: { stardust: 50 }, gives: { oil: 1000 } },
+];
+
+// ---- 祈燈（抽獎）----
+// rates：單抽時各稀有度的機率（百分比，順序同 RARITIES）。這是唯一一份機率表：抽獎邏輯與商城畫面都從這裡算。
+// pity：第 pity 抽必得最高稀有度（計數＝距離上次抽到最高稀有度的抽數；抽到就歸零）。
+export const GACHA = {
+  rates: [45, 33, 16, 5, 1],
+  pity: 40,
+  cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
+};
