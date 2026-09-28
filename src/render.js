@@ -79,7 +79,7 @@ export function createRenderer(chapter = CHAPTER1) {
     fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0);
   }
 
-  function render(g, s, dt, W, H, scale, safeTop = 0) {
+  function render(g, s, dt, W, H, scale, safeTop = 0, hud = true) {
     consume(s, dt);
     const vh = H / scale, p = s.player, T = s.t;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -94,11 +94,14 @@ export function createRenderer(chapter = CHAPTER1) {
     // 泥沼：深色水窪＋一圈反光
     const ter = s.chapter.terrain;
     if (ter === 'pools') for (const f of terrainIn('pools', s.terrainSeed, camX - 80, camY - 80, camX + VW + 80, camY + vh + 80)) {
-      const pg = g.createRadialGradient(f.x, f.y, f.r * 0.2, f.x, f.y, f.r);
-      pg.addColorStop(0, 'rgba(10,30,22,0.85)'); pg.addColorStop(0.8, 'rgba(20,50,34,0.7)'); pg.addColorStop(1, 'rgba(40,80,50,0)');
+      // 顏色要和霧沼地面明顯不同（先前太接近底色，等於隱形）：偏青綠的濁水＋亮邊＋漂浮反光
+      const pg = g.createRadialGradient(f.x, f.y - f.r * 0.2, f.r * 0.1, f.x, f.y, f.r);
+      pg.addColorStop(0, 'rgba(70,140,120,0.85)'); pg.addColorStop(0.75, 'rgba(40,95,80,0.8)'); pg.addColorStop(1, 'rgba(30,70,60,0.2)');
       g.fillStyle = pg; g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.8, 0, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = `rgba(150,230,170,${0.12 + Math.sin(T * 1.5 + f.x) * 0.05})`; g.lineWidth = 1.5;
-      g.beginPath(); g.ellipse(f.x, f.y, f.r * 0.7, f.r * 0.52, 0, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = 'rgba(160,240,200,0.45)'; g.lineWidth = 2;
+      g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.8, 0, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = `rgba(200,255,230,${0.25 + Math.sin(T * 1.5 + f.x) * 0.12})`; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(f.x - f.r * 0.2, f.y - f.r * 0.15, f.r * 0.35, f.r * 0.12, -0.2, 0, Math.PI * 2); g.stroke();
     }
 
     // 地面危險：預警時畫虛線輪廓，生效時填滿
@@ -309,7 +312,7 @@ export function createRenderer(chapter = CHAPTER1) {
     }
     if (fx.whiteFlash > 0) { g.fillStyle = `rgba(255,245,220,${fx.whiteFlash * 0.6})`; g.fillRect(0, 0, W, H); }
 
-    renderHud(g, s, W, H, scale, camX, camY, vh, safeTop);
+    if (hud) renderHud(g, s, W, H, scale, camX, camY, vh, safeTop); // 主選單背景的展示局不畫 HUD，免得疊到標題
   }
 
   function renderHud(g, s, W, H, k, camX, camY, vh, safeTop) {

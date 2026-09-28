@@ -158,7 +158,7 @@ function frame(now) {
   const t0 = performance.now();
   if (mode === 'menu') demoStep(dt);
   else if (!paused) { sim.update(dt, input.move); sync(); }
-  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop);
+  renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
   fps.frames++; fps.acc += raw; fps.worst = Math.max(fps.worst, cost);

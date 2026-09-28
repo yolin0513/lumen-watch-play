@@ -211,7 +211,7 @@ export const GEAR_AFFIXES = [
 ];
 export const GEAR_MAX_LV = 10;
 export const gearUpgradeCost = (rarity, lv) => Math.round((36 + rarity * 36) * lv * (1 + lv * 0.15));
-export const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magnet: '拾取範圍', cdr: '冷卻縮減', regen: '每秒回復', oil: '燈油獲得', armor: '減傷', revive: '復活' };
+export const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magnet: '拾取範圍', cdr: '冷卻', regen: '每秒回復', oil: '燈油獲得', armor: '受到傷害', revive: '復活' };
 
 export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 export const SLOTS = { weapon: 4, passive: 4 };
