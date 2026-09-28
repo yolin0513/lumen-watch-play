@@ -2600,7 +2600,8 @@ const f1 = (x) => x.toFixed(1);
 
 function createPerf(chapterId, sync = false, off = []) {
   const chapter = CHAPTERS.find((c) => c.id === chapterId) ?? CHAPTERS[0];
-  const stages = [{ name: '輕場面（開局）', frames: 300, skipTo: 0 }, { name: '重場面（第 360 秒）', frames: 600, skipTo: 360 }];
+  // 同步模式沒有垂直同步造成的抖動，樣本少一點就夠（也讓慢的環境量得完）
+  const stages = [{ name: '輕場面（開局）', frames: sync ? 100 : 300, skipTo: 0 }, { name: '重場面（第 360 秒）', frames: sync ? 150 : 600, skipTo: 360 }];
   let stage = 0, rec = [], lastNow = null, done = false, report = null, curPhases = null;
   const results = [];
   const prof = { off: new Set(off), // render.js 每畫完一個步驟呼叫 lap(名稱)
