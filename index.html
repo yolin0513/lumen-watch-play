@@ -18,26 +18,67 @@
   #stage { position: relative; height: 100%; max-width: 520px; margin: 0 auto; background: #0b0a1a; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; }
   button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { opacity: 0.4; cursor: default; }
 
-  #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 34px; height: 34px; border-radius: 50%;
-    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); font-size: 12px; letter-spacing: -2px; display: none; }
+  /* 暫停鍵：兩條直線用 SVG 畫，不靠字型 */
+  #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 36px; height: 36px; border-radius: 50%; padding: 0;
+    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; }
+  #pauseBtn svg { width: 14px; height: 14px; display: block; }
+
   .overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
     padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); box-sizing: border-box;
     background: radial-gradient(ellipse at 50% 40%, rgba(30, 20, 70, 0.55), rgba(5, 4, 13, 0.88)); text-align: center; }
   .overlay.show { display: flex; animation: fadeIn .25s ease-out; }
+  .overlay.scroll { justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
+  .overlay.scroll > * { flex: none; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   h1 { margin: 0; font-size: 44px; letter-spacing: 6px; color: var(--gold);
     text-shadow: 0 0 18px rgba(255, 190, 90, 0.8), 0 0 48px rgba(255, 140, 60, 0.5); }
-  h2 { margin: 0 0 14px; font-size: 22px; color: var(--gold); text-shadow: 0 0 12px rgba(255, 190, 90, 0.6); }
-  .sub { color: var(--dim); font-size: 14px; margin: 8px 0 28px; line-height: 1.6; }
+  h2 { margin: 0 0 12px; font-size: 22px; color: var(--gold); text-shadow: 0 0 12px rgba(255, 190, 90, 0.6); }
+  .sub { color: var(--dim); font-size: 14px; margin: 8px 0 18px; line-height: 1.6; }
   .btn { display: block; width: min(280px, 100%); margin: 8px auto; padding: 14px 0; border-radius: 14px; font-size: 17px; font-weight: 700;
     border: 1px solid var(--edge); background: linear-gradient(180deg, #3a2a10, #1c1208); color: var(--gold);
     box-shadow: 0 0 18px rgba(255, 180, 80, 0.25), inset 0 1px 0 rgba(255, 230, 170, 0.25); }
   .btn:active { transform: scale(0.97); }
   .btn.ghost { background: rgba(20, 16, 44, 0.8); color: var(--ink); border-color: rgba(160, 170, 255, 0.3); box-shadow: none; }
-  .chapter { width: min(300px, 100%); padding: 14px; margin-bottom: 18px; border-radius: 16px; background: var(--panel); border: 1px solid rgba(143, 232, 255, 0.3);
-    box-shadow: 0 0 24px rgba(80, 200, 255, 0.15); }
-  .chapter b { color: #8fe8ff; font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; }
+  .btn.small { display: inline-block; width: auto; padding: 10px 14px; margin: 4px; font-size: 14px; }
+  .row2 { display: flex; gap: 8px; width: min(280px, 100%); }
+  .row2 .btn { flex: 1; margin: 4px 0; }
+  .oil { font-size: 14px; color: var(--dim); } .oil b { color: var(--gold); font-size: 18px; margin-left: 4px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; width: min(380px, 100%); margin-bottom: 10px; }
+  .topbar h2 { margin: 0; }
+  .progress { font-size: 12px; color: var(--dim); margin: 2px 0 18px; }
+
+  .chapter { display: block; width: min(340px, 100%); padding: 14px; margin: 0 auto 12px; border-radius: 16px; background: var(--panel); text-align: left;
+    border: 1px solid var(--cc, rgba(143, 232, 255, 0.35)); box-shadow: 0 0 22px color-mix(in srgb, var(--cc, #8fe8ff) 20%, transparent); }
+  .chapter b { color: var(--cc, #8fe8ff); font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+  .chapter .done { float: right; font-size: 12px; color: #ffe27a; border: 1px solid #ffe27a88; border-radius: 8px; padding: 1px 6px; }
+  .chapter .best { color: #cfd6ff; }
+  .ch1 { --cc: #8fe8ff; } .ch2 { --cc: #9fe6a8; } .ch3 { --cc: #e6a0ff; }
+
+  .list { width: min(380px, 100%); }
+  .list .row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: var(--panel); border: 1px solid rgba(160, 170, 255, 0.18); text-align: left; }
+  .row .info { flex: 1; } .row .lv { color: var(--gold); font-size: 13px; } .row .d { color: #cfd6ff; font-size: 12px; margin-top: 2px; line-height: 1.4; }
+  .row .buy { min-width: 64px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--edge); background: #2a1e0c; color: var(--gold); font-weight: 700; line-height: 1.2; }
+  .row .max { color: var(--dim); font-size: 13px; }
+
+  .equipped, .bag { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: min(380px, 100%); }
+  .gear { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border-radius: 12px; background: var(--panel); text-align: left;
+    border: 1px solid var(--c, rgba(160, 170, 255, 0.2)); position: relative; font-size: 13px; }
+  .gear b { color: var(--c, var(--dim)); } .gear .slot { font-size: 11px; color: var(--dim); } .gear .main { font-size: 12px; color: #cfd6ff; }
+  .gear .eq { position: absolute; top: 6px; right: 8px; font-size: 10px; color: #ffe27a; }
+  .gear.empty { opacity: 0.55; }
+  .summary { width: min(380px, 100%); font-size: 12px; color: #cfd6ff; margin: 10px 0; line-height: 1.5; text-align: left; }
+  .bag-title { width: min(380px, 100%); text-align: left; font-size: 13px; color: var(--dim); margin: 6px 0; }
+  .empty-bag { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 12px; }
+  .sheet { position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.5); z-index: 5; }
+  .sheet.show { display: flex; }
+  .sheet-card { width: min(420px, 100%); box-sizing: border-box; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); border-radius: 18px 18px 0 0;
+    background: #141032; border-top: 2px solid var(--c); text-align: left; }
+  .sheet-card .name { color: var(--c); font-size: 18px; } .sheet-card .rar { color: var(--dim); font-size: 12px; margin: 2px 0 8px; }
+  .sheet-card ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.7; } .sheet-card .mainline { color: #ffe9a8; font-weight: 700; }
+  .sheet-card .acts { text-align: center; }
+
   .cards { display: flex; flex-direction: column; gap: 10px; width: min(360px, 100%); }
   .card { display: flex; gap: 12px; align-items: center; text-align: left; padding: 12px; border-radius: 16px; background: var(--panel);
     border: 1px solid var(--c, var(--edge)); box-shadow: 0 0 16px color-mix(in srgb, var(--c, #ffd27a) 30%, transparent); }
@@ -45,27 +86,64 @@
   .card img { width: 52px; height: 52px; flex: none; }
   .card .t { font-weight: 800; font-size: 16px; } .card .l { font-size: 12px; font-weight: 700; color: var(--c); margin-left: 6px; }
   .card .d { font-size: 13px; color: #cfd6ff; margin-top: 3px; line-height: 1.4; } .card .h { font-size: 11px; color: #ffcf8a; margin-top: 4px; }
-  .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 22px; max-width: 320px; }
+  .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 16px; max-width: 320px; }
   .build span { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--dim); width: 60px; }
   .build img { width: 40px; height: 40px; }
-  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 18px; margin: 6px 0 26px; font-size: 15px; }
+  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 18px; margin: 6px 0 14px; font-size: 15px; }
   .stats dt { color: var(--dim); text-align: right; } .stats dd { margin: 0; text-align: left; font-weight: 700; }
+  .ledger { width: min(300px, 100%); margin: 0 0 12px; font-size: 14px; }
+  .ledger div { display: flex; justify-content: space-between; padding: 3px 0; color: #cfd6ff; } .ledger b { color: var(--gold); }
+  .ledger .total { border-top: 1px solid var(--edge); margin-top: 4px; padding-top: 6px; font-size: 16px; }
+  .ledger .note { font-size: 12px; color: var(--dim); }
+  .drops { width: min(300px, 100%); margin-bottom: 10px; } .drops-title { font-size: 13px; color: var(--dim); margin-bottom: 4px; }
+  .drop { display: flex; justify-content: space-between; padding: 6px 10px; margin-bottom: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--c); font-size: 13px; }
+  .drop b { color: var(--c); }
   .win h1 { font-size: 36px; } .lose h1 { font-size: 36px; color: #c9b8ff; text-shadow: 0 0 18px rgba(150, 120, 255, 0.7); }
-  .hint { font-size: 12px; color: var(--dim); margin-top: 18px; line-height: 1.6; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 14px; line-height: 1.6; }
+  .linkish { background: none; border: none; color: var(--dim); font-size: 12px; text-decoration: underline; margin-top: 10px; }
+  #toast { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%); max-width: 86%; z-index: 10;
+    padding: 10px 14px; border-radius: 12px; background: rgba(20, 16, 44, 0.95); border: 1px solid var(--edge); font-size: 13px; line-height: 1.5;
+    opacity: 0; pointer-events: none; transition: opacity .3s; text-align: center; }
+  #toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="game"></canvas>
   <div id="safeProbe" style="position:absolute;top:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none"></div>
-  <button id="pauseBtn" aria-label="暫停">❚❚</button>
+  <button id="pauseBtn" aria-label="暫停"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/></svg></button>
 
   <div id="menu" class="overlay show">
     <h1>燈芯守望</h1>
     <div class="sub">菌潮入夜。提起你的燈，<br>把熄滅的燈塔一座座點回來。</div>
-    <div class="chapter"><b>第一章・螢苔原</b><div>撐過 7 分鐘的菌潮，擊敗燈塔守衛</div></div>
-    <button class="btn" data-act="start">點燈出發</button>
+    <div class="oil-slot"></div>
+    <div class="progress"></div>
+    <button class="btn" data-act="openChapters">點燈出發</button>
+    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
+    <button class="linkish" data-act="resetSave">清除進度</button>
+  </div>
+
+  <div id="chapters" class="overlay scroll">
+    <h2>選擇燈塔</h2>
+    <div class="list"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+  </div>
+
+  <div id="talents" class="overlay scroll">
+    <div class="topbar"><h2>天賦</h2><div class="oil-slot"></div></div>
+    <div class="list"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+  </div>
+
+  <div id="gear" class="overlay scroll">
+    <div class="topbar"><h2>裝備</h2><div class="oil-slot"></div></div>
+    <div class="equipped"></div>
+    <div class="summary"></div>
+    <div class="bag-title"></div>
+    <div class="bag"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+    <div class="sheet"></div>
   </div>
 
   <div id="levelup" class="overlay"><h2>選擇強化</h2><div class="cards"></div></div>
@@ -76,15 +154,19 @@
     <h2>暫停</h2>
     <div class="build"></div>
     <button class="btn" data-act="resume">繼續</button>
-    <button class="btn ghost" data-act="quit">放棄本局</button>
+    <button class="btn ghost" data-act="quit">撤離（結算已擊倒的燈油）</button>
   </div>
 
-  <div id="result" class="overlay">
+  <div id="result" class="overlay scroll">
     <h1></h1><div class="sub"></div>
     <dl class="stats"></dl>
+    <div class="ledger"></div>
+    <div class="drops"></div>
     <button class="btn" data-act="retry">再來一局</button>
     <button class="btn ghost" data-act="menu">回主選單</button>
   </div>
+
+  <div id="toast"></div>
 </div>
 <script type="module" src="src/main.js"></script>
 <script>

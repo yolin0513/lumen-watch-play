@@ -1,28 +1,37 @@
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
-import { VW } from './sim.js';
-import { ENEMIES, WEAPONS, PASSIVES } from './content.js';
-import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, PALETTES } from './art.js';
+import { VW, terrainIn } from './sim.js';
+import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } from './content.js';
+import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } from './art.js';
 
+// shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
-  mite:     { seed: 11, radius: 11, hue: 290, eyes: 1 },
-  moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3 },
-  brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7 },
-  spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3 },
-  splitter: { seed: 64, radius: 15, hue: 200, eyes: 2, spikes: 4 },
+  mite:     { seed: 11, radius: 11, hue: 290, eyes: 1, shared: true },
+  moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3, shared: true },
+  brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7, shared: true },
+  spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3, shared: true },
+  splitter: { seed: 64, radius: 15, hue: 200, eyes: 2, spikes: 4, shared: true },
+  leech:    { seed: 91, radius: 12, hue: 110, eyes: 2 },
+  bloater:  { seed: 37, radius: 16, hue: 60,  eyes: 1, spikes: 6 },
+  turret:   { seed: 13, radius: 14, hue: 190, eyes: 1, spikes: 9 },
+  blinker:  { seed: 58, radius: 10, hue: 300, eyes: 2, spikes: 2 },
+  shell:    { seed: 29, radius: 17, hue: 230, eyes: 2, spikes: 10 },
   boss1:    { seed: 77, radius: 42, hue: 322, eyes: 3, spikes: 12 },
+  boss2:    { seed: 83, radius: 40, hue: 95,  eyes: 4, spikes: 6 },
+  boss3:    { seed: 47, radius: 44, hue: 250, eyes: 1, spikes: 16 },
 };
 const AFFIX_COLOR = { swift: 'rgba(120,255,200,1)', regen: 'rgba(120,255,120,1)', armor: 'rgba(255,200,90,1)' };
 
-export function createRenderer() {
+export function createRenderer(chapter = CHAPTER1) {
   const sprites = {};
-  for (const k of Object.keys(ENEMIES)) sprites[k] = makeCreature(CREATURE_ART[k]);
-  const ground = makeGround(PALETTES.moss);
+  for (const k of Object.keys(ENEMIES)) { const a = CREATURE_ART[k]; sprites[k] = makeCreature({ ...a, hue: a.hue + (a.shared ? chapter.hue : 0) }); }
+  const ground = makeGround(PALETTES[chapter.palette], 7 + chapter.id);
   const chestImg = makeChest();
   const G = {
     bolt: glow('rgba(255,210,120,1)', 14), gem: glow('rgba(120,230,255,1)', 12), spark: glow('rgba(255,160,220,1)', 10),
     star: glow('rgba(140,235,255,1)', 14), spore: glow('rgba(255,90,200,1)', 16), orb: glow('rgba(150,235,255,1)', 22),
     gold: glow('rgba(255,210,90,1)', 30), heal: glow('rgba(255,140,170,1)', 18), magnet: glow('rgba(120,200,255,1)', 18),
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
+    crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
@@ -45,11 +54,15 @@ export function createRenderer() {
         case 'level': fx.levelFlash = 1; burst(e.x, e.y, 30, G.gem, 220); break;
         case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18 }); break;
         case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3 }); break;
-        case 'burst': fx.rings.push({ x: e.x, y: e.y, r: 70, life: 0.35, color: 'spore' }); break;
+        case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
         case 'heal': burst(e.x, e.y, 16, G.heal, 120); break;
         case 'magnet': fx.rings.push({ x: e.x, y: e.y, r: 300, life: 0.5, color: 'magnet' }); break;
         case 'announce': banner(e.text, e.big); if (e.big) fx.shake = 10; break;
+        case 'blast': fx.shake = Math.max(fx.shake, 6); fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 26, G.blast, 240, 0.6, 14); break;
+        case 'blink': burst(e.x, e.y, 14, G.crystal, 150, 0.4, 10); break;
+        case 'spark': burst(e.x, e.y, 3, G.crystal, 90, 0.25, 8); break;
+        case 'revive': fx.whiteFlash = 1; banner('燈芯復燃！', true); burst(e.x, e.y, 80, G.gold, 320, 1, 14); break;
         case 'bossdown': fx.whiteFlash = 1; fx.shake = 16; burst(e.x, e.y, 120, G.gold, 380, 1.4, 16); burst(e.x, e.y, 80, G.spore, 300, 1.2, 14); break;
       }
     }
@@ -77,6 +90,40 @@ export function createRenderer() {
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
     g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+
+    // 泥沼：深色水窪＋一圈反光
+    const ter = s.chapter.terrain;
+    if (ter === 'pools') for (const f of terrainIn('pools', s.terrainSeed, camX - 80, camY - 80, camX + VW + 80, camY + vh + 80)) {
+      const pg = g.createRadialGradient(f.x, f.y, f.r * 0.2, f.x, f.y, f.r);
+      pg.addColorStop(0, 'rgba(10,30,22,0.85)'); pg.addColorStop(0.8, 'rgba(20,50,34,0.7)'); pg.addColorStop(1, 'rgba(40,80,50,0)');
+      g.fillStyle = pg; g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.8, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(150,230,170,${0.12 + Math.sin(T * 1.5 + f.x) * 0.05})`; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(f.x, f.y, f.r * 0.7, f.r * 0.52, 0, 0, Math.PI * 2); g.stroke();
+    }
+
+    // 地面危險：預警時畫虛線輪廓，生效時填滿
+    for (const h of s.hazards) {
+      const active = h.t >= h.arm, k = active ? 1 : h.t / h.arm;
+      if (h.type === 'zone') {
+        const col = h.src === 'poison' ? '120,255,140' : h.src === 'rain' ? '180,150,255' : '255,120,120';
+        g.fillStyle = `rgba(${col},${active ? 0.35 : 0.08 + k * 0.12})`;
+        g.beginPath(); g.arc(h.x, h.y, h.r, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = `rgba(${col},${active ? 0.8 : 0.5})`; g.lineWidth = 2; g.setLineDash(active ? [] : [6, 5]);
+        g.beginPath(); g.arc(h.x, h.y, active ? h.r : h.r * (0.4 + k * 0.6), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      } else if (h.type === 'beam') {
+        g.save(); g.translate(h.x, h.y); g.rotate(h.ang);
+        if (active) {
+          g.globalCompositeOperation = 'lighter';
+          g.fillStyle = 'rgba(200,120,255,0.35)'; g.fillRect(0, -h.w, h.len, h.w * 2);
+          g.fillStyle = 'rgba(255,230,255,0.9)'; g.fillRect(0, -h.w * 0.25, h.len, h.w * 0.5);
+          g.globalCompositeOperation = 'source-over';
+        } else {
+          g.strokeStyle = `rgba(230,160,255,${0.3 + k * 0.5})`; g.lineWidth = 2; g.setLineDash([10, 8]);
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(h.len, 0); g.stroke(); g.setLineDash([]);
+        }
+        g.restore();
+      }
+    }
 
     // 競技場光圈：外面壓暗，邊緣發光
     if (s.arena) {
@@ -124,22 +171,48 @@ export function createRenderer() {
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
-    // Boss 衝刺預警
-    for (const e of s.enemies) if (e.tele) {
-      g.save(); g.translate(e.x, e.y); g.rotate(Math.atan2(e.tele.dy, e.tele.dx));
-      g.fillStyle = `rgba(255,60,120,${0.18 + Math.sin(T * 30) * 0.08})`; g.fillRect(0, -e.r, e.tele.len, e.r * 2);
-      g.strokeStyle = 'rgba(255,120,170,0.7)'; g.lineWidth = 1.5; g.strokeRect(0, -e.r, e.tele.len, e.r * 2);
-      g.restore();
+    // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
+    for (const e of s.enemies) {
+      if (e.tele) {
+        const w = e.tele.w ?? e.r;
+        g.save(); g.translate(e.x, e.y); g.rotate(Math.atan2(e.tele.dy, e.tele.dx));
+        g.fillStyle = `rgba(255,60,120,${0.18 + Math.sin(T * 30) * 0.08})`; g.fillRect(0, -w, e.tele.len, w * 2);
+        g.strokeStyle = 'rgba(255,120,170,0.7)'; g.lineWidth = 1.5; g.strokeRect(0, -w, e.tele.len, w * 2);
+        g.restore();
+      }
+      if (e.fuse > 0) {
+        const R = ENEMIES[e.kind].blastR;
+        g.fillStyle = `rgba(255,140,60,${0.12 + Math.sin(T * 25) * 0.08})`; g.beginPath(); g.arc(e.x, e.y, R, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = 'rgba(255,170,90,0.8)'; g.lineWidth = 2; g.beginPath(); g.arc(e.x, e.y, R * (1 - e.fuse / ENEMIES[e.kind].fuse), 0, Math.PI * 2); g.stroke();
+      }
+      if (e.warn) {
+        const q = 1 - e.warn.t / ENEMIES[e.kind].blinkWarn;
+        g.strokeStyle = `rgba(255,150,255,${0.4 + q * 0.5})`; g.lineWidth = 2;
+        g.beginPath(); g.arc(e.warn.x, e.warn.y, 16 - q * 8, 0, Math.PI * 2); g.stroke();
+        g.beginPath(); g.moveTo(e.warn.x - 10, e.warn.y); g.lineTo(e.warn.x + 10, e.warn.y); g.moveTo(e.warn.x, e.warn.y - 10); g.lineTo(e.warn.x, e.warn.y + 10); g.stroke();
+      }
     }
 
-    // 敵人（依 y 排序）
-    const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2)).sort((a, b) => a.y - b.y);
+    // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
+    const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
+    if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
+    vis.push({ player: true, y: p.y });
+    vis.sort((a, b) => a.y - b.y);
     for (const e of vis) {
+      if (e.player) { drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); continue; }
+      if (e.pillar) {
+        const f = e.pillar, img = makePillar(f.r), k = f.r / (Math.round(f.r / 3) * 3);
+        g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35 + Math.sin(T * 2 + f.x) * 0.1;
+        g.drawImage(G.crystal, f.x - f.r * 1.8, f.y - f.r * 2.4, f.r * 3.6, f.r * 3.6); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        g.drawImage(img, f.x - img.width / 2 * k, f.y - img.height / 2 * k, img.width * k, img.height * k);
+        continue;
+      }
       const sp = sprites[e.kind], img = sp.frames[Math.floor(e.frame) % sp.frames.length];
       const k = e.r / ENEMIES[e.kind].r, size = sp.size * k;
-      if (e.elite || e.kind === 'boss1') {
+      const boss = ENEMIES[e.kind].ai === 'boss';
+      if (e.elite || boss) {
         g.globalCompositeOperation = 'lighter';
-        const gl = e.kind === 'boss1' ? G.boss : G['elite_' + e.affix];
+        const gl = boss ? G.boss : G['elite_' + e.affix];
         const pr = e.r * (2.2 + Math.sin(T * 5) * 0.15);
         g.globalAlpha = 0.6; g.drawImage(gl, e.x - pr, e.y - pr, pr * 2, pr * 2); g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
@@ -154,8 +227,6 @@ export function createRenderer() {
         g.fillStyle = AFFIX_COLOR[e.affix]; g.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);
       }
     }
-
-    drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4);
 
     // 子彈、光球、電弧、粒子（加亮疊加）
     g.globalCompositeOperation = 'lighter';
@@ -195,7 +266,7 @@ export function createRenderer() {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
@@ -210,8 +281,22 @@ export function createRenderer() {
     }
     g.globalAlpha = 1;
 
-    // 螢幕空間：暗角、受傷紅框、白閃
+    // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
+    if (s.chapter.fog) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
+      const px = (p.x - camX) * scale, py = (p.y - camY) * scale, R = s.chapter.fog * scale;
+      const fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
+      fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
+      g.fillStyle = fg; g.fillRect(0, 0, W, H);
+      g.globalAlpha = 0.18;
+      for (let i = 0; i < 5; i++) { // 緩慢飄動的霧團
+        const fx0 = ((i * 173 + T * (8 + i * 3)) % (W + 400)) - 200, fy0 = ((i * 311) % H);
+        const mg = g.createRadialGradient(fx0, fy0, 0, fx0, fy0, 180 * scale / 2);
+        mg.addColorStop(0, 'rgba(200,230,210,0.9)'); mg.addColorStop(1, 'rgba(200,230,210,0)');
+        g.fillStyle = mg; g.fillRect(fx0 - 200 * scale, fy0 - 200 * scale, 400 * scale, 400 * scale);
+      }
+      g.globalAlpha = 1;
+    }
     const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);

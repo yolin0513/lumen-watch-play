@@ -7,8 +7,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>燈芯守望</title>
-
-
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <style>
   :root { --gold: #ffd27a; --ink: #e9ecff; --dim: #9aa3d6; --panel: rgba(16, 13, 38, 0.92); --edge: rgba(255, 210, 122, 0.35); }
@@ -18,26 +16,67 @@
   #stage { position: relative; height: 100%; max-width: 520px; margin: 0 auto; background: #0b0a1a; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; }
   button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { opacity: 0.4; cursor: default; }
 
-  #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 34px; height: 34px; border-radius: 50%;
-    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); font-size: 12px; letter-spacing: -2px; display: none; }
+  /* 暫停鍵：兩條直線用 SVG 畫，不靠字型 */
+  #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 8px; width: 36px; height: 36px; border-radius: 50%; padding: 0;
+    border: 1px solid var(--edge); background: rgba(10, 8, 30, 0.6); display: none; align-items: center; justify-content: center; }
+  #pauseBtn svg { width: 14px; height: 14px; display: block; }
+
   .overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
     padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); box-sizing: border-box;
     background: radial-gradient(ellipse at 50% 40%, rgba(30, 20, 70, 0.55), rgba(5, 4, 13, 0.88)); text-align: center; }
   .overlay.show { display: flex; animation: fadeIn .25s ease-out; }
+  .overlay.scroll { justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
+  .overlay.scroll > * { flex: none; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   h1 { margin: 0; font-size: 44px; letter-spacing: 6px; color: var(--gold);
     text-shadow: 0 0 18px rgba(255, 190, 90, 0.8), 0 0 48px rgba(255, 140, 60, 0.5); }
-  h2 { margin: 0 0 14px; font-size: 22px; color: var(--gold); text-shadow: 0 0 12px rgba(255, 190, 90, 0.6); }
-  .sub { color: var(--dim); font-size: 14px; margin: 8px 0 28px; line-height: 1.6; }
+  h2 { margin: 0 0 12px; font-size: 22px; color: var(--gold); text-shadow: 0 0 12px rgba(255, 190, 90, 0.6); }
+  .sub { color: var(--dim); font-size: 14px; margin: 8px 0 18px; line-height: 1.6; }
   .btn { display: block; width: min(280px, 100%); margin: 8px auto; padding: 14px 0; border-radius: 14px; font-size: 17px; font-weight: 700;
     border: 1px solid var(--edge); background: linear-gradient(180deg, #3a2a10, #1c1208); color: var(--gold);
     box-shadow: 0 0 18px rgba(255, 180, 80, 0.25), inset 0 1px 0 rgba(255, 230, 170, 0.25); }
   .btn:active { transform: scale(0.97); }
   .btn.ghost { background: rgba(20, 16, 44, 0.8); color: var(--ink); border-color: rgba(160, 170, 255, 0.3); box-shadow: none; }
-  .chapter { width: min(300px, 100%); padding: 14px; margin-bottom: 18px; border-radius: 16px; background: var(--panel); border: 1px solid rgba(143, 232, 255, 0.3);
-    box-shadow: 0 0 24px rgba(80, 200, 255, 0.15); }
-  .chapter b { color: #8fe8ff; font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; }
+  .btn.small { display: inline-block; width: auto; padding: 10px 14px; margin: 4px; font-size: 14px; }
+  .row2 { display: flex; gap: 8px; width: min(280px, 100%); }
+  .row2 .btn { flex: 1; margin: 4px 0; }
+  .oil { font-size: 14px; color: var(--dim); } .oil b { color: var(--gold); font-size: 18px; margin-left: 4px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; width: min(380px, 100%); margin-bottom: 10px; }
+  .topbar h2 { margin: 0; }
+  .progress { font-size: 12px; color: var(--dim); margin: 2px 0 18px; }
+
+  .chapter { display: block; width: min(340px, 100%); padding: 14px; margin: 0 auto 12px; border-radius: 16px; background: var(--panel); text-align: left;
+    border: 1px solid var(--cc, rgba(143, 232, 255, 0.35)); box-shadow: 0 0 22px color-mix(in srgb, var(--cc, #8fe8ff) 20%, transparent); }
+  .chapter b { color: var(--cc, #8fe8ff); font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+  .chapter .done { float: right; font-size: 12px; color: #ffe27a; border: 1px solid #ffe27a88; border-radius: 8px; padding: 1px 6px; }
+  .chapter .best { color: #cfd6ff; }
+  .ch1 { --cc: #8fe8ff; } .ch2 { --cc: #9fe6a8; } .ch3 { --cc: #e6a0ff; }
+
+  .list { width: min(380px, 100%); }
+  .list .row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: var(--panel); border: 1px solid rgba(160, 170, 255, 0.18); text-align: left; }
+  .row .info { flex: 1; } .row .lv { color: var(--gold); font-size: 13px; } .row .d { color: #cfd6ff; font-size: 12px; margin-top: 2px; line-height: 1.4; }
+  .row .buy { min-width: 64px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--edge); background: #2a1e0c; color: var(--gold); font-weight: 700; line-height: 1.2; }
+  .row .max { color: var(--dim); font-size: 13px; }
+
+  .equipped, .bag { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: min(380px, 100%); }
+  .gear { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border-radius: 12px; background: var(--panel); text-align: left;
+    border: 1px solid var(--c, rgba(160, 170, 255, 0.2)); position: relative; font-size: 13px; }
+  .gear b { color: var(--c, var(--dim)); } .gear .slot { font-size: 11px; color: var(--dim); } .gear .main { font-size: 12px; color: #cfd6ff; }
+  .gear .eq { position: absolute; top: 6px; right: 8px; font-size: 10px; color: #ffe27a; }
+  .gear.empty { opacity: 0.55; }
+  .summary { width: min(380px, 100%); font-size: 12px; color: #cfd6ff; margin: 10px 0; line-height: 1.5; text-align: left; }
+  .bag-title { width: min(380px, 100%); text-align: left; font-size: 13px; color: var(--dim); margin: 6px 0; }
+  .empty-bag { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 12px; }
+  .sheet { position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.5); z-index: 5; }
+  .sheet.show { display: flex; }
+  .sheet-card { width: min(420px, 100%); box-sizing: border-box; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); border-radius: 18px 18px 0 0;
+    background: #141032; border-top: 2px solid var(--c); text-align: left; }
+  .sheet-card .name { color: var(--c); font-size: 18px; } .sheet-card .rar { color: var(--dim); font-size: 12px; margin: 2px 0 8px; }
+  .sheet-card ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.7; } .sheet-card .mainline { color: #ffe9a8; font-weight: 700; }
+  .sheet-card .acts { text-align: center; }
+
   .cards { display: flex; flex-direction: column; gap: 10px; width: min(360px, 100%); }
   .card { display: flex; gap: 12px; align-items: center; text-align: left; padding: 12px; border-radius: 16px; background: var(--panel);
     border: 1px solid var(--c, var(--edge)); box-shadow: 0 0 16px color-mix(in srgb, var(--c, #ffd27a) 30%, transparent); }
@@ -45,27 +84,64 @@
   .card img { width: 52px; height: 52px; flex: none; }
   .card .t { font-weight: 800; font-size: 16px; } .card .l { font-size: 12px; font-weight: 700; color: var(--c); margin-left: 6px; }
   .card .d { font-size: 13px; color: #cfd6ff; margin-top: 3px; line-height: 1.4; } .card .h { font-size: 11px; color: #ffcf8a; margin-top: 4px; }
-  .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 22px; max-width: 320px; }
+  .build { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 16px; max-width: 320px; }
   .build span { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--dim); width: 60px; }
   .build img { width: 40px; height: 40px; }
-  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 18px; margin: 6px 0 26px; font-size: 15px; }
+  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 18px; margin: 6px 0 14px; font-size: 15px; }
   .stats dt { color: var(--dim); text-align: right; } .stats dd { margin: 0; text-align: left; font-weight: 700; }
+  .ledger { width: min(300px, 100%); margin: 0 0 12px; font-size: 14px; }
+  .ledger div { display: flex; justify-content: space-between; padding: 3px 0; color: #cfd6ff; } .ledger b { color: var(--gold); }
+  .ledger .total { border-top: 1px solid var(--edge); margin-top: 4px; padding-top: 6px; font-size: 16px; }
+  .ledger .note { font-size: 12px; color: var(--dim); }
+  .drops { width: min(300px, 100%); margin-bottom: 10px; } .drops-title { font-size: 13px; color: var(--dim); margin-bottom: 4px; }
+  .drop { display: flex; justify-content: space-between; padding: 6px 10px; margin-bottom: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--c); font-size: 13px; }
+  .drop b { color: var(--c); }
   .win h1 { font-size: 36px; } .lose h1 { font-size: 36px; color: #c9b8ff; text-shadow: 0 0 18px rgba(150, 120, 255, 0.7); }
-  .hint { font-size: 12px; color: var(--dim); margin-top: 18px; line-height: 1.6; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 14px; line-height: 1.6; }
+  .linkish { background: none; border: none; color: var(--dim); font-size: 12px; text-decoration: underline; margin-top: 10px; }
+  #toast { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%); max-width: 86%; z-index: 10;
+    padding: 10px 14px; border-radius: 12px; background: rgba(20, 16, 44, 0.95); border: 1px solid var(--edge); font-size: 13px; line-height: 1.5;
+    opacity: 0; pointer-events: none; transition: opacity .3s; text-align: center; }
+  #toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="game"></canvas>
   <div id="safeProbe" style="position:absolute;top:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none"></div>
-  <button id="pauseBtn" aria-label="暫停">❚❚</button>
+  <button id="pauseBtn" aria-label="暫停"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#ffd27a"/></svg></button>
 
   <div id="menu" class="overlay show">
     <h1>燈芯守望</h1>
     <div class="sub">菌潮入夜。提起你的燈，<br>把熄滅的燈塔一座座點回來。</div>
-    <div class="chapter"><b>第一章・螢苔原</b><div>撐過 7 分鐘的菌潮，擊敗燈塔守衛</div></div>
-    <button class="btn" data-act="start">點燈出發</button>
+    <div class="oil-slot"></div>
+    <div class="progress"></div>
+    <button class="btn" data-act="openChapters">點燈出發</button>
+    <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備</button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
+    <button class="linkish" data-act="resetSave">清除進度</button>
+  </div>
+
+  <div id="chapters" class="overlay scroll">
+    <h2>選擇燈塔</h2>
+    <div class="list"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+  </div>
+
+  <div id="talents" class="overlay scroll">
+    <div class="topbar"><h2>天賦</h2><div class="oil-slot"></div></div>
+    <div class="list"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+  </div>
+
+  <div id="gear" class="overlay scroll">
+    <div class="topbar"><h2>裝備</h2><div class="oil-slot"></div></div>
+    <div class="equipped"></div>
+    <div class="summary"></div>
+    <div class="bag-title"></div>
+    <div class="bag"></div>
+    <button class="btn ghost" data-act="menu">返回</button>
+    <div class="sheet"></div>
   </div>
 
   <div id="levelup" class="overlay"><h2>選擇強化</h2><div class="cards"></div></div>
@@ -76,15 +152,19 @@
     <h2>暫停</h2>
     <div class="build"></div>
     <button class="btn" data-act="resume">繼續</button>
-    <button class="btn ghost" data-act="quit">放棄本局</button>
+    <button class="btn ghost" data-act="quit">撤離（結算已擊倒的燈油）</button>
   </div>
 
-  <div id="result" class="overlay">
+  <div id="result" class="overlay scroll">
     <h1></h1><div class="sub"></div>
     <dl class="stats"></dl>
+    <div class="ledger"></div>
+    <div class="drops"></div>
     <button class="btn" data-act="retry">再來一局</button>
     <button class="btn ghost" data-act="menu">回主選單</button>
   </div>
+
+  <div id="toast"></div>
 </div>
 <script>
 "use strict";
@@ -184,12 +264,12 @@ const WEAPONS = {
   },
 };
 
-// ---- 被動（每項 5 級，效果按等級線性疊加） ----
+// ---- 被動（每項 5 級；mods 是「每一級」給的加成，疊加規則見 stats.js） ----
 const PASSIVES = {
-  lens:  { name: '聚光鏡', color: '#fff0a0', desc: '所有傷害 +10%',       per: { dmgMul: 0.10 } },
-  wick:  { name: '快燃芯', color: '#ff8a5c', desc: '攻擊冷卻 -8%',         per: { cdMul: 0.08 } },
-  stone: { name: '引光石', color: '#7fd6ff', desc: '拾取範圍 +30%、移速 +4%', per: { magnetMul: 0.30, speedMul: 0.04 } },
-  ember: { name: '暖芯',   color: '#ff9fb4', desc: '最大生命 +20、每秒回復 +0.4', per: { maxHp: 20, regen: 0.4 } },
+  lens:  { name: '聚光鏡', color: '#fff0a0', desc: '所有傷害 +10%',          mods: [{ stat: 'dmg', pct: 0.10 }] },
+  wick:  { name: '快燃芯', color: '#ff8a5c', desc: '攻擊冷卻 -8%',            mods: [{ stat: 'cdr', pct: 0.08 }] },
+  stone: { name: '引光石', color: '#7fd6ff', desc: '拾取範圍 +30%、移速 +4%', mods: [{ stat: 'magnet', pct: 0.30 }, { stat: 'speed', pct: 0.04 }] },
+  ember: { name: '暖芯',   color: '#ff9fb4', desc: '最大生命 +20、每秒回復 +0.4', mods: [{ stat: 'maxHp', flat: 20 }, { stat: 'regen', flat: 0.4 }] },
 };
 
 // ---- 共鳴：武器滿級＋持有指定被動，開燈核時進化 ----
@@ -201,14 +281,25 @@ const RESONANCES = {
 };
 
 // ---- 怪物 ----
-// ai: chase 追擊 / weave 蛇行追擊 / spit 保持距離吐孢 / 其他行為旗標：split 死後分裂
+// ai：chase 追擊 / weave 蛇行 / spit 保持距離吐孢 / lunge 蓄力撲擊 / bomber 貼近自爆 / turret 定點三連射 / blink 預警後瞬移
+// 其他旗標：split 死後分裂、armor 受傷倍率（越小越硬）、oil 擊倒給的燈油
 const ENEMIES = {
-  mite:     { name: '菌蟎', r: 11, hp: 10, speed: 60,  dmg: 6,  xp: 1, ai: 'chase' },
-  moth:     { name: '孢蛾', r: 9,  hp: 7,  speed: 105, dmg: 5,  xp: 1, ai: 'weave' },
-  brute:    { name: '刺囊', r: 20, hp: 70, speed: 36,  dmg: 14, xp: 5, ai: 'chase', mass: 4 },
-  spitter:  { name: '吐孢菇', r: 13, hp: 24, speed: 50, dmg: 6, xp: 3, ai: 'spit', keep: 150, fireCd: 3.2, shotDmg: 7 },
-  splitter: { name: '裂囊', r: 15, hp: 34, speed: 48,  dmg: 8,  xp: 3, ai: 'chase', split: { kind: 'mite', n: 3 } },
-  boss1:    { name: '噬燈菌母', r: 42, hp: 40000, speed: 44, dmg: 14, xp: 0, ai: 'boss', mass: 50 },
+  mite:     { name: '菌蟎',   r: 11, hp: 10,  speed: 60,  dmg: 6,  xp: 1, oil: 1, ai: 'chase' },
+  moth:     { name: '孢蛾',   r: 9,  hp: 7,   speed: 105, dmg: 5,  xp: 1, oil: 1, ai: 'weave' },
+  brute:    { name: '刺囊',   r: 20, hp: 70,  speed: 36,  dmg: 14, xp: 5, oil: 4, ai: 'chase', mass: 4 },
+  spitter:  { name: '吐孢菇', r: 13, hp: 24,  speed: 50,  dmg: 6,  xp: 3, oil: 2, ai: 'spit', keep: 150, fireCd: 3.2, shotDmg: 7 },
+  splitter: { name: '裂囊',   r: 15, hp: 34,  speed: 48,  dmg: 8,  xp: 3, oil: 2, ai: 'chase', split: { kind: 'mite', n: 3 } },
+  // 第二章：霧沼
+  leech:    { name: '沼蛭',   r: 12, hp: 26,  speed: 55,  dmg: 9,  xp: 2, oil: 2, ai: 'lunge', lungeSpeed: 360, windup: 0.6, lungeT: 0.35, lungeCd: 2.6, range: 150 },
+  bloater:  { name: '脹孢囊', r: 16, hp: 45,  speed: 50,  dmg: 6,  xp: 3, oil: 2, ai: 'bomber', fuse: 1.0, blastR: 72, blastDmg: 22, blastHurtsEnemies: 60 },
+  // 第三章：晶窟
+  turret:   { name: '晶刺',   r: 14, hp: 60,  speed: 0,   dmg: 8,  xp: 4, oil: 3, ai: 'turret', fireCd: 2.8, shotDmg: 8, mass: 99 },
+  blinker:  { name: '閃晶蛾', r: 10, hp: 16,  speed: 80,  dmg: 7,  xp: 2, oil: 2, ai: 'blink', blinkCd: 3.6, blinkWarn: 0.8 },
+  shell:    { name: '晶甲蟲', r: 17, hp: 42,  speed: 38,  dmg: 11, xp: 4, oil: 3, ai: 'chase', armor: 0.6, mass: 3 },
+  // 燈塔守衛
+  boss1:    { name: '噬燈菌母', r: 42, hp: 40000, speed: 44, dmg: 14, xp: 0, oil: 0, ai: 'boss', mass: 50 },
+  boss2:    { name: '沼母巨蛭', r: 40, hp: 52000, speed: 50, dmg: 13, xp: 0, oil: 0, ai: 'boss', mass: 50 },
+  boss3:    { name: '晶心守衛', r: 44, hp: 70000, speed: 30, dmg: 18, xp: 0, oil: 0, ai: 'boss', mass: 50 },
 };
 
 // 精英：放大、加血、帶一個詞綴；死亡必掉燈核
@@ -219,35 +310,161 @@ const ELITE_AFFIXES = {
   armor:  { name: '硬殼', dmgTaken: 0.6 },
 };
 
-// ---- 第一章：螢苔原 ----
+// ---- 章節 ----
 // roster：[起始秒, 種類, 權重]；spawnRate(t)：每秒生幾隻；events：固定時間事件
-const CHAPTER1 = {
-  name: '螢苔原', length: 480, bossAt: 420, arenaR: 250,
-  hpScale: (t) => 1 + Math.max(0, t - 60) / 135,  // 怪物血量：第 1 分鐘不成長，之後線性成長
-  dmgScale: (t) => 1 + t / 360,                    // 怪物接觸傷害成長
-  spawnRate: (t) => 1.2 + t * 0.018 + (t > 240 ? (t - 240) * 0.015 : 0),
-  maxEnemies: 300,
-  roster: [
-    [0, 'mite', 10], [45, 'moth', 5], [150, 'spitter', 2], [210, 'splitter', 3], [270, 'brute', 2], [330, 'moth', 4],
-  ],
-  events: [
-    { at: 90,  type: 'ring',  kind: 'mite', n: 26 },
-    { at: 150, type: 'elite', kind: 'brute' },
-    { at: 200, type: 'rush',  kind: 'moth', n: 22 },
-    { at: 260, type: 'ring',  kind: 'splitter', n: 14 },
-    { at: 300, type: 'elite', kind: 'spitter' },
-    { at: 345, type: 'rush',  kind: 'moth', n: 30 },
-    { at: 370, type: 'elite', kind: 'splitter' },
-    { at: 390, type: 'ring',  kind: 'mite', n: 40 },
-    { at: 420, type: 'boss',  kind: 'boss1' },
-  ],
+// terrain：pools 泥沼（玩家踩到減速）/ pillars 晶柱（擋路、擋子彈）；fog：霧中自動瞄準距離（null＝無霧）
+// palette：地面與色調（render 用）；hue：共用怪物的色相偏移
+const CHAPTERS = [
+  {
+    id: 1, name: '螢苔原', tagline: '開闊的苔原，菌潮從四面八方湧來', palette: 'moss', hue: 0,
+    length: 480, bossAt: 420, arenaR: 250, boss: 'boss1', terrain: null, fog: null,
+    hpScale: (t) => 1 + Math.max(0, t - 60) / 135,  // 怪物血量：第 1 分鐘不成長，之後線性成長
+    dmgScale: (t) => 1 + t / 360,                    // 怪物接觸傷害成長
+    spawnRate: (t) => 1.2 + t * 0.018 + (t > 240 ? (t - 240) * 0.015 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 10], [45, 'moth', 5], [150, 'spitter', 2], [210, 'splitter', 3], [270, 'brute', 2], [330, 'moth', 4]],
+    events: [
+      { at: 90,  type: 'ring',  kind: 'mite', n: 26 },
+      { at: 150, type: 'elite', kind: 'brute' },
+      { at: 200, type: 'rush',  kind: 'moth', n: 22 },
+      { at: 260, type: 'ring',  kind: 'splitter', n: 14 },
+      { at: 300, type: 'elite', kind: 'spitter' },
+      { at: 345, type: 'rush',  kind: 'moth', n: 30 },
+      { at: 370, type: 'elite', kind: 'splitter' },
+      { at: 390, type: 'ring',  kind: 'mite', n: 40 },
+      { at: 420, type: 'boss',  kind: 'boss1' },
+    ],
+    reward: { clear: 300, firstClear: 300, gear: [60, 30, 10, 0, 0] },
+  },
+  {
+    id: 2, name: '霧沼', tagline: '濃霧縮短了瞄準距離，泥沼拖慢腳步，沼蛭會蓄力撲來', palette: 'marsh', hue: 60,
+    length: 480, bossAt: 420, arenaR: 240, boss: 'boss2', terrain: 'pools', fog: 210,
+    hpScale: (t) => 1.15 + Math.max(0, t - 45) / 105,
+    dmgScale: (t) => 1.05 + t / 330,
+    spawnRate: (t) => 1.5 + t * 0.02 + (t > 240 ? (t - 240) * 0.016 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 8], [20, 'leech', 4], [90, 'moth', 4], [140, 'bloater', 3], [220, 'spitter', 2], [300, 'leech', 3]],
+    events: [
+      { at: 75,  type: 'rush',  kind: 'leech', n: 12 },
+      { at: 130, type: 'elite', kind: 'leech' },
+      { at: 180, type: 'ring',  kind: 'bloater', n: 12 },
+      { at: 240, type: 'rush',  kind: 'moth', n: 30 },
+      { at: 280, type: 'elite', kind: 'bloater' },
+      { at: 330, type: 'ring',  kind: 'leech', n: 24 },
+      { at: 365, type: 'elite', kind: 'spitter' },
+      { at: 395, type: 'ring',  kind: 'mite', n: 44 },
+      { at: 420, type: 'boss',  kind: 'boss2' },
+    ],
+    reward: { clear: 500, firstClear: 500, gear: [35, 40, 20, 5, 0] },
+  },
+  {
+    id: 3, name: '晶窟', tagline: '晶柱擋路也擋子彈，晶刺在遠處架起火線，閃晶蛾會突然出現在身邊', palette: 'crystal', hue: 170,
+    length: 480, bossAt: 420, arenaR: 260, boss: 'boss3', terrain: 'pillars', fog: null,
+    hpScale: (t) => 1.3 + Math.max(0, t - 30) / 90,
+    dmgScale: (t) => 1.15 + t / 300,
+    spawnRate: (t) => 1.6 + t * 0.021 + (t > 240 ? (t - 240) * 0.017 : 0),
+    maxEnemies: 300,
+    roster: [[0, 'mite', 7], [45, 'blinker', 4], [110, 'shell', 2], [120, 'turret', 1], [200, 'splitter', 3], [280, 'blinker', 3]],
+    events: [
+      { at: 70,  type: 'ring',  kind: 'mite', n: 30 },
+      { at: 120, type: 'elite', kind: 'shell' },
+      { at: 170, type: 'rush',  kind: 'blinker', n: 18 },
+      { at: 230, type: 'elite', kind: 'turret' },
+      { at: 270, type: 'ring',  kind: 'shell', n: 10 },
+      { at: 320, type: 'elite', kind: 'blinker' },
+      { at: 360, type: 'rush',  kind: 'splitter', n: 18 },
+      { at: 395, type: 'ring',  kind: 'blinker', n: 30 },
+      { at: 420, type: 'boss',  kind: 'boss3' },
+    ],
+    reward: { clear: 800, firstClear: 800, gear: [15, 35, 35, 13, 2] },
+  },
+];
+const CHAPTER1 = CHAPTERS[0];
+
+// ---- 燈油（局外貨幣）結算 ----
+// 一局的燈油 ＝ floor( (floor(Σ擊倒×該怪 oil × perKill) ＋ 精英數×elite ＋ 擊敗守衛×boss ＋ 通關獎勵 ＋ 首通獎勵) × (1 + 燈油加成) )
+// 陣亡或放棄：只有擊倒與精英兩項。由 tools/meta-test.mjs 用「從事件逐筆重算」的母體檢查釘住。
+const OIL = { perKill: 0.15, elite: 40, boss: 250 };
+
+// ---- 天賦（永久加成，用燈油升級） ----
+// mods：每一級給的加成（疊加規則見 stats.js）；cost[i]：從 i 級升到 i+1 級的價格
+const TALENTS = {
+  might:  { name: '燈焰', desc: '所有傷害 +5%',     mods: [{ stat: 'dmg', pct: 0.05 }],    cost: [90, 180, 300, 480, 720, 1020, 1380, 1800, 2280, 2820] },
+  vigor:  { name: '燈身', desc: '最大生命 +12',     mods: [{ stat: 'maxHp', flat: 12 }],   cost: [70, 150, 250, 390, 570, 780, 1050, 1350, 1710, 2100] },
+  swift:  { name: '輕步', desc: '移動速度 +3%',     mods: [{ stat: 'speed', pct: 0.03 }],  cost: [120, 270, 480, 750, 1080] },
+  reach:  { name: '引光', desc: '拾取範圍 +10%',    mods: [{ stat: 'magnet', pct: 0.10 }], cost: [60, 130, 230, 360, 540] },
+  haste:  { name: '燃速', desc: '攻擊冷卻 -3%',     mods: [{ stat: 'cdr', pct: 0.03 }],    cost: [150, 330, 570, 870, 1260] },
+  greed:  { name: '聚油', desc: '燈油獲得 +8%',     mods: [{ stat: 'oil', pct: 0.08 }],    cost: [110, 240, 420, 660, 960] },
+  ward:   { name: '燈罩', desc: '受到傷害 -3%',     mods: [{ stat: 'armor', pct: 0.03 }],  cost: [130, 290, 490, 750, 1080] },
+  rekindle: { name: '復燃', desc: '倒下時以一半生命復活一次', mods: [{ stat: 'revive', flat: 1 }], cost: [1500] },
 };
+
+// ---- 裝備 ----
+// 4 個部位各有固定主屬性；稀有度決定主屬性數值與副詞條數量；強化每級主屬性 +10%（相加，見 gearMods）
+const RARITIES = [
+  { name: '常見', color: '#c9cfe6', affixes: 0, salvage: 30 },
+  { name: '精良', color: '#7fe08a', affixes: 1, salvage: 80 },
+  { name: '稀有', color: '#6fb6ff', affixes: 2, salvage: 200 },
+  { name: '史詩', color: '#c68cff', affixes: 3, salvage: 500 },
+  { name: '傳說', color: '#ffc85a', affixes: 4, salvage: 1200 },
+];
+const GEAR_SLOTS = {
+  lamp:  { name: '提燈', main: { stat: 'dmg',   pct:  [0.05, 0.08, 0.12, 0.17, 0.24] } },
+  cloak: { name: '披風', main: { stat: 'maxHp', flat: [10, 18, 28, 42, 60] } },
+  charm: { name: '護符', main: { stat: 'cdr',   pct:  [0.02, 0.035, 0.05, 0.07, 0.09] } },
+  boots: { name: '靴子', main: { stat: 'speed', pct:  [0.03, 0.05, 0.07, 0.09, 0.12] } },
+};
+// 副詞條：[stat, 類型, 每個稀有度的數值]
+const GEAR_AFFIXES = [
+  ['dmg', 'pct', [0.02, 0.03, 0.04, 0.05, 0.07]],
+  ['maxHp', 'flat', [5, 8, 12, 16, 22]],
+  ['speed', 'pct', [0.01, 0.02, 0.03, 0.04, 0.05]],
+  ['magnet', 'pct', [0.05, 0.08, 0.12, 0.16, 0.2]],
+  ['regen', 'flat', [0.1, 0.15, 0.2, 0.3, 0.4]],
+  ['oil', 'pct', [0.02, 0.03, 0.05, 0.07, 0.1]],
+  ['armor', 'pct', [0.01, 0.015, 0.02, 0.03, 0.04]],
+];
+const GEAR_MAX_LV = 10;
+const gearUpgradeCost = (rarity, lv) => Math.round((36 + rarity * 36) * lv * (1 + lv * 0.15));
+const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magnet: '拾取範圍', cdr: '冷卻縮減', regen: '每秒回復', oil: '燈油獲得', armor: '減傷', revive: '復活' };
 
 const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 const SLOTS = { weapon: 4, passive: 4 };
 const MAX_LV = 5;
 
-return { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV };
+return { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, OIL, TALENTS, RARITIES, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV };
+})();
+
+// ---- stats.js
+const __m_stats_js = (() => {
+// 加成疊加規則——全遊戲唯一一處。局內被動、天賦、裝備的加成都轉成 modifier 丟進來算，規則不准在別處另寫。
+//
+// modifier 形狀：{ stat, flat?, pct? }
+//   flat：同一屬性的所有 flat 直接相加。
+//   pct ：同一屬性的所有百分比「先相加」，再一次乘上 (1 + Σpct)。
+//         → 兩個 +20% 疊起來是 +40%（×1.40），不是 ×1.2×1.2＝×1.44。
+//   最終值 ＝ (基礎值 + Σflat) × (1 + Σpct)
+// 例外（「縮減類」，越多越好但不能無限）：
+//   cdr   冷卻縮減：Σpct 相加後上限 CAPS.cdr，冷卻倍率 ＝ 1 − min(Σ, 上限)
+//   armor 減傷    ：Σpct 相加後上限 CAPS.armor，受傷倍率 ＝ 1 − min(Σ, 上限)
+// 這些規則由 tools/meta-test.mjs 的「疊加規則」情境釘住。
+const STATS = ['dmg', 'maxHp', 'speed', 'magnet', 'cdr', 'regen', 'oil', 'armor', 'revive'];
+const CAPS = { cdr: 0.6, armor: 0.5 };
+
+function aggregate(mods) {
+  const agg = {};
+  for (const s of STATS) agg[s] = { flat: 0, pct: 0 };
+  for (const m of mods) {
+    const a = agg[m.stat];
+    if (!a) throw new Error(`未知屬性 ${m.stat}`);
+    a.flat += m.flat || 0; a.pct += m.pct || 0;
+  }
+  return agg;
+}
+const scaled = (base, a) => (base + a.flat) * (1 + a.pct);
+const reduction = (a, cap) => 1 - Math.min(a.pct, cap);
+
+return { STATS, CAPS, aggregate, scaled, reduction };
 })();
 
 // ---- sim.js
@@ -255,7 +472,9 @@ const __m_sim_js = (() => {
 // 純邏輯層（不碰 DOM／Canvas）：一整章的規則。Node 可直接 import 測試（tools/sim-test.mjs）。
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
+// 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
 const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV } = __m_content_js;
+const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
 function makeRng(seed = 1) {
@@ -266,34 +485,68 @@ function makeRng(seed = 1) {
 const TAU = Math.PI * 2;
 const BASE = { hp: 100, speed: 120, magnet: 95 };
 const GEM_DRIFT = { range: 220, speed: 28 }; // 附近的光屑會緩慢飄向玩家，站著不動也撿得到一些
+const AIM_RANGE = 420;
 
-function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
+// ---------- 地形（依座標與種子決定，sim 與 render 共用；不存狀態，無限大地圖也不佔記憶體） ----------
+// pools 泥沼：玩家在裡面移速 ×slow。pillars 晶柱：擋住玩家、怪物、雙方子彈。出生點附近 clear 範圍內不放。
+const TERRAIN = {
+  pools:   { cell: 190, chance: 0.32, rMin: 38, rMax: 68, slow: 0.55, clear: 150 },
+  pillars: { cell: 150, chance: 0.38, rMin: 16, rMax: 30, clear: 130 },
+};
+function hash2(ix, iy, seed, salt) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed + salt, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function terrainCell(kind, seed, ix, iy) {
+  const T = TERRAIN[kind];
+  if (hash2(ix, iy, seed, 1) >= T.chance) return null;
+  const r = T.rMin + hash2(ix, iy, seed, 2) * (T.rMax - T.rMin);
+  const x = ix * T.cell + r + hash2(ix, iy, seed, 3) * (T.cell - 2 * r);
+  const y = iy * T.cell + r + hash2(ix, iy, seed, 4) * (T.cell - 2 * r);
+  if (Math.hypot(x, y) < T.clear + r) return null;
+  return { x, y, r };
+}
+function terrainIn(kind, seed, x0, y0, x1, y1) {
+  const T = TERRAIN[kind], out = [];
+  for (let ix = Math.floor(x0 / T.cell); ix <= Math.floor(x1 / T.cell); ix++)
+    for (let iy = Math.floor(y0 / T.cell); iy <= Math.floor(y1 / T.cell); iy++) { const f = terrainCell(kind, seed, ix, iy); if (f) out.push(f); }
+  return out;
+}
+
+function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
   const rand = makeRng(seed);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
   const s = {
-    t: 0, phase: 'play', kills: 0, vh, chapter,
+    t: 0, phase: 'play', kills: 0, vh, chapter, terrainSeed: seed % 100000,
     player: {
-      x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1,
-      facing: 1, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {},
+      x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1, armorMul: 1,
+      revives: 0, facing: 1, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
     },
-    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [],
+    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [],
     events: [],        // 給畫面層的一次性事件
+    ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
     spawnAcc: 0, eventIdx: 0, boss: null, arena: null, winT: 0,
     autoSpawn: true, god: false, // 測試用
   };
   const p = s.player;
+  const aimRange = chapter.fog ?? AIM_RANGE;
 
-  // ---------- 成長 ----------
+  // ---------- 成長（局內被動＋局外 meta，一律走 stats.js） ----------
   function recalc() {
-    const sum = (key) => Object.entries(p.passives).reduce((a, [id, l]) => a + (PASSIVES[id].per[key] || 0) * l, 0);
-    p.dmgMul = 1 + sum('dmgMul');
-    p.cdMul = Math.max(0.4, 1 - sum('cdMul'));
-    p.magnet = BASE.magnet * (1 + sum('magnetMul'));
-    p.speed = BASE.speed * (1 + sum('speedMul'));
-    const maxHp = BASE.hp + sum('maxHp');
+    const mods = [...meta];
+    for (const [id, lv] of Object.entries(p.passives)) for (const m of PASSIVES[id].mods) for (let i = 0; i < lv; i++) mods.push(m);
+    const a = aggregate(mods);
+    p.dmgMul = scaled(1, a.dmg);
+    p.cdMul = reduction(a.cdr, CAPS.cdr);
+    p.armorMul = reduction(a.armor, CAPS.armor);
+    p.magnet = scaled(BASE.magnet, a.magnet);
+    p.speed = scaled(BASE.speed, a.speed);
+    const maxHp = scaled(BASE.hp, a.maxHp);
     p.hp += maxHp - p.maxHp; p.maxHp = maxHp;
-    p.regen = sum('regen');
+    p.regen = scaled(0, a.regen);
+    return a;
   }
   function weaponStats(w) { return w.evo ? RESONANCES[w.id].stats : WEAPONS[w.id].lv[w.lv - 1]; }
   function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0 }; p.weapons.push(w); return w; }
@@ -370,18 +623,21 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   function closeChest() { if (s.phase !== 'chest') return; s.chest = null; s.phase = 'play'; nextChoice(); }
 
   // ---------- 生怪 ----------
+  const isBoss = (kind) => ENEMIES[kind].ai === 'boss';
   function spawnDist() { return Math.hypot(VW, s.vh) / 2 + 30; }
   function spawnEnemy(kind, { angle, dist, x, y, elite = false, affix = null } = {}) {
     const t = ENEMIES[kind];
     const a = angle ?? rand() * TAU;
     const d = dist ?? spawnDist();
-    const hpMul = (kind === 'boss1' ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
+    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
       flash: 0, frame: rand() * 4, seed: rand() * 100, slowT: 0, slow: 0, orbT: 0, fireT: (t.fireCd || 0) * (0.5 + rand()),
+      mode: 'move', modeT: 0, cdT: rand() * 1.5, dirX: 0, dirY: 0, tele: null, fuse: 0, warn: null,
     };
-    if (kind === 'boss1') Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, mode: 'move', modeT: 0, dirX: 0, dirY: 0 });
+    if (t.ai === 'blink') e.cdT = t.blinkCd * (0.4 + rand() * 0.6);
+    if (isBoss(kind)) Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, beamT: 2, rainT: 3, combo: 0 });
     s.enemies.push(e);
     return e;
   }
@@ -399,20 +655,20 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
       for (let i = 0; i < ev.n; i++) { const off = (i / (ev.n - 1) - 0.5) * 360; spawnEnemy(ev.kind, { x: cx - Math.sin(a) * off, y: cy + Math.cos(a) * off }); }
     } else if (ev.type === 'elite') {
       const affix = pick(Object.keys(ELITE_AFFIXES));
-      spawnEnemy(ev.kind, { elite: true, affix });
+      spawnEnemy(ev.kind, { elite: true, affix, dist: ENEMIES[ev.kind].ai === 'turret' ? 200 : undefined });
       s.events.push({ type: 'announce', text: `精英出現：${ELITE_AFFIXES[affix].name}${ENEMIES[ev.kind].name}` });
     } else if (ev.type === 'boss') startBoss(ev.kind);
     s.events.push({ type: 'wave', kind: ev.type });
   }
   function startBoss(kind) {
     s.arena = { x: p.x, y: p.y, r: s.chapter.arenaR };
-    // 光圈外的怪直接消散（不給經驗）
+    // 光圈外的怪直接消散（不給經驗、不算擊倒）
     s.enemies = s.enemies.filter((e) => {
       const inside = Math.hypot(e.x - s.arena.x, e.y - s.arena.y) < s.arena.r - 10;
       if (!inside) s.events.push({ type: 'fade', x: e.x, y: e.y });
       return inside;
     });
-    s.ebullets.length = 0;
+    s.ebullets.length = 0; s.hazards.length = 0;
     s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7 });
     s.events.push({ type: 'announce', text: `燈塔守衛：${ENEMIES[kind].name}`, big: true });
   }
@@ -442,27 +698,56 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     return best;
   }
 
+  // ---------- 地形互動 ----------
+  const terrain = s.chapter.terrain;
+  function pillarAt(x, y) { // 子彈只需查自己所在格（晶柱完整落在格內）
+    if (terrain !== 'pillars') return null;
+    const T = TERRAIN.pillars, f = terrainCell('pillars', s.terrainSeed, Math.floor(x / T.cell), Math.floor(y / T.cell));
+    return f && (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r ? f : null;
+  }
+  function pushOutOfPillars(o, rad) {
+    if (terrain !== 'pillars') return;
+    for (const f of terrainIn('pillars', s.terrainSeed, o.x - rad, o.y - rad, o.x + rad, o.y + rad)) {
+      const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy) || 0.01, min = f.r + rad;
+      if (d < min) { o.x = f.x + dx / d * min; o.y = f.y + dy / d * min; }
+    }
+  }
+  function inPool(x, y) {
+    if (terrain !== 'pools') return false;
+    const R = TERRAIN.pools.rMax; // 泥沼完整落在自己的格內，查 ±rMax 的範圍就夠
+    return terrainIn('pools', s.terrainSeed, x - R, y - R, x + R, y + R).some((f) => (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r);
+  }
+
   // ---------- 傷害 ----------
   function damage(e, amount, kx = 0, ky = 0) {
     if (e.hp <= 0) return;
     const aff = e.affix && ELITE_AFFIXES[e.affix];
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
-    if (e.kind !== 'boss1') { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
+    if (!isBoss(e.kind)) { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
     s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 });
   }
-  function hurtPlayer(dmg, src) {
+  function hurtPlayer(raw, src) {
     if (p.hurtT > 0 || s.god || s.phase !== 'play') return;
+    const dmg = Math.max(1, Math.round(raw * p.armorMul));
     p.hp -= dmg; p.hurtT = 0.5;
     s.events.push({ type: 'hurt', x: p.x, y: p.y, v: dmg, src });
-    if (p.hp <= 0) { p.hp = 0; s.phase = 'lose'; s.events.push({ type: 'lose' }); }
+    if (p.hp > 0) return;
+    if (p.revives > 0) { // 復燃：半血復活，短暫無敵並震開周圍
+      p.revives--; p.hp = p.maxHp * 0.5; p.hurtT = 2;
+      s.ebullets.length = 0;
+      for (const e of s.enemies) { const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1; if (d < 160 && !isBoss(e.kind)) { e.x += dx / d * 120; e.y += dy / d * 120; } }
+      s.events.push({ type: 'revive', x: p.x, y: p.y });
+      return;
+    }
+    p.hp = 0; s.phase = 'lose'; s.events.push({ type: 'lose' });
   }
 
   // ---------- 武器 ----------
   function fireBolt(w, st, dt) {
     w.cd -= dt;
     if (w.cd > 0) return;
-    const target = nearest(p.x, p.y, 420);
+    const target = nearest(p.x, p.y, aimRange);
     if (!target) return;
     w.cd = st.cd * p.cdMul;
     const base = Math.atan2(target.y - p.y, target.x - p.x);
@@ -508,12 +793,13 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   function chainWeapon(w, st, dt) {
     w.cd -= dt;
     if (w.cd > 0) return;
-    const first = nearest(p.x, p.y, 260);
+    const reach = Math.min(260, aimRange);
+    const first = nearest(p.x, p.y, reach);
     if (!first) return;
     w.cd = st.cd * p.cdMul;
     const hit = new Set();
     for (let k = 0; k < st.arcs; k++) {
-      let cur = k === 0 ? first : nearest(p.x, p.y, 260, hit);
+      let cur = k === 0 ? first : nearest(p.x, p.y, reach, hit);
       if (!cur) break;
       const pts = [[p.x, p.y]];
       for (let j = 0; j <= st.jumps && cur; j++) {
@@ -527,61 +813,153 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon };
 
   // ---------- 敵人行為 ----------
+  function shoot(e, ux, uy, speed, dmg, r, spread = [0]) {
+    for (const off of spread) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * speed, vy: (uy * c + ux * sn) * speed, life: 4, dmg, r }); }
+  }
+  const eliteDmg = (e) => (e.elite ? ELITE.dmgMul : 1);
   function enemyMove(e, dt) {
     const t = ENEMIES[e.kind];
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    let spd = t.speed * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
+    const spd = t.speed * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
     let vx = ux, vy = uy;
-    if (t.ai === 'weave') { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; }
-    else if (t.ai === 'spit') {
-      const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
-      const side = Math.sin(e.seed) > 0 ? 1 : -1;
-      vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
-      e.fireT -= dt;
-      if (e.fireT <= 0 && d < 320) {
-        e.fireT = t.fireCd;
-        s.ebullets.push({ x: e.x, y: e.y, vx: ux * 110, vy: uy * 110, life: 4, dmg: t.shotDmg * (e.elite ? ELITE.dmgMul : 1), r: e.elite ? 8 : 5 });
-        if (e.elite) for (const off of [-0.35, 0.35]) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * 110, vy: (uy * c + ux * sn) * 110, life: 4, dmg: t.shotDmg, r: 6 }); }
+    e.cdT -= dt; e.modeT -= dt;
+    switch (t.ai) {
+      case 'weave': { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; break; }
+      case 'spit': {
+        const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
+        const side = Math.sin(e.seed) > 0 ? 1 : -1;
+        vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
+        e.fireT -= dt;
+        if (e.fireT <= 0 && d < 320) { e.fireT = t.fireCd; shoot(e, ux, uy, 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0]); }
+        break;
       }
-    } else if (t.ai === 'boss') return bossAct(e, dt, ux, uy, d);
+      case 'turret': {
+        e.fireT -= dt;
+        if (e.fireT <= 0 && d < 360) { e.fireT = t.fireCd; shoot(e, ux, uy, 120, t.shotDmg * eliteDmg(e), 6, e.elite ? [-0.5, -0.25, 0, 0.25, 0.5] : [-0.3, 0, 0.3]); s.events.push({ type: 'burst', x: e.x, y: e.y, small: true }); }
+        return [0, 0];
+      }
+      case 'lunge': { // 靠近 → 蓄力（原地、顯示預警線）→ 高速撲擊 → 冷卻
+        if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'lunge'; e.modeT = t.lungeT; e.tele = null; } return [0, 0]; }
+        if (e.mode === 'lunge') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = t.lungeCd; } return [e.dirX * t.lungeSpeed, e.dirY * t.lungeSpeed]; }
+        if (d < t.range && e.cdT <= 0) { e.mode = 'windup'; e.modeT = t.windup; e.dirX = ux; e.dirY = uy; e.tele = { dx: ux, dy: uy, len: t.lungeSpeed * t.lungeT, w: e.r }; return [0, 0]; }
+        break;
+      }
+      case 'bomber': { // 靠近就點燃引信，燃燒中仍慢慢貼近（逼玩家走開），時間到爆炸（也會炸到其他怪）
+        if (e.fuse > 0) { e.fuse -= dt; if (e.fuse <= 0) { explode(e, t); return [0, 0]; } return [ux * spd * 0.5, uy * spd * 0.5]; }
+        if (d < t.blastR * 1.25) e.fuse = t.fuse;
+        break;
+      }
+      case 'blink': { // 預警標記出現在玩家身邊，時間到瞬移過去
+        if (e.warn) { e.warn.t -= dt; if (e.warn.t <= 0) { e.x = e.warn.x; e.y = e.warn.y; e.warn = null; e.cdT = t.blinkCd; s.events.push({ type: 'blink', x: e.x, y: e.y }); } return [0, 0]; }
+        if (e.cdT <= 0 && d < 420 && d > 90) { const a = rand() * TAU; e.warn = { x: p.x + Math.cos(a) * 70, y: p.y + Math.sin(a) * 70, t: t.blinkWarn }; return [0, 0]; }
+        break;
+      }
+      case 'boss': return BOSS_AI[e.kind](e, dt, ux, uy, d);
+    }
     const len = Math.hypot(vx, vy) || 1;
     return [vx / len * spd, vy / len * spd];
+  }
+  function explode(e, t) {
+    s.events.push({ type: 'blast', x: e.x, y: e.y, r: t.blastR });
+    if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (t.blastR + 8) ** 2) hurtPlayer(Math.round(t.blastDmg * eliteDmg(e) * s.chapter.dmgScale(s.t)), 'blast');
+    for (const o of s.enemies) if (o !== e && o.hp > 0 && !isBoss(o.kind) && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < t.blastR * t.blastR) { o.hp -= t.blastHurtsEnemies; o.flash = 0.1; }
+    e.hp = 0; e.noReward = true; // 自爆不算玩家擊倒
   }
   function radial(e, n, speed, offset, dmg) {
     for (let i = 0; i < n; i++) { const a = offset + (i / n) * TAU; s.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 5, dmg, r: 7 }); }
   }
-  function bossAct(e, dt, ux, uy) {
-    const t = ENEMIES[e.kind];
-    const frac = e.hp / e.maxHp;
-    const phase = frac > 0.6 ? 1 : frac > 0.25 ? 2 : 3;
-    if (phase !== e.bphase) {
-      e.bphase = phase;
-      s.events.push({ type: 'announce', text: phase === 2 ? '菌母暴躁起來了！' : '菌母孢雨狂亂！' });
-      if (phase === 2) e.summonT = 0;
-    }
-    e.burstT -= dt;
-    if (e.burstT <= 0) {
-      e.burstT = phase === 3 ? 1.6 : 3;
-      radial(e, phase === 1 ? 12 : 16, phase === 3 ? 115 : 100, phase === 3 ? s.t * 1.7 : rand() * TAU, 10);
-      s.events.push({ type: 'burst', x: e.x, y: e.y });
-    }
-    if (phase >= 2) {
-      e.summonT -= dt;
-      if (e.summonT <= 0) {
-        e.summonT = 11;
-        for (let i = 0; i < 6; i++) spawnEnemy('mite', { x: e.x + Math.cos(i) * 50, y: e.y + Math.sin(i) * 50 });
+  function bossPhase(e, lines) {
+    const frac = e.hp / e.maxHp, phase = frac > 0.6 ? 1 : frac > 0.25 ? 2 : 3;
+    if (phase !== e.bphase) { e.bphase = phase; s.events.push({ type: 'announce', text: lines[phase - 2] }); if (phase === 2) e.summonT = 0; }
+    return phase;
+  }
+  function summonEvery(e, dt, gap, kind, n, dist = 50) {
+    e.summonT -= dt;
+    if (e.summonT > 0) return;
+    e.summonT = gap;
+    for (let i = 0; i < n; i++) { const a = (i / n) * TAU; spawnEnemy(kind, { x: e.x + Math.cos(a) * dist, y: e.y + Math.sin(a) * dist }); }
+  }
+  // 衝刺共用：move → windup（預警）→ dash；回傳這一幀的速度，trail 為衝刺時每幀呼叫
+  function dashStep(e, ux, uy, speed, windup, dashT, dashSpeed, teleLen, trail) {
+    if (e.mode === 'windup') { e.tele = { dx: e.dirX, dy: e.dirY, len: teleLen, w: e.r }; if (e.modeT <= 0) { e.mode = 'dash'; e.modeT = dashT; e.tele = null; } return [0, 0]; }
+    if (e.mode === 'dash') { if (e.modeT <= 0) e.mode = 'move'; trail?.(); return [e.dirX * dashSpeed, e.dirY * dashSpeed]; }
+    if (e.dashT <= 0) { e.mode = 'windup'; e.modeT = windup; e.dirX = ux; e.dirY = uy; return [0, 0]; }
+    return [ux * speed, uy * speed];
+  }
+  const BOSS_AI = {
+    // 噬燈菌母：孢子彈幕 → 召喚＋衝撞 → 旋轉孢雨
+    boss1(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['菌母暴躁起來了！', '菌母孢雨狂亂！']);
+      e.burstT -= dt;
+      if (e.burstT <= 0) {
+        e.burstT = phase === 3 ? 1.6 : 3;
+        radial(e, phase === 1 ? 12 : 16, phase === 3 ? 115 : 100, phase === 3 ? s.t * 1.7 : rand() * TAU, 10);
+        s.events.push({ type: 'burst', x: e.x, y: e.y });
+      }
+      if (phase >= 2) summonEvery(e, dt, 11, 'mite', 6);
+      if (phase >= 2 && e.mode === 'move') e.dashT -= dt;
+      const v = dashStep(e, ux, uy, ENEMIES.boss1.speed, 0.9, 0.55, 600, 330);
+      if (e.mode !== 'move' && e.dashT <= 0) e.dashT = phase === 3 ? 3.5 : 5; // 開始蓄力就排下一次
+      return v;
+    },
+    // 沼母巨蛭：連續三段撲擊，沿路留下毒沼 → 召喚沼蛭＋孢環 → 更快的撲擊
+    boss2(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['巨蛭召來了子嗣！', '巨蛭陷入狂亂！']);
+      if (e.mode === 'move') e.dashT -= dt;
+      if (e.mode === 'move' && e.dashT <= 0 && e.combo === 0) e.combo = 3;
+      const windup = phase === 3 ? 0.5 : 0.7, before = e.mode;
+      const v = dashStep(e, ux, uy, ENEMIES.boss2.speed, windup, 0.42, 520, 220, () => {
+        e.trailAcc = (e.trailAcc || 0) + dt;
+        if (e.trailAcc > 0.1) { e.trailAcc = 0; s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: 30, arm: 0.4, dur: 4, t: 0, dmg: 9, src: 'poison' }); }
+      });
+      if (before === 'dash' && e.mode === 'move') { e.combo = Math.max(0, e.combo - 1); e.dashT = e.combo > 0 ? 0.25 : (phase === 3 ? 3 : 4.2); }
+      if (phase >= 2) {
+        summonEvery(e, dt, 12, 'leech', 5, 60);
+        e.burstT -= dt;
+        if (e.burstT <= 0) { e.burstT = phase === 3 ? 2.6 : 3.5; radial(e, phase === 3 ? 18 : 14, 105, rand() * TAU, 10); s.events.push({ type: 'burst', x: e.x, y: e.y }); }
+      }
+      return v;
+    },
+    // 晶心守衛：旋轉光束（先預警）→ 加上晶雨（地面預警圈）→ 更多、更快的光束＋召喚晶刺
+    boss3(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['晶心裂開，晶雨落下！', '晶心全力運轉！']);
+      e.beamT -= dt;
+      if (e.beamT <= 0) {
+        const n = phase + 1, spin = (rand() < 0.5 ? -1 : 1) * (phase === 3 ? 0.8 : 0.55), a0 = rand() * TAU;
+        for (let i = 0; i < n; i++) s.hazards.push({ type: 'beam', owner: e, ang: a0 + (i / n) * TAU, spin, len: 620, w: 22, arm: 1.0, dur: 3.2, t: 0, dmg: 16, src: 'beam' });
+        e.beamT = phase === 3 ? 5 : 6.5;
+      }
+      if (phase >= 2) {
+        e.rainT -= dt;
+        if (e.rainT <= 0) {
+          e.rainT = phase === 3 ? 3 : 4;
+          const n = phase === 3 ? 7 : 5;
+          for (let i = 0; i < n; i++) { const a = rand() * TAU, r = i === 0 ? 0 : 40 + rand() * 110; s.hazards.push({ type: 'zone', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, r: 42, arm: 1.0, dur: 0.25, t: 0, dmg: 22, src: 'rain' }); }
+        }
+      }
+      if (phase === 3) summonEvery(e, dt, 14, 'turret', 2, 120);
+      return [ux * ENEMIES.boss3.speed, uy * ENEMIES.boss3.speed];
+    },
+  };
+
+  // ---------- 地面危險（預警 arm 秒後生效 dur 秒） ----------
+  function updateHazards(dt) {
+    for (const h of s.hazards) {
+      h.t += dt;
+      if (h.type === 'beam') {
+        if (h.owner.hp <= 0) { h.t = 1e9; continue; }
+        h.x = h.owner.x; h.y = h.owner.y;
+        if (h.t >= h.arm) h.ang += h.spin * dt;
+      }
+      if (h.t < h.arm || h.t > h.arm + h.dur) continue;
+      if (h.type === 'zone' && (p.x - h.x) ** 2 + (p.y - h.y) ** 2 < (h.r + 8) ** 2) hurtPlayer(h.dmg, h.src); // 地面危險是固定傷害，不吃時間倍率
+      if (h.type === 'beam') {
+        const cx = Math.cos(h.ang), cy = Math.sin(h.ang), rx = p.x - h.x, ry = p.y - h.y, along = rx * cx + ry * cy;
+        if (along > 0 && along < h.len && Math.abs(rx * cy - ry * cx) < h.w / 2 + 8) hurtPlayer(h.dmg, h.src);
       }
     }
-    e.modeT -= dt;
-    if (e.mode === 'move') {
-      if (phase >= 2) e.dashT -= dt;
-      if (e.dashT <= 0) { e.mode = 'windup'; e.modeT = 0.9; e.dirX = ux; e.dirY = uy; e.dashT = phase === 3 ? 3.5 : 5; }
-      return [ux * t.speed, uy * t.speed];
-    }
-    if (e.mode === 'windup') { e.tele = { dx: e.dirX, dy: e.dirY, len: 330 }; if (e.modeT <= 0) { e.mode = 'dash'; e.modeT = 0.55; e.tele = null; } return [0, 0]; }
-    if (e.modeT <= 0) e.mode = 'move';
-    return [e.dirX * 600, e.dirY * 600];
+    s.hazards = s.hazards.filter((h) => h.t <= h.arm + h.dur);
   }
 
   // ---------- 主更新 ----------
@@ -591,8 +969,11 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     const ch = s.chapter;
 
     // 玩家
-    p.x += move.x * p.speed * dt; p.y += move.y * p.speed * dt;
+    p.inPool = inPool(p.x, p.y);
+    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1);
+    p.x += move.x * spd * dt; p.y += move.y * spd * dt;
     if (move.x) p.facing = move.x > 0 ? 1 : -1;
+    pushOutOfPillars(p, 12);
     if (s.arena) clampArena(p, 14);
     p.hurtT = Math.max(0, p.hurtT - dt);
     if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
@@ -608,6 +989,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
 
     // 敵人移動＋互推＋接觸傷害
     for (const e of s.enemies) {
+      if (e.hp <= 0) continue;
       const [vx, vy] = enemyMove(e, dt);
       let sx = 0, sy = 0;
       near(e.x, e.y, (o) => {
@@ -616,12 +998,14 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
         if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
       });
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
+      if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
       e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
-      if (d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * (e.elite ? ELITE.dmgMul : 1) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
+      if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
     }
+    updateHazards(dt);
 
     // 武器
     for (const w of p.weapons) WEAPON_FN[w.id](w, weaponStats(w), dt);
@@ -630,6 +1014,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     for (const b of s.bullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
+      if (pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {
         if (b.life <= 0 || e.hp <= 0 || b.hit.has(e)) return;
         const rr = e.r + (b.big ? 9 : 4);
@@ -647,6 +1032,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     // 敵方子彈
     for (const b of s.ebullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      if (pillarAt(b.x, b.y)) { b.life = 0; continue; }
       if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + 8) ** 2) { hurtPlayer(b.dmg, 'spore'); b.life = 0; }
     }
     s.ebullets = s.ebullets.filter((b) => b.life > 0);
@@ -661,7 +1047,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     // 離太遠的怪移回附近（不在競技場時）
     if (!s.arena) {
       const far = Math.hypot(VW, s.vh) * 0.9;
-      for (const e of s.enemies) if (!e.elite && Math.hypot(e.x - p.x, e.y - p.y) > far) { const a = rand() * TAU; e.x = p.x + Math.cos(a) * spawnDist(); e.y = p.y + Math.sin(a) * spawnDist(); }
+      for (const e of s.enemies) if (!e.elite && Math.hypot(e.x - p.x, e.y - p.y) > far) { const a = rand() * TAU; e.x = p.x + Math.cos(a) * spawnDist(); e.y = p.y + Math.sin(a) * spawnDist(); e.warn = null; e.fuse = 0; }
     }
 
     // 經驗晶
@@ -698,17 +1084,23 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     if (d > max) { o.x = s.arena.x + dx / d * max; o.y = s.arena.y + dy / d * max; }
   }
 
+  // 擊倒的唯一入口：燈油帳（ledger）與 kill 事件都只在這裡寫，兩者必須一致（tools/meta-test.mjs 檢查）
   function onKill(e) {
+    if (e.noReward) { s.events.push({ type: 'fade', x: e.x, y: e.y }); return; }
     const t = ENEMIES[e.kind];
     s.kills++;
-    s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
-    if (e.kind === 'boss1') {
+    if (isBoss(e.kind)) {
+      s.ledger.boss = e.kind;
+      s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: false, boss: true });
       s.boss = null; s.winT = 1.8; s.god = true;
       for (const o of s.enemies) { o.hp = 0; s.events.push({ type: 'fade', x: o.x, y: o.y }); }
-      s.enemies = []; s.ebullets = [];
+      s.enemies = []; s.ebullets = []; s.hazards = [];
       s.events.push({ type: 'bossdown', x: e.x, y: e.y });
       return;
     }
+    if (e.elite) s.ledger.elites++;
+    else s.ledger.kills[e.kind] = (s.ledger.kills[e.kind] || 0) + 1;
+    s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
     s.gems.push({ x: e.x, y: e.y, v: t.xp * (e.elite ? ELITE.xpMul : 1), pull: false });
     if (e.elite) s.pickups.push({ type: 'chest', x: e.x, y: e.y });
     else {
@@ -733,11 +1125,14 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     s.gems = keep;
   }
 
+  const agg0 = recalc();
+  p.hp = p.maxHp;
+  p.revives = Math.floor(scaled(0, agg0.revive));
   addWeapon('bolt');
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options };
 }
 
-return { VW, makeRng, createSim };
+return { VW, makeRng, TERRAIN, terrainCell, terrainIn, createSim };
 })();
 
 // ---- art.js
@@ -907,9 +1302,35 @@ function drawPlayer(g, x, y, t, facing, hurt) {
   g.restore();
 }
 
+// 每章一套地面色盤：螢苔原＝藍紫螢光苔、霧沼＝暗綠泥灘、晶窟＝深藍岩床帶洋紅晶屑
 const PALETTES = {
-  moss: { base: '#15182b', blotchA: 'rgba(60,40,120,0.18)', blotchB: 'rgba(20,110,120,0.15)', crack: 'rgba(120,220,255,0.12)', crystal: 'rgba(140,200,255,0.55)', dotA: 'rgba(160,140,255,0.25)', dotB: 'rgba(80,220,200,0.2)' },
+  moss:    { base: '#15182b', blotchA: 'rgba(60,40,120,0.18)', blotchB: 'rgba(20,110,120,0.15)', crack: 'rgba(120,220,255,0.12)', crystal: 'rgba(140,200,255,0.55)', dotA: 'rgba(160,140,255,0.25)', dotB: 'rgba(80,220,200,0.2)' },
+  marsh:   { base: '#0f1a17', blotchA: 'rgba(40,90,60,0.22)', blotchB: 'rgba(90,110,40,0.14)', crack: 'rgba(150,220,140,0.10)', crystal: 'rgba(170,230,150,0.35)', dotA: 'rgba(120,200,120,0.22)', dotB: 'rgba(200,220,120,0.14)' },
+  crystal: { base: '#0c1024', blotchA: 'rgba(40,60,160,0.22)', blotchB: 'rgba(140,40,140,0.14)', crack: 'rgba(200,160,255,0.16)', crystal: 'rgba(255,140,230,0.6)', dotA: 'rgba(120,160,255,0.3)', dotB: 'rgba(255,120,220,0.2)' },
 };
+
+// 晶柱：六角晶簇（依半徑快取）
+const pillarCache = new Map();
+function makePillar(r) {
+  const k = Math.round(r / 3) * 3;
+  if (pillarCache.has(k)) return pillarCache.get(k);
+  const S = k * 3, c = canvas(S * 2, S * 2), g = c.getContext('2d'), rr = rng(k * 17 + 3);
+  g.translate(S, S);
+  g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.ellipse(0, k * 0.55, k * 1.15, k * 0.45, 0, 0, Math.PI * 2); g.fill();
+  const shards = 5;
+  for (let i = 0; i < shards; i++) {
+    const a = -Math.PI / 2 + (i - (shards - 1) / 2) * 0.35 + (rr() - 0.5) * 0.2, h = k * (1.1 + rr() * 1.1) * (i === 2 ? 1.4 : 1), w = k * (0.28 + rr() * 0.15);
+    const bx = (i - 2) * k * 0.28, by = k * 0.3, tx = bx + Math.cos(a) * h, ty = by + Math.sin(a) * h;
+    const px = -Math.sin(a) * w, py = Math.cos(a) * w;
+    const grad = g.createLinearGradient(bx, by, tx, ty);
+    grad.addColorStop(0, '#2a2a6a'); grad.addColorStop(0.6, '#6a5ad8'); grad.addColorStop(1, '#f0b8ff');
+    g.fillStyle = grad;
+    g.beginPath(); g.moveTo(bx - px, by - py); g.lineTo(tx - px * 0.3, ty - py * 0.3); g.lineTo(tx + Math.cos(a) * w * 0.8, ty + Math.sin(a) * w * 0.8); g.lineTo(tx + px * 0.3, ty + py * 0.3); g.lineTo(bx + px, by + py); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,220,255,0.55)'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, by); g.lineTo(tx + Math.cos(a) * w * 0.8, ty + Math.sin(a) * w * 0.8); g.stroke();
+  }
+  pillarCache.set(k, c);
+  return c;
+}
 
 // ---- 圖示：武器／被動／道具（64px 圓形徽章），HUD 與升級卡片共用 ----
 const iconCache = new Map();
@@ -985,35 +1406,44 @@ function makeChest() {
   return c;
 }
 
-return { rng, glow, makeGround, makeCreature, drawPlayer, PALETTES, makeIcon, makeChest };
+return { rng, glow, makeGround, makeCreature, drawPlayer, PALETTES, makePillar, makeIcon, makeChest };
 })();
 
 // ---- render.js
 const __m_render_js = (() => {
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
-const { VW } = __m_sim_js;
-const { ENEMIES, WEAPONS, PASSIVES } = __m_content_js;
-const { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, PALETTES } = __m_art_js;
+const { VW, terrainIn } = __m_sim_js;
+const { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } = __m_content_js;
+const { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } = __m_art_js;
+// shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
-  mite:     { seed: 11, radius: 11, hue: 290, eyes: 1 },
-  moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3 },
-  brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7 },
-  spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3 },
-  splitter: { seed: 64, radius: 15, hue: 200, eyes: 2, spikes: 4 },
+  mite:     { seed: 11, radius: 11, hue: 290, eyes: 1, shared: true },
+  moth:     { seed: 5,  radius: 9,  hue: 20,  eyes: 1, spikes: 3, shared: true },
+  brute:    { seed: 23, radius: 20, hue: 150, eyes: 2, spikes: 7, shared: true },
+  spitter:  { seed: 41, radius: 13, hue: 95,  eyes: 3, shared: true },
+  splitter: { seed: 64, radius: 15, hue: 200, eyes: 2, spikes: 4, shared: true },
+  leech:    { seed: 91, radius: 12, hue: 110, eyes: 2 },
+  bloater:  { seed: 37, radius: 16, hue: 60,  eyes: 1, spikes: 6 },
+  turret:   { seed: 13, radius: 14, hue: 190, eyes: 1, spikes: 9 },
+  blinker:  { seed: 58, radius: 10, hue: 300, eyes: 2, spikes: 2 },
+  shell:    { seed: 29, radius: 17, hue: 230, eyes: 2, spikes: 10 },
   boss1:    { seed: 77, radius: 42, hue: 322, eyes: 3, spikes: 12 },
+  boss2:    { seed: 83, radius: 40, hue: 95,  eyes: 4, spikes: 6 },
+  boss3:    { seed: 47, radius: 44, hue: 250, eyes: 1, spikes: 16 },
 };
 const AFFIX_COLOR = { swift: 'rgba(120,255,200,1)', regen: 'rgba(120,255,120,1)', armor: 'rgba(255,200,90,1)' };
 
-function createRenderer() {
+function createRenderer(chapter = CHAPTER1) {
   const sprites = {};
-  for (const k of Object.keys(ENEMIES)) sprites[k] = makeCreature(CREATURE_ART[k]);
-  const ground = makeGround(PALETTES.moss);
+  for (const k of Object.keys(ENEMIES)) { const a = CREATURE_ART[k]; sprites[k] = makeCreature({ ...a, hue: a.hue + (a.shared ? chapter.hue : 0) }); }
+  const ground = makeGround(PALETTES[chapter.palette], 7 + chapter.id);
   const chestImg = makeChest();
   const G = {
     bolt: glow('rgba(255,210,120,1)', 14), gem: glow('rgba(120,230,255,1)', 12), spark: glow('rgba(255,160,220,1)', 10),
     star: glow('rgba(140,235,255,1)', 14), spore: glow('rgba(255,90,200,1)', 16), orb: glow('rgba(150,235,255,1)', 22),
     gold: glow('rgba(255,210,90,1)', 30), heal: glow('rgba(255,140,170,1)', 18), magnet: glow('rgba(120,200,255,1)', 18),
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
+    crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
@@ -1036,11 +1466,15 @@ function createRenderer() {
         case 'level': fx.levelFlash = 1; burst(e.x, e.y, 30, G.gem, 220); break;
         case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18 }); break;
         case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3 }); break;
-        case 'burst': fx.rings.push({ x: e.x, y: e.y, r: 70, life: 0.35, color: 'spore' }); break;
+        case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
         case 'heal': burst(e.x, e.y, 16, G.heal, 120); break;
         case 'magnet': fx.rings.push({ x: e.x, y: e.y, r: 300, life: 0.5, color: 'magnet' }); break;
         case 'announce': banner(e.text, e.big); if (e.big) fx.shake = 10; break;
+        case 'blast': fx.shake = Math.max(fx.shake, 6); fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 26, G.blast, 240, 0.6, 14); break;
+        case 'blink': burst(e.x, e.y, 14, G.crystal, 150, 0.4, 10); break;
+        case 'spark': burst(e.x, e.y, 3, G.crystal, 90, 0.25, 8); break;
+        case 'revive': fx.whiteFlash = 1; banner('燈芯復燃！', true); burst(e.x, e.y, 80, G.gold, 320, 1, 14); break;
         case 'bossdown': fx.whiteFlash = 1; fx.shake = 16; burst(e.x, e.y, 120, G.gold, 380, 1.4, 16); burst(e.x, e.y, 80, G.spore, 300, 1.2, 14); break;
       }
     }
@@ -1068,6 +1502,40 @@ function createRenderer() {
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
     g.fillStyle = g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+
+    // 泥沼：深色水窪＋一圈反光
+    const ter = s.chapter.terrain;
+    if (ter === 'pools') for (const f of terrainIn('pools', s.terrainSeed, camX - 80, camY - 80, camX + VW + 80, camY + vh + 80)) {
+      const pg = g.createRadialGradient(f.x, f.y, f.r * 0.2, f.x, f.y, f.r);
+      pg.addColorStop(0, 'rgba(10,30,22,0.85)'); pg.addColorStop(0.8, 'rgba(20,50,34,0.7)'); pg.addColorStop(1, 'rgba(40,80,50,0)');
+      g.fillStyle = pg; g.beginPath(); g.ellipse(f.x, f.y, f.r, f.r * 0.8, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(150,230,170,${0.12 + Math.sin(T * 1.5 + f.x) * 0.05})`; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(f.x, f.y, f.r * 0.7, f.r * 0.52, 0, 0, Math.PI * 2); g.stroke();
+    }
+
+    // 地面危險：預警時畫虛線輪廓，生效時填滿
+    for (const h of s.hazards) {
+      const active = h.t >= h.arm, k = active ? 1 : h.t / h.arm;
+      if (h.type === 'zone') {
+        const col = h.src === 'poison' ? '120,255,140' : h.src === 'rain' ? '180,150,255' : '255,120,120';
+        g.fillStyle = `rgba(${col},${active ? 0.35 : 0.08 + k * 0.12})`;
+        g.beginPath(); g.arc(h.x, h.y, h.r, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = `rgba(${col},${active ? 0.8 : 0.5})`; g.lineWidth = 2; g.setLineDash(active ? [] : [6, 5]);
+        g.beginPath(); g.arc(h.x, h.y, active ? h.r : h.r * (0.4 + k * 0.6), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      } else if (h.type === 'beam') {
+        g.save(); g.translate(h.x, h.y); g.rotate(h.ang);
+        if (active) {
+          g.globalCompositeOperation = 'lighter';
+          g.fillStyle = 'rgba(200,120,255,0.35)'; g.fillRect(0, -h.w, h.len, h.w * 2);
+          g.fillStyle = 'rgba(255,230,255,0.9)'; g.fillRect(0, -h.w * 0.25, h.len, h.w * 0.5);
+          g.globalCompositeOperation = 'source-over';
+        } else {
+          g.strokeStyle = `rgba(230,160,255,${0.3 + k * 0.5})`; g.lineWidth = 2; g.setLineDash([10, 8]);
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(h.len, 0); g.stroke(); g.setLineDash([]);
+        }
+        g.restore();
+      }
+    }
 
     // 競技場光圈：外面壓暗，邊緣發光
     if (s.arena) {
@@ -1115,22 +1583,48 @@ function createRenderer() {
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
-    // Boss 衝刺預警
-    for (const e of s.enemies) if (e.tele) {
-      g.save(); g.translate(e.x, e.y); g.rotate(Math.atan2(e.tele.dy, e.tele.dx));
-      g.fillStyle = `rgba(255,60,120,${0.18 + Math.sin(T * 30) * 0.08})`; g.fillRect(0, -e.r, e.tele.len, e.r * 2);
-      g.strokeStyle = 'rgba(255,120,170,0.7)'; g.lineWidth = 1.5; g.strokeRect(0, -e.r, e.tele.len, e.r * 2);
-      g.restore();
+    // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
+    for (const e of s.enemies) {
+      if (e.tele) {
+        const w = e.tele.w ?? e.r;
+        g.save(); g.translate(e.x, e.y); g.rotate(Math.atan2(e.tele.dy, e.tele.dx));
+        g.fillStyle = `rgba(255,60,120,${0.18 + Math.sin(T * 30) * 0.08})`; g.fillRect(0, -w, e.tele.len, w * 2);
+        g.strokeStyle = 'rgba(255,120,170,0.7)'; g.lineWidth = 1.5; g.strokeRect(0, -w, e.tele.len, w * 2);
+        g.restore();
+      }
+      if (e.fuse > 0) {
+        const R = ENEMIES[e.kind].blastR;
+        g.fillStyle = `rgba(255,140,60,${0.12 + Math.sin(T * 25) * 0.08})`; g.beginPath(); g.arc(e.x, e.y, R, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = 'rgba(255,170,90,0.8)'; g.lineWidth = 2; g.beginPath(); g.arc(e.x, e.y, R * (1 - e.fuse / ENEMIES[e.kind].fuse), 0, Math.PI * 2); g.stroke();
+      }
+      if (e.warn) {
+        const q = 1 - e.warn.t / ENEMIES[e.kind].blinkWarn;
+        g.strokeStyle = `rgba(255,150,255,${0.4 + q * 0.5})`; g.lineWidth = 2;
+        g.beginPath(); g.arc(e.warn.x, e.warn.y, 16 - q * 8, 0, Math.PI * 2); g.stroke();
+        g.beginPath(); g.moveTo(e.warn.x - 10, e.warn.y); g.lineTo(e.warn.x + 10, e.warn.y); g.moveTo(e.warn.x, e.warn.y - 10); g.lineTo(e.warn.x, e.warn.y + 10); g.stroke();
+      }
     }
 
-    // 敵人（依 y 排序）
-    const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2)).sort((a, b) => a.y - b.y);
+    // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
+    const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
+    if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
+    vis.push({ player: true, y: p.y });
+    vis.sort((a, b) => a.y - b.y);
     for (const e of vis) {
+      if (e.player) { drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); continue; }
+      if (e.pillar) {
+        const f = e.pillar, img = makePillar(f.r), k = f.r / (Math.round(f.r / 3) * 3);
+        g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35 + Math.sin(T * 2 + f.x) * 0.1;
+        g.drawImage(G.crystal, f.x - f.r * 1.8, f.y - f.r * 2.4, f.r * 3.6, f.r * 3.6); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        g.drawImage(img, f.x - img.width / 2 * k, f.y - img.height / 2 * k, img.width * k, img.height * k);
+        continue;
+      }
       const sp = sprites[e.kind], img = sp.frames[Math.floor(e.frame) % sp.frames.length];
       const k = e.r / ENEMIES[e.kind].r, size = sp.size * k;
-      if (e.elite || e.kind === 'boss1') {
+      const boss = ENEMIES[e.kind].ai === 'boss';
+      if (e.elite || boss) {
         g.globalCompositeOperation = 'lighter';
-        const gl = e.kind === 'boss1' ? G.boss : G['elite_' + e.affix];
+        const gl = boss ? G.boss : G['elite_' + e.affix];
         const pr = e.r * (2.2 + Math.sin(T * 5) * 0.15);
         g.globalAlpha = 0.6; g.drawImage(gl, e.x - pr, e.y - pr, pr * 2, pr * 2); g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
@@ -1145,8 +1639,6 @@ function createRenderer() {
         g.fillStyle = AFFIX_COLOR[e.affix]; g.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);
       }
     }
-
-    drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4);
 
     // 子彈、光球、電弧、粒子（加亮疊加）
     g.globalCompositeOperation = 'lighter';
@@ -1186,7 +1678,7 @@ function createRenderer() {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
@@ -1201,8 +1693,22 @@ function createRenderer() {
     }
     g.globalAlpha = 1;
 
-    // 螢幕空間：暗角、受傷紅框、白閃
+    // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
+    if (s.chapter.fog) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
+      const px = (p.x - camX) * scale, py = (p.y - camY) * scale, R = s.chapter.fog * scale;
+      const fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
+      fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
+      g.fillStyle = fg; g.fillRect(0, 0, W, H);
+      g.globalAlpha = 0.18;
+      for (let i = 0; i < 5; i++) { // 緩慢飄動的霧團
+        const fx0 = ((i * 173 + T * (8 + i * 3)) % (W + 400)) - 200, fy0 = ((i * 311) % H);
+        const mg = g.createRadialGradient(fx0, fy0, 0, fx0, fy0, 180 * scale / 2);
+        mg.addColorStop(0, 'rgba(200,230,210,0.9)'); mg.addColorStop(1, 'rgba(200,230,210,0)');
+        g.fillStyle = mg; g.fillRect(fx0 - 200 * scale, fy0 - 200 * scale, 400 * scale, 400 * scale);
+      }
+      g.globalAlpha = 1;
+    }
     const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
@@ -1302,27 +1808,322 @@ function drawSlot(g, icon, x, y, S, lv) {
 return { createRenderer };
 })();
 
+// ---- save.js
+const __m_save_js = (() => {
+// 存檔：讀、寫、升級、修復。不直接碰 localStorage——儲存體由 createStore 包起來注入，Node 測試可塞假的。
+//
+// 原則（tools/save-test.mjs 逐條驗證，並用突變證明測試會紅）：
+// 1. localStorage 任何一步都可能 throw（隱私模式、被停用、空間滿）。讀寫都包 try/catch，失敗就改用記憶體存檔，遊戲照玩。
+// 2. 看不懂的東西不覆蓋：壞檔（不是 JSON、被截斷）先備份到 <KEY>.corrupt 再用新檔；比本程式新的版本（future）只讀不寫。
+// 3. 升級舊版存檔前，先把原文備份到 <KEY>.backup.v<舊版號>；備份寫不進去就不升級寫回（只在記憶體玩），
+//    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
+// 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS } = __m_content_js;
+const SAVE_KEY = 'lumen.save';
+const SAVE_VERSION = 1;
+const MAX_ITEMS = 60;
+
+function defaultProfile() {
+  return {
+    v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
+    gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null } },
+    chapters: { cleared: [], best: {} },
+    stats: { runs: 0, kills: 0 },
+  };
+}
+
+// ---- 儲存體：包住 localStorage 的每個動作；拿不到就退回記憶體 ----
+function createStore(getStorage) {
+  let ls = null;
+  try { ls = getStorage(); ls.getItem('__probe__'); } catch { ls = null; }
+  const mem = new Map();
+  const store = {
+    persistent: !!ls,
+    get(k) { if (!ls) return { ok: true, value: mem.has(k) ? mem.get(k) : null }; try { return { ok: true, value: ls.getItem(k) }; } catch (e) { return { ok: false, error: e?.name || 'Error' }; } },
+    set(k, v) { if (!ls) { mem.set(k, v); return { ok: true, memory: true }; } try { ls.setItem(k, v); return { ok: true }; } catch (e) { mem.set(k, v); return { ok: false, error: e?.name || 'Error' }; } },
+  };
+  return store;
+}
+
+// ---- 版本升級：MIGRATIONS[n] 把 v=n 的資料升成 v=n+1 ----
+// v0＝沒有版本號的存檔（本作沒有正式發行過 v0；這是給「缺版本號」的資料一條升級路，而不是直接丟棄）。
+const MIGRATIONS = {
+  0: (d) => ({ ...defaultProfile(), oil: d.oil, talents: d.talents, v: 1 }),
+};
+
+// 讀檔。回傳 { profile, status, notes, writable }
+// status：new 沒存檔 / ok / repaired 有欄位被修 / migrated 升級成功 / corrupt 壞檔已備份 / future 比程式新（唯讀）
+//         unavailable 儲存體讀不到 / migrate-failed 升級失敗（原檔保留、唯讀）/ backup-failed 升級前備份失敗（原檔保留、唯讀）
+function loadProfile(store) {
+  const got = store.get(SAVE_KEY);
+  if (!got.ok) return { profile: defaultProfile(), status: 'unavailable', notes: [`讀取失敗：${got.error}`], writable: false };
+  if (got.value == null) return { profile: defaultProfile(), status: 'new', notes: [], writable: true };
+  let data;
+  try { data = JSON.parse(got.value); } catch { data = undefined; }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    store.set(`${SAVE_KEY}.corrupt`, got.value);
+    return { profile: defaultProfile(), status: 'corrupt', notes: ['存檔無法解析，已備份到 .corrupt 並重新開始'], writable: true };
+  }
+  let v = Number.isInteger(data.v) ? data.v : 0;
+  if (v > SAVE_VERSION) {
+    const r = sanitize(data);
+    return { profile: r.profile, status: 'future', notes: [`存檔版本 v${v} 比遊戲新，這次只讀不寫`, ...r.notes], writable: false };
+  }
+  let status = 'ok';
+  if (v < SAVE_VERSION) {
+    const b = store.set(`${SAVE_KEY}.backup.v${v}`, got.value);
+    if (!b.ok || b.memory) {
+      const r = sanitize(tryMigrate(data, v) ?? {});
+      return { profile: r.profile, status: 'backup-failed', notes: ['升級前無法備份舊存檔，為保護進度，這次只在記憶體中遊玩'], writable: false };
+    }
+    const migrated = tryMigrate(data, v);
+    if (!migrated) return { profile: defaultProfile(), status: 'migrate-failed', notes: [`v${v} 存檔升級失敗，原檔保留在 .backup.v${v}`], writable: false };
+    data = migrated; status = 'migrated';
+  }
+  const r = sanitize(data);
+  if (r.notes.length && status === 'ok') status = 'repaired';
+  return { profile: r.profile, status, notes: r.notes, writable: true };
+}
+function tryMigrate(data, from) {
+  try {
+    let d = data;
+    for (let v = from; v < SAVE_VERSION; v++) { d = MIGRATIONS[v](d); if (!d || d.v !== v + 1) throw new Error(`migration ${v} 結果不對`); }
+    return d;
+  } catch { return null; }
+}
+
+function saveProfile(store, profile, writable = true) {
+  if (!writable) return { ok: false, reason: 'readonly' };
+  let json;
+  try { json = JSON.stringify(profile); } catch (e) { return { ok: false, reason: e?.name || 'Error' }; }
+  const r = store.set(SAVE_KEY, json);
+  return r.ok ? { ok: true, memory: !!r.memory } : { ok: false, reason: r.error };
+}
+
+// ---- 逐欄修復 ----
+const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+const nonNegInt = (x) => Number.isFinite(x) && x >= 0 ? Math.floor(x) : null;
+function sanitize(d) {
+  const notes = [], out = defaultProfile();
+  const fix = (msg) => notes.push(msg);
+
+  const oil = nonNegInt(d.oil);
+  if (oil === null) { if (d.oil !== undefined) fix(`oil 不合法（${JSON.stringify(d.oil)}），歸零`); } else out.oil = oil;
+
+  if (isObj(d.talents)) {
+    for (const [id, lv] of Object.entries(d.talents)) {
+      const def = TALENTS[id];
+      if (!def) { fix(`未知天賦 ${id} 已移除`); continue; }
+      const n = nonNegInt(lv);
+      if (n === null) { fix(`天賦 ${id} 等級不合法，歸零`); continue; }
+      if (n > def.cost.length) fix(`天賦 ${id} 等級 ${n} 超過上限，改為 ${def.cost.length}`);
+      if (n > 0) out.talents[id] = Math.min(n, def.cost.length);
+    }
+  } else if (d.talents !== undefined) fix('talents 型別不對，重設');
+
+  const uids = new Set();
+  if (isObj(d.gear) && Array.isArray(d.gear.items)) {
+    for (const it of d.gear.items) {
+      const item = sanitizeItem(it);
+      if (!item || uids.has(item.uid)) { fix('移除一件不合法或重複的裝備'); continue; }
+      if (out.gear.items.length >= MAX_ITEMS) { fix('裝備超過上限，多的移除'); break; }
+      uids.add(item.uid); out.gear.items.push(item);
+    }
+    if (isObj(d.gear.equipped)) {
+      for (const slot of Object.keys(out.gear.equipped)) {
+        const uid = d.gear.equipped[slot];
+        if (uid == null) continue;
+        const it = out.gear.items.find((i) => i.uid === uid);
+        if (it && it.slot === slot) out.gear.equipped[slot] = uid; else fix(`${slot} 裝備參照不存在，卸下`);
+      }
+    }
+  } else if (d.gear !== undefined) fix('gear 型別不對，重設');
+  const maxUid = Math.max(0, ...uids);
+  const nu = nonNegInt(d.nextUid);
+  out.nextUid = Math.max(maxUid + 1, nu ?? 1);
+
+  if (isObj(d.chapters)) {
+    const valid = new Set(CHAPTERS.map((c) => c.id));
+    if (Array.isArray(d.chapters.cleared)) out.chapters.cleared = [...new Set(d.chapters.cleared.filter((id) => valid.has(id)))].sort();
+    if (isObj(d.chapters.best)) for (const [id, b] of Object.entries(d.chapters.best)) {
+      if (valid.has(Number(id)) && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) out.chapters.best[id] = { t: b.t, kills: nonNegInt(b.kills) };
+    }
+  } else if (d.chapters !== undefined) fix('chapters 型別不對，重設');
+
+  if (isObj(d.stats)) { out.stats.runs = nonNegInt(d.stats.runs) ?? 0; out.stats.kills = nonNegInt(d.stats.kills) ?? 0; }
+  return { profile: out, notes };
+}
+const AFFIX_STATS = new Map(GEAR_AFFIXES.map(([stat, type]) => [stat, type]));
+function sanitizeItem(it) {
+  if (!isObj(it)) return null;
+  const uid = nonNegInt(it.uid), rarity = nonNegInt(it.rarity), lv = nonNegInt(it.lv);
+  if (!uid || !GEAR_SLOTS[it.slot] || rarity === null || rarity >= RARITIES.length || !lv) return null;
+  const affixes = Array.isArray(it.affixes) ? it.affixes.filter((a) => isObj(a) && AFFIX_STATS.get(a.stat) === a.type && Number.isFinite(a.value)).slice(0, 4) : [];
+  return { uid, slot: it.slot, rarity, lv: Math.min(lv, GEAR_MAX_LV), affixes };
+}
+
+return { SAVE_KEY, SAVE_VERSION, MAX_ITEMS, defaultProfile, createStore, MIGRATIONS, loadProfile, saveProfile, sanitize };
+})();
+
+// ---- meta.js
+const __m_meta_js = (() => {
+// 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
+// 數值全部在 content.js；疊加規則全部在 stats.js。
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL } = __m_content_js;
+const { aggregate } = __m_stats_js;
+const { MAX_ITEMS } = __m_save_js;
+// ---- 加成：天賦＋已裝備的裝備 → modifier 陣列（交給 createSim 的 meta） ----
+function talentMods(profile) {
+  const out = [];
+  for (const [id, lv] of Object.entries(profile.talents)) for (const m of TALENTS[id].mods) for (let i = 0; i < lv; i++) out.push(m);
+  return out;
+}
+// 裝備主屬性：稀有度基礎值 × (1 + 0.1 × (強化等級 − 1))；副詞條不受強化影響
+function gearMods(item) {
+  const main = GEAR_SLOTS[item.slot].main, k = 1 + 0.1 * (item.lv - 1);
+  const m = { stat: main.stat };
+  if (main.pct) m.pct = main.pct[item.rarity] * k; else m.flat = main.flat[item.rarity] * k;
+  return [m, ...item.affixes.map((a) => ({ stat: a.stat, [a.type]: a.value }))];
+}
+function equippedItems(profile) {
+  return Object.values(profile.gear.equipped).filter((u) => u != null).map((u) => profile.gear.items.find((i) => i.uid === u)).filter(Boolean);
+}
+function profileMods(profile) { return [...talentMods(profile), ...equippedItems(profile).flatMap(gearMods)]; }
+const oilBonus = (profile) => aggregate(profileMods(profile)).oil.pct;
+
+// ---- 天賦 ----
+function talentCost(profile, id) { const lv = profile.talents[id] || 0; return TALENTS[id].cost[lv] ?? null; }
+function buyTalent(profile, id) {
+  const cost = talentCost(profile, id);
+  if (cost === null) return { ok: false, reason: 'max' };
+  if (profile.oil < cost) return { ok: false, reason: 'oil' };
+  profile.oil -= cost; profile.talents[id] = (profile.talents[id] || 0) + 1;
+  return { ok: true, cost };
+}
+
+// ---- 裝備 ----
+function rollGear(profile, rand, weights, minRarity = 0) {
+  let total = 0; weights.forEach((w, i) => { if (i >= minRarity) total += w; });
+  let x = rand() * total, rarity = minRarity;
+  for (let i = minRarity; i < weights.length; i++) { x -= weights[i]; if (x <= 0 && weights[i] > 0) { rarity = i; break; } }
+  const slots = Object.keys(GEAR_SLOTS), slot = slots[Math.floor(rand() * slots.length)];
+  const pool = GEAR_AFFIXES.filter(([stat]) => stat !== GEAR_SLOTS[slot].main.stat);
+  const affixes = [];
+  for (let i = 0; i < RARITIES[rarity].affixes && pool.length; i++) {
+    const [stat, type, vals] = pool.splice(Math.floor(rand() * pool.length), 1)[0];
+    affixes.push({ stat, type, value: vals[rarity] });
+  }
+  return { uid: profile.nextUid++, slot, rarity, lv: 1, affixes };
+}
+function equip(profile, uid) {
+  const it = profile.gear.items.find((i) => i.uid === uid);
+  if (!it) return { ok: false };
+  profile.gear.equipped[it.slot] = uid;
+  return { ok: true };
+}
+function unequip(profile, slot) { profile.gear.equipped[slot] = null; return { ok: true }; }
+function upgradeGear(profile, uid) {
+  const it = profile.gear.items.find((i) => i.uid === uid);
+  if (!it) return { ok: false, reason: 'missing' };
+  if (it.lv >= GEAR_MAX_LV) return { ok: false, reason: 'max' };
+  const cost = gearUpgradeCost(it.rarity, it.lv);
+  if (profile.oil < cost) return { ok: false, reason: 'oil' };
+  profile.oil -= cost; it.lv++;
+  return { ok: true, cost };
+}
+const salvageValue = (it) => Math.round(RARITIES[it.rarity].salvage * (1 + 0.25 * (it.lv - 1)));
+function salvage(profile, uid) {
+  const i = profile.gear.items.findIndex((x) => x.uid === uid);
+  if (i < 0) return { ok: false };
+  const it = profile.gear.items[i];
+  if (profile.gear.equipped[it.slot] === uid) profile.gear.equipped[it.slot] = null;
+  profile.gear.items.splice(i, 1);
+  const v = salvageValue(it); profile.oil += v;
+  return { ok: true, oil: v };
+}
+
+// ---- 燈油結算 ----
+// 公式見 content.js 的 OIL 說明。lines 逐項列出，total 必須等於 floor(subtotal × (1 + bonusPct))。
+function computeOil(ledger, chapter, { won, firstClear }, bonusPct) {
+  const lines = [];
+  let killOil = 0, killCount = 0;
+  for (const [kind, n] of Object.entries(ledger.kills)) { killOil += ENEMIES[kind].oil * n; killCount += n; }
+  killOil = Math.floor(killOil * OIL.perKill);
+  lines.push({ label: `擊倒 ${killCount}`, amount: killOil });
+  if (ledger.elites) lines.push({ label: `精英 ×${ledger.elites}`, amount: ledger.elites * OIL.elite });
+  if (won && ledger.boss) lines.push({ label: '擊敗燈塔守衛', amount: OIL.boss });
+  if (won) lines.push({ label: '點亮燈塔', amount: chapter.reward.clear });
+  if (won && firstClear) lines.push({ label: '首次通關', amount: chapter.reward.firstClear });
+  const subtotal = lines.reduce((a, l) => a + l.amount, 0);
+  const total = Math.floor(subtotal * (1 + bonusPct));
+  if (total !== subtotal) lines.push({ label: `聚油加成 +${Math.round(bonusPct * 100)}%`, amount: total - subtotal });
+  return { lines, subtotal, bonusPct, total };
+}
+
+// 一局結束：燈油入帳、掉裝備、記通關與最佳紀錄。回傳給結算畫面的摘要。
+function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
+  const chapter = CHAPTERS.find((c) => c.id === chapterId);
+  const firstClear = won && !profile.chapters.cleared.includes(chapterId);
+  const oil = computeOil(ledger, chapter, { won, firstClear }, oilBonus(profile));
+  profile.oil += oil.total;
+
+  const drops = [];
+  const n = won ? 2 : t >= 240 ? 1 : 0;
+  for (let i = 0; i < n; i++) drops.push(rollGear(profile, rand, chapter.reward.gear));
+  if (firstClear) drops.push(rollGear(profile, rand, chapter.reward.gear.map((w, i) => (i >= 2 ? Math.max(w, 1) : w)), 2));
+  let autoSalvage = 0;
+  for (const it of drops) {
+    if (profile.gear.items.length < MAX_ITEMS) profile.gear.items.push(it);
+    else { const v = salvageValue(it); autoSalvage += v; it.salvaged = v; }
+  }
+  profile.oil += autoSalvage;
+
+  if (won && firstClear) profile.chapters.cleared = [...profile.chapters.cleared, chapterId].sort();
+  const best = profile.chapters.best[chapterId];
+  if (won && (!best || t < best.t)) profile.chapters.best[chapterId] = { t: Math.round(t), kills };
+  profile.stats.runs++; profile.stats.kills += kills;
+  return { oil, drops, autoSalvage, firstClear, won };
+}
+
+const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
+
+return { talentMods, gearMods, equippedItems, profileMods, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, salvageValue, salvage, computeOil, settleRun, chapterUnlocked };
+})();
+
 // ---- ui.js
 const __m_ui_js = (() => {
-// HTML 介面層：主選單、升級三選一、燈核、暫停、結算。只負責顯示與把點擊轉成 actions。
-const { WEAPONS, PASSIVES, RESONANCES } = __m_content_js;
+// HTML 介面層：主選單、章節、天賦、裝備、升級三選一、燈核、暫停、結算、提示。
+// 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
+const { talentCost, gearMods, salvageValue, chapterUnlocked, profileMods } = __m_meta_js;
+const { aggregate } = __m_stats_js;
 const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const num = (n) => Math.floor(n).toLocaleString('zh-Hant');
+
+// 加成顯示：pct → +12%；flat → +10（回復顯示 /秒）
+function fmtMod(m) {
+  const name = STAT_NAMES[m.stat];
+  if (m.pct) return `${name} ${m.stat === 'cdr' || m.stat === 'armor' ? '-' : '+'}${+(m.pct * 100).toFixed(1)}%`;
+  return `${name} +${+m.flat.toFixed(2)}${m.stat === 'regen' ? '/秒' : ''}`;
+}
+const gearName = (it) => `${RARITIES[it.rarity].name}${GEAR_SLOTS[it.slot].name}${it.lv > 1 ? ` +${it.lv - 1}` : ''}`;
 
 function createUI(actions) {
   let lockUntil = 0; // 面板剛出現時短暫鎖住點擊，避免移動中的手指誤點
   const lock = () => { lockUntil = performance.now() + 350; };
   document.getElementById('stage').addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
-    if (!el || performance.now() < lockUntil) return;
-    actions[el.dataset.act]?.(Number(el.dataset.i));
+    if (!el || el.disabled || performance.now() < lockUntil) return;
+    actions[el.dataset.act]?.(el.dataset);
   });
 
   function show(id) {
     for (const o of document.querySelectorAll('.overlay')) o.classList.toggle('show', o.id === id);
-    $('#pauseBtn').style.display = id === null ? 'block' : 'none';
+    $('#pauseBtn').style.display = id === null ? 'flex' : 'none';
     if (id) lock();
   }
   function card(o, i) {
@@ -1336,11 +2137,80 @@ function createUI(actions) {
     const ps = Object.entries(p.passives).map(([id, lv]) => `<span><img src="${iconUrl(id, PASSIVES[id].color)}" alt="">${esc(PASSIVES[id].name)}<br>Lv ${lv}</span>`);
     return w.concat(ps).join('');
   }
-  const clock = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const oilTag = (profile) => `<div class="oil">燈油 <b>${num(profile.oil)}</b></div>`;
+  function gearTile(it, equipped) {
+    const c = RARITIES[it.rarity].color;
+    return `<button class="gear" data-act="gearOpen" data-uid="${it.uid}" style="--c:${c}">
+      <span class="slot">${GEAR_SLOTS[it.slot].name}</span><b>${esc(gearName(it))}</b>
+      <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
+  }
 
+  let toastT = 0;
   return {
     hud() { show(null); },
-    menu() { show('menu'); },
+    toast(text, ms = 3500) {
+      const t = $('#toast'); t.textContent = text; t.classList.add('show');
+      clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+    },
+
+    menu(profile) {
+      $('#menu .oil-slot').innerHTML = oilTag(profile);
+      const cleared = profile.chapters.cleared.length;
+      $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length} 座燈塔` : '尚未點亮任何燈塔';
+      show('menu');
+    },
+    chapters(profile) {
+      $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
+        const open = chapterUnlocked(profile, c.id), done = profile.chapters.cleared.includes(c.id), best = profile.chapters.best[c.id];
+        return `<button class="chapter ch${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
+          <b>第${'一二三四五六'[c.id - 1]}章・${esc(c.name)}</b>${done ? '<span class="done">已點亮</span>' : ''}
+          <div>${open ? esc(c.tagline) : `通關第${'一二三四五六'[c.id - 2]}章後解鎖`}</div>
+          ${best ? `<div class="best">最快 ${clock(best.t)}・擊倒 ${best.kills}</div>` : ''}</button>`;
+      }).join('');
+      show('chapters');
+    },
+    talents(profile) {
+      $('#talents .oil-slot').innerHTML = oilTag(profile);
+      $('#talents .list').innerHTML = Object.entries(TALENTS).map(([id, t]) => {
+        const lv = profile.talents[id] || 0, max = t.cost.length, cost = talentCost(profile, id);
+        const total = t.mods.map((m) => fmtMod({ stat: m.stat, flat: (m.flat || 0) * lv, pct: (m.pct || 0) * lv })).join('、');
+        return `<div class="row"><div class="info"><b>${esc(t.name)}</b> <span class="lv">${lv} / ${max}</span>
+          <div class="d">${esc(t.desc)}${lv ? `（目前 ${esc(total)}）` : ''}</div></div>
+          ${cost === null ? '<span class="max">已滿</span>' : `<button class="buy" data-act="buyTalent" data-id="${id}" ${profile.oil < cost ? 'disabled' : ''}>升級<br><small>${num(cost)}</small></button>`}</div>`;
+      }).join('');
+      show('talents');
+    },
+    gear(profile, openUid = null) {
+      $('#gear .oil-slot').innerHTML = oilTag(profile);
+      const eq = profile.gear.equipped, items = profile.gear.items;
+      $('#gear .equipped').innerHTML = Object.keys(GEAR_SLOTS).map((slot) => {
+        const it = items.find((i) => i.uid === eq[slot]);
+        return it ? gearTile(it, true) : `<div class="gear empty"><span class="slot">${GEAR_SLOTS[slot].name}</span><b>未裝備</b></div>`;
+      }).join('');
+      const agg = aggregate(profileMods(profile));
+      const lines = Object.entries(agg).filter(([, a]) => a.flat || a.pct).map(([stat, a]) => fmtMod({ stat, flat: a.flat, pct: a.pct }));
+      $('#gear .summary').textContent = lines.length ? `天賦＋裝備合計：${lines.join('、')}` : '還沒有任何局外加成';
+      const sorted = [...items].sort((a, b) => b.rarity - a.rarity || b.lv - a.lv || a.uid - b.uid);
+      $('#gear .bag-title').textContent = `背包 ${items.length}`;
+      $('#gear .bag').innerHTML = sorted.map((it) => gearTile(it, eq[it.slot] === it.uid)).join('') || '<div class="empty-bag">還沒有裝備。打完一章（或撐過 4 分鐘）會掉落。</div>';
+      const sheet = $('#gear .sheet');
+      const it = items.find((i) => i.uid === openUid);
+      if (it) {
+        const on = eq[it.slot] === it.uid, cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null;
+        sheet.innerHTML = `<div class="sheet-card" style="--c:${RARITIES[it.rarity].color}">
+          <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
+          <ul>${gearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          <div class="acts">
+            <button class="btn small" data-act="${on ? 'gearUnequip' : 'gearEquip'}" data-uid="${it.uid}">${on ? '卸下' : '裝備'}</button>
+            ${cost === null ? '<button class="btn small ghost" disabled>已滿級</button>' : `<button class="btn small" data-act="gearUpgrade" data-uid="${it.uid}" ${profile.oil < cost ? 'disabled' : ''}>強化（${num(cost)}）</button>`}
+            <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))}）</button>
+            <button class="btn small ghost" data-act="gearClose">關閉</button></div></div>`;
+        sheet.classList.add('show');
+      } else sheet.classList.remove('show');
+      if ($('#gear').classList.contains('show')) return; // 已經開著就只重畫內容，不重新淡入
+      show('gear');
+    },
+
     levelUp(choices) { $('#levelup .cards').innerHTML = choices.map(card).join(''); show('levelup'); },
     chest(result) {
       $('#chest h2').textContent = result.type === 'evo' ? '共鳴覺醒！' : '燈核開啟';
@@ -1348,40 +2218,48 @@ function createUI(actions) {
       show('chest');
     },
     pause(s) { $('#pause .build').innerHTML = buildHtml(s.player); show('pause'); },
-    result(s) {
+    result(s, summary, profile) {
       const win = s.phase === 'win';
       const r = $('#result');
-      r.className = 'overlay ' + (win ? 'win' : 'lose');
+      r.className = 'overlay scroll ' + (win ? 'win' : 'lose');
       r.querySelector('h1').textContent = win ? '燈塔重燃' : '燈火熄滅';
-      r.querySelector('.sub').textContent = win ? `${s.chapter.name}的燈塔再次亮起。` : '菌潮吞沒了光……再試一次吧。';
+      r.querySelector('.sub').textContent = win ? `${s.chapter.name}的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
       r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—']]
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-      r.querySelector('.build')?.remove();
-      r.querySelector('.stats').insertAdjacentHTML('afterend', `<div class="build">${buildHtml(s.player)}</div>`);
+      r.querySelector('.ledger').innerHTML = summary.oil.lines.map((l) => `<div><span>${esc(l.label)}</span><b>+${num(l.amount)}</b></div>`).join('')
+        + `<div class="total"><span>本局燈油</span><b>+${num(summary.oil.total)}</b></div>`
+        + (summary.autoSalvage ? `<div class="note"><span>背包已滿，新裝備自動分解</span><b>+${num(summary.autoSalvage)}</b></div>` : '')
+        + `<div class="note"><span>目前持有</span><b>${num(profile.oil)}</b></div>`;
+      r.querySelector('.drops').innerHTML = summary.drops.length
+        ? `<div class="drops-title">獲得裝備</div>${summary.drops.map((it) => `<div class="drop" style="--c:${RARITIES[it.rarity].color}"><b>${esc(gearName(it))}</b><span>${esc(fmtMod(gearMods(it)[0]))}${it.salvaged ? '（已自動分解）' : ''}</span></div>`).join('')}`
+        : '';
       show('result');
     },
   };
 }
 
-return { createUI };
+return { fmtMod, gearName, createUI };
 })();
 
 // ---- main.js
 const __m_main_js = (() => {
-// 進入點：畫布尺寸、主迴圈、畫面狀態切換（主選單／遊戲中／暫停）。
+// 進入點：畫布尺寸、主迴圈、畫面狀態切換（主選單／章節／天賦／裝備／遊戲中／暫停／結算）、存檔。
 // 網址參數：?debug 顯示 FPS／實體數。
 const { createInput } = __m_input_js;
-const { createSim, VW } = __m_sim_js;
+const { createSim, makeRng, VW } = __m_sim_js;
 const { createRenderer } = __m_render_js;
-const { createUI } = __m_ui_js;
+const { createUI, gearName } = __m_ui_js;
+const { CHAPTERS, CHAPTER1 } = __m_content_js;
+const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
+const { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } = __m_meta_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
-let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單背景展示 / run 正式一局
-let renderer = createRenderer();
+let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
+let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1397,14 +2275,55 @@ function resize() {
 resize();
 addEventListener('resize', resize);
 
+// ---------- 存檔（任何失敗都不擋遊戲，只提示一次） ----------
+const store = createStore(() => window.localStorage);
+const loaded = loadProfile(store);
+let profile = loaded.profile, writable = loaded.writable, warnedSave = false;
+const LOAD_NOTICE = {
+  corrupt: '存檔損壞，已另外備份並重新開始。',
+  repaired: '部分存檔資料不正確，已自動修正。',
+  migrated: '存檔已升級到新版本（舊檔已備份）。',
+  future: '這份存檔來自較新版本的遊戲，這次遊玩不會寫入存檔。',
+  unavailable: '讀不到瀏覽器存檔，這次的進度只保留到關閉頁面為止。',
+  'migrate-failed': '存檔升級失敗，原檔已保留；這次的進度只保留到關閉頁面為止。',
+  'backup-failed': '無法備份舊存檔，為保護進度，這次只在記憶體中遊玩。',
+};
+function persist() {
+  const r = saveProfile(store, profile, writable);
+  if (warnedSave) return;
+  if (!r.ok && r.reason !== 'readonly') { warnedSave = true; ui.toast(`進度無法存入瀏覽器（${r.reason}），關閉頁面後會遺失。`, 6000); }
+  else if (r.ok && r.memory) { warnedSave = true; ui.toast('瀏覽器不允許存檔（例如無痕模式），進度只保留到關閉頁面為止。', 6000); }
+}
+
+// ---------- 介面動作 ----------
+const refreshGear = (uid) => ui.gear(profile, uid);
 const ui = createUI({
-  start: () => newRun(),
-  retry: () => newRun(),
+  openChapters: () => ui.chapters(profile),
+  openTalents: () => ui.talents(profile),
+  openGear: () => ui.gear(profile),
   menu: () => toMenu(),
-  choose: (i) => { sim.choose(i); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
+  startChapter: (d) => { const id = Number(d.id); if (chapterUnlocked(profile, id)) newRun(id); },
+  retry: () => newRun(chapterId),
+  buyTalent: (d) => { if (buyTalent(profile, d.id).ok) persist(); ui.talents(profile); },
+  gearOpen: (d) => refreshGear(Number(d.uid)),
+  gearClose: () => refreshGear(null),
+  gearEquip: (d) => { equip(profile, Number(d.uid)); persist(); refreshGear(Number(d.uid)); },
+  gearUnequip: (d) => { const it = profile.gear.items.find((i) => i.uid === Number(d.uid)); if (it) unequip(profile, it.slot); persist(); refreshGear(Number(d.uid)); },
+  gearUpgrade: (d) => { if (upgradeGear(profile, Number(d.uid)).ok) persist(); refreshGear(Number(d.uid)); },
+  gearSalvage: (d) => {
+    const it = profile.gear.items.find((i) => i.uid === Number(d.uid));
+    if (!it || (it.rarity >= 2 && !confirm(`確定分解「${gearName(it)}」？`))) return;
+    salvage(profile, it.uid); persist(); refreshGear(null);
+  },
+  resetSave: () => {
+    if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
+    store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
+    profile = defaultProfile(); persist(); ui.menu(profile);
+  },
+  choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
   resume: () => { paused = false; input.reset(); sync(); },
-  quit: () => toMenu(),
+  quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
 addEventListener('keydown', (e) => {
@@ -1425,29 +2344,44 @@ if (navigator.serviceWorker?.controller) {
 // 主選單背景：無敵、繞圈走、自動挑升級的展示局
 function toMenu() {
   if (reloadPending) { location.reload(); return; }
-  mode = 'menu'; paused = false;
-  sim = createSim({ seed: 7, vh: H / scale });
-  sim.state.god = true;
-  renderer = createRenderer();
-  shown = null; ui.menu();
+  if (mode !== 'menu' || !sim) {
+    mode = 'menu'; paused = false;
+    sim = createSim({ seed: 7, vh: H / scale });
+    sim.state.god = true;
+    renderer = createRenderer(CHAPTER1);
+  }
+  shown = null; ui.menu(profile);
 }
-function newRun() {
-  mode = 'run'; paused = false;
-  sim = createSim({ seed: (Math.random() * 2 ** 31) | 0, vh: H / scale });
-  renderer = createRenderer();
+function newRun(id) {
+  chapterId = id;
+  const chapter = CHAPTERS.find((c) => c.id === id);
+  mode = 'run'; paused = false; settled = null;
+  runSeed = (Math.random() * 2 ** 31) | 0;
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile) });
+  renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
+}
+
+// 一局結束只結算一次：燈油入帳、掉裝備、存檔
+function settle() {
+  if (settled) return settled;
+  const s = sim.state;
+  settled = settleRun(profile, { ledger: s.ledger, chapterId, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
+  persist();
+  return settled;
 }
 
 // 依 sim 狀態決定要顯示哪個面板（只在狀態改變時重畫 DOM）
 function sync() {
+  if (mode === 'menu') return;
   const s = sim.state;
-  const want = mode === 'menu' ? 'menu' : paused ? 'pause' : s.phase;
+  const want = paused ? 'pause' : s.phase;
   if (want === shown) return;
   shown = want;
   if (want === 'choice') ui.levelUp(s.choice);
   else if (want === 'chest') ui.chest(s.chest);
   else if (want === 'pause') ui.pause(s);
-  else if (want === 'win' || want === 'lose') setTimeout(() => ui.result(s), want === 'lose' ? 700 : 0);
+  else if (want === 'win' || want === 'lose') { const sum = settle(); setTimeout(() => ui.result(s, sum, profile), want === 'lose' && !s.quit ? 700 : 0); }
   else if (want === 'play') ui.hud();
 }
 
@@ -1455,7 +2389,7 @@ function demoStep(dt) {
   const s = sim.state;
   if (s.phase === 'choice') sim.choose(0);
   if (s.phase === 'chest') sim.closeChest();
-  if (s.t > 150) toMenu(); // 展示局定期重來，避免怪太多
+  if (s.t > 150) { sim = createSim({ seed: 7, vh: H / scale }); sim.state.god = true; } // 展示局定期重來，避免怪太多
   const a = s.t * 0.35;
   sim.update(dt, { x: Math.cos(a) * 0.6, y: Math.sin(a) * 0.6 });
 }
@@ -1498,6 +2432,7 @@ function drawStick() {
 }
 
 toMenu();
+if (LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
 requestAnimationFrame(frame);
 
 return {  };

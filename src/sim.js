@@ -1,7 +1,9 @@
 // 純邏輯層（不碰 DOM／Canvas）：一整章的規則。Node 可直接 import 測試（tools/sim-test.mjs）。
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
+// 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
 import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV } from './content.js';
+import { aggregate, scaled, reduction, CAPS } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -13,34 +15,68 @@ export function makeRng(seed = 1) {
 const TAU = Math.PI * 2;
 const BASE = { hp: 100, speed: 120, magnet: 95 };
 const GEM_DRIFT = { range: 220, speed: 28 }; // 附近的光屑會緩慢飄向玩家，站著不動也撿得到一些
+const AIM_RANGE = 420;
 
-export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
+// ---------- 地形（依座標與種子決定，sim 與 render 共用；不存狀態，無限大地圖也不佔記憶體） ----------
+// pools 泥沼：玩家在裡面移速 ×slow。pillars 晶柱：擋住玩家、怪物、雙方子彈。出生點附近 clear 範圍內不放。
+export const TERRAIN = {
+  pools:   { cell: 190, chance: 0.32, rMin: 38, rMax: 68, slow: 0.55, clear: 150 },
+  pillars: { cell: 150, chance: 0.38, rMin: 16, rMax: 30, clear: 130 },
+};
+function hash2(ix, iy, seed, salt) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed + salt, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+export function terrainCell(kind, seed, ix, iy) {
+  const T = TERRAIN[kind];
+  if (hash2(ix, iy, seed, 1) >= T.chance) return null;
+  const r = T.rMin + hash2(ix, iy, seed, 2) * (T.rMax - T.rMin);
+  const x = ix * T.cell + r + hash2(ix, iy, seed, 3) * (T.cell - 2 * r);
+  const y = iy * T.cell + r + hash2(ix, iy, seed, 4) * (T.cell - 2 * r);
+  if (Math.hypot(x, y) < T.clear + r) return null;
+  return { x, y, r };
+}
+export function terrainIn(kind, seed, x0, y0, x1, y1) {
+  const T = TERRAIN[kind], out = [];
+  for (let ix = Math.floor(x0 / T.cell); ix <= Math.floor(x1 / T.cell); ix++)
+    for (let iy = Math.floor(y0 / T.cell); iy <= Math.floor(y1 / T.cell); iy++) { const f = terrainCell(kind, seed, ix, iy); if (f) out.push(f); }
+  return out;
+}
+
+export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [] } = {}) {
   const rand = makeRng(seed);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
   const s = {
-    t: 0, phase: 'play', kills: 0, vh, chapter,
+    t: 0, phase: 'play', kills: 0, vh, chapter, terrainSeed: seed % 100000,
     player: {
-      x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1,
-      facing: 1, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {},
+      x: 0, y: 0, hp: BASE.hp, maxHp: BASE.hp, speed: BASE.speed, magnet: BASE.magnet, regen: 0, dmgMul: 1, cdMul: 1, armorMul: 1,
+      revives: 0, facing: 1, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
     },
-    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [],
+    enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [],
     events: [],        // 給畫面層的一次性事件
+    ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
     spawnAcc: 0, eventIdx: 0, boss: null, arena: null, winT: 0,
     autoSpawn: true, god: false, // 測試用
   };
   const p = s.player;
+  const aimRange = chapter.fog ?? AIM_RANGE;
 
-  // ---------- 成長 ----------
+  // ---------- 成長（局內被動＋局外 meta，一律走 stats.js） ----------
   function recalc() {
-    const sum = (key) => Object.entries(p.passives).reduce((a, [id, l]) => a + (PASSIVES[id].per[key] || 0) * l, 0);
-    p.dmgMul = 1 + sum('dmgMul');
-    p.cdMul = Math.max(0.4, 1 - sum('cdMul'));
-    p.magnet = BASE.magnet * (1 + sum('magnetMul'));
-    p.speed = BASE.speed * (1 + sum('speedMul'));
-    const maxHp = BASE.hp + sum('maxHp');
+    const mods = [...meta];
+    for (const [id, lv] of Object.entries(p.passives)) for (const m of PASSIVES[id].mods) for (let i = 0; i < lv; i++) mods.push(m);
+    const a = aggregate(mods);
+    p.dmgMul = scaled(1, a.dmg);
+    p.cdMul = reduction(a.cdr, CAPS.cdr);
+    p.armorMul = reduction(a.armor, CAPS.armor);
+    p.magnet = scaled(BASE.magnet, a.magnet);
+    p.speed = scaled(BASE.speed, a.speed);
+    const maxHp = scaled(BASE.hp, a.maxHp);
     p.hp += maxHp - p.maxHp; p.maxHp = maxHp;
-    p.regen = sum('regen');
+    p.regen = scaled(0, a.regen);
+    return a;
   }
   function weaponStats(w) { return w.evo ? RESONANCES[w.id].stats : WEAPONS[w.id].lv[w.lv - 1]; }
   function addWeapon(id) { const w = { id, lv: 1, evo: false, cd: 0.2, ang: 0, fling: 0 }; p.weapons.push(w); return w; }
@@ -117,18 +153,21 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   function closeChest() { if (s.phase !== 'chest') return; s.chest = null; s.phase = 'play'; nextChoice(); }
 
   // ---------- 生怪 ----------
+  const isBoss = (kind) => ENEMIES[kind].ai === 'boss';
   function spawnDist() { return Math.hypot(VW, s.vh) / 2 + 30; }
   function spawnEnemy(kind, { angle, dist, x, y, elite = false, affix = null } = {}) {
     const t = ENEMIES[kind];
     const a = angle ?? rand() * TAU;
     const d = dist ?? spawnDist();
-    const hpMul = (kind === 'boss1' ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
+    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1);
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
       flash: 0, frame: rand() * 4, seed: rand() * 100, slowT: 0, slow: 0, orbT: 0, fireT: (t.fireCd || 0) * (0.5 + rand()),
+      mode: 'move', modeT: 0, cdT: rand() * 1.5, dirX: 0, dirY: 0, tele: null, fuse: 0, warn: null,
     };
-    if (kind === 'boss1') Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, mode: 'move', modeT: 0, dirX: 0, dirY: 0 });
+    if (t.ai === 'blink') e.cdT = t.blinkCd * (0.4 + rand() * 0.6);
+    if (isBoss(kind)) Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, beamT: 2, rainT: 3, combo: 0 });
     s.enemies.push(e);
     return e;
   }
@@ -146,20 +185,20 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
       for (let i = 0; i < ev.n; i++) { const off = (i / (ev.n - 1) - 0.5) * 360; spawnEnemy(ev.kind, { x: cx - Math.sin(a) * off, y: cy + Math.cos(a) * off }); }
     } else if (ev.type === 'elite') {
       const affix = pick(Object.keys(ELITE_AFFIXES));
-      spawnEnemy(ev.kind, { elite: true, affix });
+      spawnEnemy(ev.kind, { elite: true, affix, dist: ENEMIES[ev.kind].ai === 'turret' ? 200 : undefined });
       s.events.push({ type: 'announce', text: `精英出現：${ELITE_AFFIXES[affix].name}${ENEMIES[ev.kind].name}` });
     } else if (ev.type === 'boss') startBoss(ev.kind);
     s.events.push({ type: 'wave', kind: ev.type });
   }
   function startBoss(kind) {
     s.arena = { x: p.x, y: p.y, r: s.chapter.arenaR };
-    // 光圈外的怪直接消散（不給經驗）
+    // 光圈外的怪直接消散（不給經驗、不算擊倒）
     s.enemies = s.enemies.filter((e) => {
       const inside = Math.hypot(e.x - s.arena.x, e.y - s.arena.y) < s.arena.r - 10;
       if (!inside) s.events.push({ type: 'fade', x: e.x, y: e.y });
       return inside;
     });
-    s.ebullets.length = 0;
+    s.ebullets.length = 0; s.hazards.length = 0;
     s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7 });
     s.events.push({ type: 'announce', text: `燈塔守衛：${ENEMIES[kind].name}`, big: true });
   }
@@ -189,27 +228,56 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     return best;
   }
 
+  // ---------- 地形互動 ----------
+  const terrain = s.chapter.terrain;
+  function pillarAt(x, y) { // 子彈只需查自己所在格（晶柱完整落在格內）
+    if (terrain !== 'pillars') return null;
+    const T = TERRAIN.pillars, f = terrainCell('pillars', s.terrainSeed, Math.floor(x / T.cell), Math.floor(y / T.cell));
+    return f && (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r ? f : null;
+  }
+  function pushOutOfPillars(o, rad) {
+    if (terrain !== 'pillars') return;
+    for (const f of terrainIn('pillars', s.terrainSeed, o.x - rad, o.y - rad, o.x + rad, o.y + rad)) {
+      const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy) || 0.01, min = f.r + rad;
+      if (d < min) { o.x = f.x + dx / d * min; o.y = f.y + dy / d * min; }
+    }
+  }
+  function inPool(x, y) {
+    if (terrain !== 'pools') return false;
+    const R = TERRAIN.pools.rMax; // 泥沼完整落在自己的格內，查 ±rMax 的範圍就夠
+    return terrainIn('pools', s.terrainSeed, x - R, y - R, x + R, y + R).some((f) => (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r);
+  }
+
   // ---------- 傷害 ----------
   function damage(e, amount, kx = 0, ky = 0) {
     if (e.hp <= 0) return;
     const aff = e.affix && ELITE_AFFIXES[e.affix];
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
-    if (e.kind !== 'boss1') { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
+    if (!isBoss(e.kind)) { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
     s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 });
   }
-  function hurtPlayer(dmg, src) {
+  function hurtPlayer(raw, src) {
     if (p.hurtT > 0 || s.god || s.phase !== 'play') return;
+    const dmg = Math.max(1, Math.round(raw * p.armorMul));
     p.hp -= dmg; p.hurtT = 0.5;
     s.events.push({ type: 'hurt', x: p.x, y: p.y, v: dmg, src });
-    if (p.hp <= 0) { p.hp = 0; s.phase = 'lose'; s.events.push({ type: 'lose' }); }
+    if (p.hp > 0) return;
+    if (p.revives > 0) { // 復燃：半血復活，短暫無敵並震開周圍
+      p.revives--; p.hp = p.maxHp * 0.5; p.hurtT = 2;
+      s.ebullets.length = 0;
+      for (const e of s.enemies) { const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1; if (d < 160 && !isBoss(e.kind)) { e.x += dx / d * 120; e.y += dy / d * 120; } }
+      s.events.push({ type: 'revive', x: p.x, y: p.y });
+      return;
+    }
+    p.hp = 0; s.phase = 'lose'; s.events.push({ type: 'lose' });
   }
 
   // ---------- 武器 ----------
   function fireBolt(w, st, dt) {
     w.cd -= dt;
     if (w.cd > 0) return;
-    const target = nearest(p.x, p.y, 420);
+    const target = nearest(p.x, p.y, aimRange);
     if (!target) return;
     w.cd = st.cd * p.cdMul;
     const base = Math.atan2(target.y - p.y, target.x - p.x);
@@ -255,12 +323,13 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   function chainWeapon(w, st, dt) {
     w.cd -= dt;
     if (w.cd > 0) return;
-    const first = nearest(p.x, p.y, 260);
+    const reach = Math.min(260, aimRange);
+    const first = nearest(p.x, p.y, reach);
     if (!first) return;
     w.cd = st.cd * p.cdMul;
     const hit = new Set();
     for (let k = 0; k < st.arcs; k++) {
-      let cur = k === 0 ? first : nearest(p.x, p.y, 260, hit);
+      let cur = k === 0 ? first : nearest(p.x, p.y, reach, hit);
       if (!cur) break;
       const pts = [[p.x, p.y]];
       for (let j = 0; j <= st.jumps && cur; j++) {
@@ -274,61 +343,153 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
   const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon };
 
   // ---------- 敵人行為 ----------
+  function shoot(e, ux, uy, speed, dmg, r, spread = [0]) {
+    for (const off of spread) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * speed, vy: (uy * c + ux * sn) * speed, life: 4, dmg, r }); }
+  }
+  const eliteDmg = (e) => (e.elite ? ELITE.dmgMul : 1);
   function enemyMove(e, dt) {
     const t = ENEMIES[e.kind];
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    let spd = t.speed * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
+    const spd = t.speed * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
     let vx = ux, vy = uy;
-    if (t.ai === 'weave') { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; }
-    else if (t.ai === 'spit') {
-      const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
-      const side = Math.sin(e.seed) > 0 ? 1 : -1;
-      vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
-      e.fireT -= dt;
-      if (e.fireT <= 0 && d < 320) {
-        e.fireT = t.fireCd;
-        s.ebullets.push({ x: e.x, y: e.y, vx: ux * 110, vy: uy * 110, life: 4, dmg: t.shotDmg * (e.elite ? ELITE.dmgMul : 1), r: e.elite ? 8 : 5 });
-        if (e.elite) for (const off of [-0.35, 0.35]) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * 110, vy: (uy * c + ux * sn) * 110, life: 4, dmg: t.shotDmg, r: 6 }); }
+    e.cdT -= dt; e.modeT -= dt;
+    switch (t.ai) {
+      case 'weave': { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; break; }
+      case 'spit': {
+        const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
+        const side = Math.sin(e.seed) > 0 ? 1 : -1;
+        vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
+        e.fireT -= dt;
+        if (e.fireT <= 0 && d < 320) { e.fireT = t.fireCd; shoot(e, ux, uy, 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0]); }
+        break;
       }
-    } else if (t.ai === 'boss') return bossAct(e, dt, ux, uy, d);
+      case 'turret': {
+        e.fireT -= dt;
+        if (e.fireT <= 0 && d < 360) { e.fireT = t.fireCd; shoot(e, ux, uy, 120, t.shotDmg * eliteDmg(e), 6, e.elite ? [-0.5, -0.25, 0, 0.25, 0.5] : [-0.3, 0, 0.3]); s.events.push({ type: 'burst', x: e.x, y: e.y, small: true }); }
+        return [0, 0];
+      }
+      case 'lunge': { // 靠近 → 蓄力（原地、顯示預警線）→ 高速撲擊 → 冷卻
+        if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'lunge'; e.modeT = t.lungeT; e.tele = null; } return [0, 0]; }
+        if (e.mode === 'lunge') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = t.lungeCd; } return [e.dirX * t.lungeSpeed, e.dirY * t.lungeSpeed]; }
+        if (d < t.range && e.cdT <= 0) { e.mode = 'windup'; e.modeT = t.windup; e.dirX = ux; e.dirY = uy; e.tele = { dx: ux, dy: uy, len: t.lungeSpeed * t.lungeT, w: e.r }; return [0, 0]; }
+        break;
+      }
+      case 'bomber': { // 靠近就點燃引信，燃燒中仍慢慢貼近（逼玩家走開），時間到爆炸（也會炸到其他怪）
+        if (e.fuse > 0) { e.fuse -= dt; if (e.fuse <= 0) { explode(e, t); return [0, 0]; } return [ux * spd * 0.5, uy * spd * 0.5]; }
+        if (d < t.blastR * 1.25) e.fuse = t.fuse;
+        break;
+      }
+      case 'blink': { // 預警標記出現在玩家身邊，時間到瞬移過去
+        if (e.warn) { e.warn.t -= dt; if (e.warn.t <= 0) { e.x = e.warn.x; e.y = e.warn.y; e.warn = null; e.cdT = t.blinkCd; s.events.push({ type: 'blink', x: e.x, y: e.y }); } return [0, 0]; }
+        if (e.cdT <= 0 && d < 420 && d > 90) { const a = rand() * TAU; e.warn = { x: p.x + Math.cos(a) * 70, y: p.y + Math.sin(a) * 70, t: t.blinkWarn }; return [0, 0]; }
+        break;
+      }
+      case 'boss': return BOSS_AI[e.kind](e, dt, ux, uy, d);
+    }
     const len = Math.hypot(vx, vy) || 1;
     return [vx / len * spd, vy / len * spd];
+  }
+  function explode(e, t) {
+    s.events.push({ type: 'blast', x: e.x, y: e.y, r: t.blastR });
+    if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (t.blastR + 8) ** 2) hurtPlayer(Math.round(t.blastDmg * eliteDmg(e) * s.chapter.dmgScale(s.t)), 'blast');
+    for (const o of s.enemies) if (o !== e && o.hp > 0 && !isBoss(o.kind) && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < t.blastR * t.blastR) { o.hp -= t.blastHurtsEnemies; o.flash = 0.1; }
+    e.hp = 0; e.noReward = true; // 自爆不算玩家擊倒
   }
   function radial(e, n, speed, offset, dmg) {
     for (let i = 0; i < n; i++) { const a = offset + (i / n) * TAU; s.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 5, dmg, r: 7 }); }
   }
-  function bossAct(e, dt, ux, uy) {
-    const t = ENEMIES[e.kind];
-    const frac = e.hp / e.maxHp;
-    const phase = frac > 0.6 ? 1 : frac > 0.25 ? 2 : 3;
-    if (phase !== e.bphase) {
-      e.bphase = phase;
-      s.events.push({ type: 'announce', text: phase === 2 ? '菌母暴躁起來了！' : '菌母孢雨狂亂！' });
-      if (phase === 2) e.summonT = 0;
-    }
-    e.burstT -= dt;
-    if (e.burstT <= 0) {
-      e.burstT = phase === 3 ? 1.6 : 3;
-      radial(e, phase === 1 ? 12 : 16, phase === 3 ? 115 : 100, phase === 3 ? s.t * 1.7 : rand() * TAU, 10);
-      s.events.push({ type: 'burst', x: e.x, y: e.y });
-    }
-    if (phase >= 2) {
-      e.summonT -= dt;
-      if (e.summonT <= 0) {
-        e.summonT = 11;
-        for (let i = 0; i < 6; i++) spawnEnemy('mite', { x: e.x + Math.cos(i) * 50, y: e.y + Math.sin(i) * 50 });
+  function bossPhase(e, lines) {
+    const frac = e.hp / e.maxHp, phase = frac > 0.6 ? 1 : frac > 0.25 ? 2 : 3;
+    if (phase !== e.bphase) { e.bphase = phase; s.events.push({ type: 'announce', text: lines[phase - 2] }); if (phase === 2) e.summonT = 0; }
+    return phase;
+  }
+  function summonEvery(e, dt, gap, kind, n, dist = 50) {
+    e.summonT -= dt;
+    if (e.summonT > 0) return;
+    e.summonT = gap;
+    for (let i = 0; i < n; i++) { const a = (i / n) * TAU; spawnEnemy(kind, { x: e.x + Math.cos(a) * dist, y: e.y + Math.sin(a) * dist }); }
+  }
+  // 衝刺共用：move → windup（預警）→ dash；回傳這一幀的速度，trail 為衝刺時每幀呼叫
+  function dashStep(e, ux, uy, speed, windup, dashT, dashSpeed, teleLen, trail) {
+    if (e.mode === 'windup') { e.tele = { dx: e.dirX, dy: e.dirY, len: teleLen, w: e.r }; if (e.modeT <= 0) { e.mode = 'dash'; e.modeT = dashT; e.tele = null; } return [0, 0]; }
+    if (e.mode === 'dash') { if (e.modeT <= 0) e.mode = 'move'; trail?.(); return [e.dirX * dashSpeed, e.dirY * dashSpeed]; }
+    if (e.dashT <= 0) { e.mode = 'windup'; e.modeT = windup; e.dirX = ux; e.dirY = uy; return [0, 0]; }
+    return [ux * speed, uy * speed];
+  }
+  const BOSS_AI = {
+    // 噬燈菌母：孢子彈幕 → 召喚＋衝撞 → 旋轉孢雨
+    boss1(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['菌母暴躁起來了！', '菌母孢雨狂亂！']);
+      e.burstT -= dt;
+      if (e.burstT <= 0) {
+        e.burstT = phase === 3 ? 1.6 : 3;
+        radial(e, phase === 1 ? 12 : 16, phase === 3 ? 115 : 100, phase === 3 ? s.t * 1.7 : rand() * TAU, 10);
+        s.events.push({ type: 'burst', x: e.x, y: e.y });
+      }
+      if (phase >= 2) summonEvery(e, dt, 11, 'mite', 6);
+      if (phase >= 2 && e.mode === 'move') e.dashT -= dt;
+      const v = dashStep(e, ux, uy, ENEMIES.boss1.speed, 0.9, 0.55, 600, 330);
+      if (e.mode !== 'move' && e.dashT <= 0) e.dashT = phase === 3 ? 3.5 : 5; // 開始蓄力就排下一次
+      return v;
+    },
+    // 沼母巨蛭：連續三段撲擊，沿路留下毒沼 → 召喚沼蛭＋孢環 → 更快的撲擊
+    boss2(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['巨蛭召來了子嗣！', '巨蛭陷入狂亂！']);
+      if (e.mode === 'move') e.dashT -= dt;
+      if (e.mode === 'move' && e.dashT <= 0 && e.combo === 0) e.combo = 3;
+      const windup = phase === 3 ? 0.5 : 0.7, before = e.mode;
+      const v = dashStep(e, ux, uy, ENEMIES.boss2.speed, windup, 0.42, 520, 220, () => {
+        e.trailAcc = (e.trailAcc || 0) + dt;
+        if (e.trailAcc > 0.1) { e.trailAcc = 0; s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: 30, arm: 0.4, dur: 4, t: 0, dmg: 9, src: 'poison' }); }
+      });
+      if (before === 'dash' && e.mode === 'move') { e.combo = Math.max(0, e.combo - 1); e.dashT = e.combo > 0 ? 0.25 : (phase === 3 ? 3 : 4.2); }
+      if (phase >= 2) {
+        summonEvery(e, dt, 12, 'leech', 5, 60);
+        e.burstT -= dt;
+        if (e.burstT <= 0) { e.burstT = phase === 3 ? 2.6 : 3.5; radial(e, phase === 3 ? 18 : 14, 105, rand() * TAU, 10); s.events.push({ type: 'burst', x: e.x, y: e.y }); }
+      }
+      return v;
+    },
+    // 晶心守衛：旋轉光束（先預警）→ 加上晶雨（地面預警圈）→ 更多、更快的光束＋召喚晶刺
+    boss3(e, dt, ux, uy) {
+      const phase = bossPhase(e, ['晶心裂開，晶雨落下！', '晶心全力運轉！']);
+      e.beamT -= dt;
+      if (e.beamT <= 0) {
+        const n = phase + 1, spin = (rand() < 0.5 ? -1 : 1) * (phase === 3 ? 0.8 : 0.55), a0 = rand() * TAU;
+        for (let i = 0; i < n; i++) s.hazards.push({ type: 'beam', owner: e, ang: a0 + (i / n) * TAU, spin, len: 620, w: 22, arm: 1.0, dur: 3.2, t: 0, dmg: 16, src: 'beam' });
+        e.beamT = phase === 3 ? 5 : 6.5;
+      }
+      if (phase >= 2) {
+        e.rainT -= dt;
+        if (e.rainT <= 0) {
+          e.rainT = phase === 3 ? 3 : 4;
+          const n = phase === 3 ? 7 : 5;
+          for (let i = 0; i < n; i++) { const a = rand() * TAU, r = i === 0 ? 0 : 40 + rand() * 110; s.hazards.push({ type: 'zone', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, r: 42, arm: 1.0, dur: 0.25, t: 0, dmg: 22, src: 'rain' }); }
+        }
+      }
+      if (phase === 3) summonEvery(e, dt, 14, 'turret', 2, 120);
+      return [ux * ENEMIES.boss3.speed, uy * ENEMIES.boss3.speed];
+    },
+  };
+
+  // ---------- 地面危險（預警 arm 秒後生效 dur 秒） ----------
+  function updateHazards(dt) {
+    for (const h of s.hazards) {
+      h.t += dt;
+      if (h.type === 'beam') {
+        if (h.owner.hp <= 0) { h.t = 1e9; continue; }
+        h.x = h.owner.x; h.y = h.owner.y;
+        if (h.t >= h.arm) h.ang += h.spin * dt;
+      }
+      if (h.t < h.arm || h.t > h.arm + h.dur) continue;
+      if (h.type === 'zone' && (p.x - h.x) ** 2 + (p.y - h.y) ** 2 < (h.r + 8) ** 2) hurtPlayer(h.dmg, h.src); // 地面危險是固定傷害，不吃時間倍率
+      if (h.type === 'beam') {
+        const cx = Math.cos(h.ang), cy = Math.sin(h.ang), rx = p.x - h.x, ry = p.y - h.y, along = rx * cx + ry * cy;
+        if (along > 0 && along < h.len && Math.abs(rx * cy - ry * cx) < h.w / 2 + 8) hurtPlayer(h.dmg, h.src);
       }
     }
-    e.modeT -= dt;
-    if (e.mode === 'move') {
-      if (phase >= 2) e.dashT -= dt;
-      if (e.dashT <= 0) { e.mode = 'windup'; e.modeT = 0.9; e.dirX = ux; e.dirY = uy; e.dashT = phase === 3 ? 3.5 : 5; }
-      return [ux * t.speed, uy * t.speed];
-    }
-    if (e.mode === 'windup') { e.tele = { dx: e.dirX, dy: e.dirY, len: 330 }; if (e.modeT <= 0) { e.mode = 'dash'; e.modeT = 0.55; e.tele = null; } return [0, 0]; }
-    if (e.modeT <= 0) e.mode = 'move';
-    return [e.dirX * 600, e.dirY * 600];
+    s.hazards = s.hazards.filter((h) => h.t <= h.arm + h.dur);
   }
 
   // ---------- 主更新 ----------
@@ -338,8 +499,11 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     const ch = s.chapter;
 
     // 玩家
-    p.x += move.x * p.speed * dt; p.y += move.y * p.speed * dt;
+    p.inPool = inPool(p.x, p.y);
+    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1);
+    p.x += move.x * spd * dt; p.y += move.y * spd * dt;
     if (move.x) p.facing = move.x > 0 ? 1 : -1;
+    pushOutOfPillars(p, 12);
     if (s.arena) clampArena(p, 14);
     p.hurtT = Math.max(0, p.hurtT - dt);
     if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
@@ -355,6 +519,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
 
     // 敵人移動＋互推＋接觸傷害
     for (const e of s.enemies) {
+      if (e.hp <= 0) continue;
       const [vx, vy] = enemyMove(e, dt);
       let sx = 0, sy = 0;
       near(e.x, e.y, (o) => {
@@ -363,12 +528,14 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
         if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
       });
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
+      if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
       e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
-      if (d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * (e.elite ? ELITE.dmgMul : 1) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
+      if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
     }
+    updateHazards(dt);
 
     // 武器
     for (const w of p.weapons) WEAPON_FN[w.id](w, weaponStats(w), dt);
@@ -377,6 +544,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     for (const b of s.bullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
+      if (pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {
         if (b.life <= 0 || e.hp <= 0 || b.hit.has(e)) return;
         const rr = e.r + (b.big ? 9 : 4);
@@ -394,6 +562,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     // 敵方子彈
     for (const b of s.ebullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      if (pillarAt(b.x, b.y)) { b.life = 0; continue; }
       if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + 8) ** 2) { hurtPlayer(b.dmg, 'spore'); b.life = 0; }
     }
     s.ebullets = s.ebullets.filter((b) => b.life > 0);
@@ -408,7 +577,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     // 離太遠的怪移回附近（不在競技場時）
     if (!s.arena) {
       const far = Math.hypot(VW, s.vh) * 0.9;
-      for (const e of s.enemies) if (!e.elite && Math.hypot(e.x - p.x, e.y - p.y) > far) { const a = rand() * TAU; e.x = p.x + Math.cos(a) * spawnDist(); e.y = p.y + Math.sin(a) * spawnDist(); }
+      for (const e of s.enemies) if (!e.elite && Math.hypot(e.x - p.x, e.y - p.y) > far) { const a = rand() * TAU; e.x = p.x + Math.cos(a) * spawnDist(); e.y = p.y + Math.sin(a) * spawnDist(); e.warn = null; e.fuse = 0; }
     }
 
     // 經驗晶
@@ -445,17 +614,23 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     if (d > max) { o.x = s.arena.x + dx / d * max; o.y = s.arena.y + dy / d * max; }
   }
 
+  // 擊倒的唯一入口：燈油帳（ledger）與 kill 事件都只在這裡寫，兩者必須一致（tools/meta-test.mjs 檢查）
   function onKill(e) {
+    if (e.noReward) { s.events.push({ type: 'fade', x: e.x, y: e.y }); return; }
     const t = ENEMIES[e.kind];
     s.kills++;
-    s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
-    if (e.kind === 'boss1') {
+    if (isBoss(e.kind)) {
+      s.ledger.boss = e.kind;
+      s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: false, boss: true });
       s.boss = null; s.winT = 1.8; s.god = true;
       for (const o of s.enemies) { o.hp = 0; s.events.push({ type: 'fade', x: o.x, y: o.y }); }
-      s.enemies = []; s.ebullets = [];
+      s.enemies = []; s.ebullets = []; s.hazards = [];
       s.events.push({ type: 'bossdown', x: e.x, y: e.y });
       return;
     }
+    if (e.elite) s.ledger.elites++;
+    else s.ledger.kills[e.kind] = (s.ledger.kills[e.kind] || 0) + 1;
+    s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
     s.gems.push({ x: e.x, y: e.y, v: t.xp * (e.elite ? ELITE.xpMul : 1), pull: false });
     if (e.elite) s.pickups.push({ type: 'chest', x: e.x, y: e.y });
     else {
@@ -480,6 +655,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1 } = {}) {
     s.gems = keep;
   }
 
+  const agg0 = recalc();
+  p.hp = p.maxHp;
+  p.revives = Math.floor(scaled(0, agg0.revive));
   addWeapon('bolt');
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options };
 }

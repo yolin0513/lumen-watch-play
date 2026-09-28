@@ -1,9 +1,12 @@
-// 進入點：畫布尺寸、主迴圈、畫面狀態切換（主選單／遊戲中／暫停）。
+// 進入點：畫布尺寸、主迴圈、畫面狀態切換（主選單／章節／天賦／裝備／遊戲中／暫停／結算）、存檔。
 // 網址參數：?debug 顯示 FPS／實體數。
 import { createInput } from './input.js';
-import { createSim, VW } from './sim.js';
+import { createSim, makeRng, VW } from './sim.js';
 import { createRenderer } from './render.js';
-import { createUI } from './ui.js';
+import { createUI, gearName } from './ui.js';
+import { CHAPTERS, CHAPTER1 } from './content.js';
+import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
+import { profileMods, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, chapterUnlocked } from './meta.js';
 
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
@@ -11,8 +14,8 @@ const input = createInput(canvas);
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
-let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單背景展示 / run 正式一局
-let renderer = createRenderer();
+let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
+let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -28,14 +31,55 @@ function resize() {
 resize();
 addEventListener('resize', resize);
 
+// ---------- 存檔（任何失敗都不擋遊戲，只提示一次） ----------
+const store = createStore(() => window.localStorage);
+const loaded = loadProfile(store);
+let profile = loaded.profile, writable = loaded.writable, warnedSave = false;
+const LOAD_NOTICE = {
+  corrupt: '存檔損壞，已另外備份並重新開始。',
+  repaired: '部分存檔資料不正確，已自動修正。',
+  migrated: '存檔已升級到新版本（舊檔已備份）。',
+  future: '這份存檔來自較新版本的遊戲，這次遊玩不會寫入存檔。',
+  unavailable: '讀不到瀏覽器存檔，這次的進度只保留到關閉頁面為止。',
+  'migrate-failed': '存檔升級失敗，原檔已保留；這次的進度只保留到關閉頁面為止。',
+  'backup-failed': '無法備份舊存檔，為保護進度，這次只在記憶體中遊玩。',
+};
+function persist() {
+  const r = saveProfile(store, profile, writable);
+  if (warnedSave) return;
+  if (!r.ok && r.reason !== 'readonly') { warnedSave = true; ui.toast(`進度無法存入瀏覽器（${r.reason}），關閉頁面後會遺失。`, 6000); }
+  else if (r.ok && r.memory) { warnedSave = true; ui.toast('瀏覽器不允許存檔（例如無痕模式），進度只保留到關閉頁面為止。', 6000); }
+}
+
+// ---------- 介面動作 ----------
+const refreshGear = (uid) => ui.gear(profile, uid);
 const ui = createUI({
-  start: () => newRun(),
-  retry: () => newRun(),
+  openChapters: () => ui.chapters(profile),
+  openTalents: () => ui.talents(profile),
+  openGear: () => ui.gear(profile),
   menu: () => toMenu(),
-  choose: (i) => { sim.choose(i); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
+  startChapter: (d) => { const id = Number(d.id); if (chapterUnlocked(profile, id)) newRun(id); },
+  retry: () => newRun(chapterId),
+  buyTalent: (d) => { if (buyTalent(profile, d.id).ok) persist(); ui.talents(profile); },
+  gearOpen: (d) => refreshGear(Number(d.uid)),
+  gearClose: () => refreshGear(null),
+  gearEquip: (d) => { equip(profile, Number(d.uid)); persist(); refreshGear(Number(d.uid)); },
+  gearUnequip: (d) => { const it = profile.gear.items.find((i) => i.uid === Number(d.uid)); if (it) unequip(profile, it.slot); persist(); refreshGear(Number(d.uid)); },
+  gearUpgrade: (d) => { if (upgradeGear(profile, Number(d.uid)).ok) persist(); refreshGear(Number(d.uid)); },
+  gearSalvage: (d) => {
+    const it = profile.gear.items.find((i) => i.uid === Number(d.uid));
+    if (!it || (it.rarity >= 2 && !confirm(`確定分解「${gearName(it)}」？`))) return;
+    salvage(profile, it.uid); persist(); refreshGear(null);
+  },
+  resetSave: () => {
+    if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
+    store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
+    profile = defaultProfile(); persist(); ui.menu(profile);
+  },
+  choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
   resume: () => { paused = false; input.reset(); sync(); },
-  quit: () => toMenu(),
+  quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
 addEventListener('keydown', (e) => {
@@ -56,29 +100,44 @@ if (navigator.serviceWorker?.controller) {
 // 主選單背景：無敵、繞圈走、自動挑升級的展示局
 function toMenu() {
   if (reloadPending) { location.reload(); return; }
-  mode = 'menu'; paused = false;
-  sim = createSim({ seed: 7, vh: H / scale });
-  sim.state.god = true;
-  renderer = createRenderer();
-  shown = null; ui.menu();
+  if (mode !== 'menu' || !sim) {
+    mode = 'menu'; paused = false;
+    sim = createSim({ seed: 7, vh: H / scale });
+    sim.state.god = true;
+    renderer = createRenderer(CHAPTER1);
+  }
+  shown = null; ui.menu(profile);
 }
-function newRun() {
-  mode = 'run'; paused = false;
-  sim = createSim({ seed: (Math.random() * 2 ** 31) | 0, vh: H / scale });
-  renderer = createRenderer();
+function newRun(id) {
+  chapterId = id;
+  const chapter = CHAPTERS.find((c) => c.id === id);
+  mode = 'run'; paused = false; settled = null;
+  runSeed = (Math.random() * 2 ** 31) | 0;
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile) });
+  renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
+}
+
+// 一局結束只結算一次：燈油入帳、掉裝備、存檔
+function settle() {
+  if (settled) return settled;
+  const s = sim.state;
+  settled = settleRun(profile, { ledger: s.ledger, chapterId, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
+  persist();
+  return settled;
 }
 
 // 依 sim 狀態決定要顯示哪個面板（只在狀態改變時重畫 DOM）
 function sync() {
+  if (mode === 'menu') return;
   const s = sim.state;
-  const want = mode === 'menu' ? 'menu' : paused ? 'pause' : s.phase;
+  const want = paused ? 'pause' : s.phase;
   if (want === shown) return;
   shown = want;
   if (want === 'choice') ui.levelUp(s.choice);
   else if (want === 'chest') ui.chest(s.chest);
   else if (want === 'pause') ui.pause(s);
-  else if (want === 'win' || want === 'lose') setTimeout(() => ui.result(s), want === 'lose' ? 700 : 0);
+  else if (want === 'win' || want === 'lose') { const sum = settle(); setTimeout(() => ui.result(s, sum, profile), want === 'lose' && !s.quit ? 700 : 0); }
   else if (want === 'play') ui.hud();
 }
 
@@ -86,7 +145,7 @@ function demoStep(dt) {
   const s = sim.state;
   if (s.phase === 'choice') sim.choose(0);
   if (s.phase === 'chest') sim.closeChest();
-  if (s.t > 150) toMenu(); // 展示局定期重來，避免怪太多
+  if (s.t > 150) { sim = createSim({ seed: 7, vh: H / scale }); sim.state.god = true; } // 展示局定期重來，避免怪太多
   const a = s.t * 0.35;
   sim.update(dt, { x: Math.cos(a) * 0.6, y: Math.sin(a) * 0.6 });
 }
@@ -129,4 +188,5 @@ function drawStick() {
 }
 
 toMenu();
+if (LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);
 requestAnimationFrame(frame);

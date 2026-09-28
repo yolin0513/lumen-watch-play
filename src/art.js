@@ -163,9 +163,35 @@ export function drawPlayer(g, x, y, t, facing, hurt) {
   g.restore();
 }
 
+// 每章一套地面色盤：螢苔原＝藍紫螢光苔、霧沼＝暗綠泥灘、晶窟＝深藍岩床帶洋紅晶屑
 export const PALETTES = {
-  moss: { base: '#15182b', blotchA: 'rgba(60,40,120,0.18)', blotchB: 'rgba(20,110,120,0.15)', crack: 'rgba(120,220,255,0.12)', crystal: 'rgba(140,200,255,0.55)', dotA: 'rgba(160,140,255,0.25)', dotB: 'rgba(80,220,200,0.2)' },
+  moss:    { base: '#15182b', blotchA: 'rgba(60,40,120,0.18)', blotchB: 'rgba(20,110,120,0.15)', crack: 'rgba(120,220,255,0.12)', crystal: 'rgba(140,200,255,0.55)', dotA: 'rgba(160,140,255,0.25)', dotB: 'rgba(80,220,200,0.2)' },
+  marsh:   { base: '#0f1a17', blotchA: 'rgba(40,90,60,0.22)', blotchB: 'rgba(90,110,40,0.14)', crack: 'rgba(150,220,140,0.10)', crystal: 'rgba(170,230,150,0.35)', dotA: 'rgba(120,200,120,0.22)', dotB: 'rgba(200,220,120,0.14)' },
+  crystal: { base: '#0c1024', blotchA: 'rgba(40,60,160,0.22)', blotchB: 'rgba(140,40,140,0.14)', crack: 'rgba(200,160,255,0.16)', crystal: 'rgba(255,140,230,0.6)', dotA: 'rgba(120,160,255,0.3)', dotB: 'rgba(255,120,220,0.2)' },
 };
+
+// 晶柱：六角晶簇（依半徑快取）
+const pillarCache = new Map();
+export function makePillar(r) {
+  const k = Math.round(r / 3) * 3;
+  if (pillarCache.has(k)) return pillarCache.get(k);
+  const S = k * 3, c = canvas(S * 2, S * 2), g = c.getContext('2d'), rr = rng(k * 17 + 3);
+  g.translate(S, S);
+  g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.ellipse(0, k * 0.55, k * 1.15, k * 0.45, 0, 0, Math.PI * 2); g.fill();
+  const shards = 5;
+  for (let i = 0; i < shards; i++) {
+    const a = -Math.PI / 2 + (i - (shards - 1) / 2) * 0.35 + (rr() - 0.5) * 0.2, h = k * (1.1 + rr() * 1.1) * (i === 2 ? 1.4 : 1), w = k * (0.28 + rr() * 0.15);
+    const bx = (i - 2) * k * 0.28, by = k * 0.3, tx = bx + Math.cos(a) * h, ty = by + Math.sin(a) * h;
+    const px = -Math.sin(a) * w, py = Math.cos(a) * w;
+    const grad = g.createLinearGradient(bx, by, tx, ty);
+    grad.addColorStop(0, '#2a2a6a'); grad.addColorStop(0.6, '#6a5ad8'); grad.addColorStop(1, '#f0b8ff');
+    g.fillStyle = grad;
+    g.beginPath(); g.moveTo(bx - px, by - py); g.lineTo(tx - px * 0.3, ty - py * 0.3); g.lineTo(tx + Math.cos(a) * w * 0.8, ty + Math.sin(a) * w * 0.8); g.lineTo(tx + px * 0.3, ty + py * 0.3); g.lineTo(bx + px, by + py); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,220,255,0.55)'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, by); g.lineTo(tx + Math.cos(a) * w * 0.8, ty + Math.sin(a) * w * 0.8); g.stroke();
+  }
+  pillarCache.set(k, c);
+  return c;
+}
 
 // ---- 圖示：武器／被動／道具（64px 圓形徽章），HUD 與升級卡片共用 ----
 const iconCache = new Map();
