@@ -1549,6 +1549,35 @@ function createRenderer(chapter = CHAPTER1) {
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
+  const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
+
+  // ---- 螢幕尺寸相關的快取（效能：量測顯示每幀重建全螢幕漸層與紋理圖樣是繪製的最大成本）----
+  // 地面：把 512 的地面磚預先放大到裝置像素，平鋪時 1:1 貼圖、不再每幀重新取樣。
+  // 霧／暗角／受傷紅框：全螢幕漸層只在畫布尺寸改變時畫一次，之後每幀 drawImage。
+  const cache = { key: '' };
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+  function screenCache(W, H, scale) {
+    const key = `${W}x${H}@${scale}`;
+    if (cache.key === key) return cache;
+    cache.key = key;
+    const T = Math.max(1, Math.round(512 * scale));
+    cache.tile = mk(T, T); cache.tile.getContext('2d').drawImage(ground, 0, 0, T, T); cache.T = T;
+    const radial = (w, h, cx, cy, r0, r1, stops) => {
+      const c = mk(w, h), cg = c.getContext('2d'), gr = cg.createRadialGradient(cx, cy, r0, cx, cy, r1);
+      for (const [o, col] of stops) gr.addColorStop(o, col);
+      cg.fillStyle = gr; cg.fillRect(0, 0, w, h); return c;
+    };
+    cache.vig = radial(W, H, W / 2, H / 2, Math.min(W, H) * 0.35, Math.max(W, H) * 0.75, [[0, 'rgba(5,4,13,0)'], [1, 'rgba(5,4,13,0.75)']]);
+    cache.red = radial(W, H, W / 2, H / 2, Math.min(W, H) * 0.3, Math.max(W, H) * 0.7, [[0, 'rgba(255,0,60,0)'], [1, 'rgba(255,20,70,1)']]);
+    if (chapter.fog) {
+      const R = chapter.fog * scale, M = 48; // 多留邊界，震動時也蓋得滿
+      cache.fogM = M;
+      cache.fog = radial(W + 2 * M, H + 2 * M, W / 2 + M, H / 2 + M, R * 0.55, R * 1.25, [[0, 'rgba(160,190,175,0)'], [0.6, 'rgba(90,120,105,0.45)'], [1, 'rgba(40,58,50,0.88)']]);
+      const br = 90 * scale;
+      cache.blob = radial(br * 2, br * 2, br, br, 0, br, [[0, 'rgba(200,230,210,0.9)'], [1, 'rgba(200,230,210,0)']]);
+    }
+    return cache;
+  }
 
   function burst(x, y, n, img, spd, life = 0.5, size = 10) {
     for (let i = 0; i < n; i++) {
@@ -1585,7 +1614,7 @@ function createRenderer(chapter = CHAPTER1) {
     for (const k of ['levelFlash', 'hurtFlash', 'whiteFlash']) fx[k] = Math.max(0, fx[k] - dt * (k === 'whiteFlash' ? 1.5 : 1));
     for (const q of fx.parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.9; q.vy *= 0.9; q.life -= dt; }
     fx.parts = fx.parts.filter((q) => q.life > 0);
-    if (fx.parts.length > 900) fx.parts.splice(0, fx.parts.length - 900);
+    if (fx.parts.length > MAX_PARTS) fx.parts.splice(0, fx.parts.length - MAX_PARTS);
     for (const q of fx.texts) { q.y -= 30 * dt; q.life -= dt; }
     fx.texts = fx.texts.filter((q) => q.life > 0);
     if (fx.texts.length > 80) fx.texts.splice(0, fx.texts.length - 80);
@@ -1607,7 +1636,14 @@ function createRenderer(chapter = CHAPTER1) {
     g.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
 
-    g.fillStyle = OFF.has('ground') ? '#101020' : g.createPattern(ground, 'repeat'); g.fillRect(camX, camY, VW, vh);
+    const C = screenCache(W, H, scale);
+    if (OFF.has('ground')) { g.fillStyle = '#101020'; g.fillRect(camX, camY, VW, vh); }
+    else { // 螢幕空間平鋪預先放大的地面磚（通常 4～6 次 drawImage）
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      const T = C.T, ox = -((((camX * scale) % T) + T) % T), oy = -((((camY * scale) % T) + T) % T);
+      for (let x = Math.round(ox); x < W; x += T) for (let y = Math.round(oy); y < H; y += T) g.drawImage(C.tile, x, y);
+      g.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
+    }
     prof?.lap('地面');
 
     // 泥沼：深色水窪＋一圈反光
@@ -1812,31 +1848,22 @@ function createRenderer(chapter = CHAPTER1) {
     // 螢幕空間：霧、暗角、受傷紅框、白閃
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (s.chapter.fog && !OFF.has('fog')) { // 霧：以玩家為中心，瞄準距離外逐漸看不清
-      const px = (p.x - camX) * scale, py = (p.y - camY) * scale, R = s.chapter.fog * scale;
-      const fg = g.createRadialGradient(px, py, R * 0.55, px, py, R * 1.25);
-      fg.addColorStop(0, 'rgba(160,190,175,0)'); fg.addColorStop(0.6, 'rgba(90,120,105,0.45)'); fg.addColorStop(1, 'rgba(40,58,50,0.88)');
-      g.fillStyle = fg; g.fillRect(0, 0, W, H);
+      const px = (p.x - camX) * scale, py = (p.y - camY) * scale;
+      g.drawImage(C.fog, px - W / 2 - C.fogM, py - H / 2 - C.fogM);
       g.globalAlpha = 0.18;
+      const br = C.blob.width / 2;
       for (let i = 0; i < 5; i++) { // 緩慢飄動的霧團
         const fx0 = ((i * 173 + T * (8 + i * 3)) % (W + 400)) - 200, fy0 = ((i * 311) % H);
-        const mg = g.createRadialGradient(fx0, fy0, 0, fx0, fy0, 180 * scale / 2);
-        mg.addColorStop(0, 'rgba(200,230,210,0.9)'); mg.addColorStop(1, 'rgba(200,230,210,0)');
-        g.fillStyle = mg; g.fillRect(fx0 - 200 * scale, fy0 - 200 * scale, 400 * scale, 400 * scale);
+        g.drawImage(C.blob, fx0 - br, fy0 - br);
       }
       g.globalAlpha = 1;
     }
     prof?.lap('霧');
-    if (!OFF.has('vignette')) {
-      const vig = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
-      vig.addColorStop(0, 'rgba(5,4,13,0)'); vig.addColorStop(1, 'rgba(5,4,13,0.75)');
-      g.fillStyle = vig; g.fillRect(0, 0, W, H);
-    }
+    if (!OFF.has('vignette')) g.drawImage(C.vig, 0, 0);
     const lowHp = p.hp / p.maxHp < 0.3 ? 0.25 + Math.sin(T * 6) * 0.1 : 0;
     const red = Math.max(fx.hurtFlash, lowHp);
     if (red > 0) {
-      const rg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
-      rg.addColorStop(0, 'rgba(255,0,60,0)'); rg.addColorStop(1, `rgba(255,20,70,${red})`);
-      g.fillStyle = rg; g.fillRect(0, 0, W, H);
+      g.globalAlpha = Math.min(1, red); g.drawImage(C.red, 0, 0); g.globalAlpha = 1;
     }
     if (fx.whiteFlash > 0) { g.fillStyle = `rgba(255,245,220,${fx.whiteFlash * 0.6})`; g.fillRect(0, 0, W, H); }
 
@@ -2864,7 +2891,13 @@ function frame(now) {
   const t0 = performance.now();
   if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
-  else if (!paused) { sim.update(dt, input.move); sync(); }
+  else if (!paused) {
+    // 掉幀時（一幀超過 1/30 秒）拆成數個小步補上，最多補到 4 步；否則低幀率時整個遊戲會變慢動作
+    const steps = Math.min(4, Math.max(1, Math.ceil(raw / (1 / 30))));
+    const sdt = Math.min(raw, 4 / 30) / steps;
+    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(steps > 1 ? sdt : dt, input.move);
+    sync();
+  }
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;

@@ -205,7 +205,13 @@ function frame(now) {
   const t0 = performance.now();
   if (perf) { perfFrame(now, dt); requestAnimationFrame(frame); return; }
   if (mode === 'menu') demoStep(dt);
-  else if (!paused) { sim.update(dt, input.move); sync(); }
+  else if (!paused) {
+    // 掉幀時（一幀超過 1/30 秒）拆成數個小步補上，最多補到 4 步；否則低幀率時整個遊戲會變慢動作
+    const steps = Math.min(4, Math.max(1, Math.ceil(raw / (1 / 30))));
+    const sdt = Math.min(raw, 4 / 30) / steps;
+    for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(steps > 1 ? sdt : dt, input.move);
+    sync();
+  }
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt, W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
