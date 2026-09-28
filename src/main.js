@@ -15,7 +15,7 @@ const g = canvas.getContext('2d');
 const input = createInput(canvas);
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
-const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1) : null; // 效能量測模式，見 perf.js
+const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync')) : null; // 效能量測模式，見 perf.js
 
 let W = 0, H = 0, scale = 1, safeTop = 0;
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
@@ -224,12 +224,16 @@ function frame(now) {
 function perfFrame(now, dt) {
   const s = sim.state;
   const auto = () => { if (s.phase === 'choice') sim.choose(0); if (s.phase === 'chest') sim.closeChest(); };
-  if (perf.needsSkip(s)) { for (let i = 0; i < 600 && s.t < perf.skipTo(perf.stage); i++) { auto(); sim.update(1 / 60, perf.move(s)); s.events.length = 0; } }
-  auto();
-  const t0 = performance.now(); sim.update(dt, perf.move(s)); const t1 = performance.now();
-  renderer.render(g, s, dt, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
-  const t2 = performance.now();
-  perf.record(now, t1 - t0, t2 - t1, s);
+  if (perf.needsSkip(s)) { for (let i = 0; i < (perf.sync ? 3000 : 600) && s.t < perf.skipTo(perf.stage); i++) { auto(); sim.update(1 / 60, perf.move(s)); s.events.length = 0; } }
+  for (let k = 0; k < (perf.sync && !perf.done && !perf.needsSkip(s) ? 30 : 1); k++) {
+    auto();
+    const step = perf.sync ? 1 / 60 : dt;
+    const t0 = performance.now(); sim.update(step, perf.move(s)); const t1 = performance.now();
+    renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
+    if (perf.sync) g.getImageData(0, 0, 1, 1); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
+    const t2 = performance.now();
+    perf.record(now, t1 - t0, t2 - t1, s);
+  }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';
   box.textContent = perf.done ? perf.report.text : `效能量測中…（${perf.stage + 1}/2）第 ${Math.floor(s.t)} 秒`;
