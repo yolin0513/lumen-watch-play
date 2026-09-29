@@ -7,6 +7,8 @@
 // &off=fog,vignette,glow,particles,ground,filter：A/B 量測，關掉指定的繪製項目（看各項佔多少）
 //   &off=cache：地面／霧／暗角改走優化前的舊做法（每幀重建圖樣與漸層），用來做前後對照
 // &dpr=1：把畫布解析度上限改成指定倍率（看解析度佔多少）
+// &evo=aura,orbit,pulse,wisps：開局就給這些武器（滿級＋共鳴）與四個滿級被動，量後期特效最多的畫面
+// 每段都量「過亮像素比例」（luma ≥ 220）：縮畫到小畫布取樣，不直接讀主畫布
 // &waves=off：關掉菌潮（M7 起第 360 秒剛好有一波菌潮；要和 M7 以前的量測比，就用這個，場面定義才相同）
 // 菌潮開著時多量一段「菌潮滿場」：第 303 秒（第 5 波三批剛湧入完，菌潮怪在上限附近）
 // &sync=1：同步模式——連續畫多幀，每幀畫完把主畫布縮到 1×1 小畫布讀回，逼 GPU 做完再計時（不直接讀主畫布，見 main.js flushGPU）。
@@ -38,8 +40,10 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
     for (const r of rows) for (const [k, v] of Object.entries(r.phases)) (phases[k] ||= []).push(v);
     const ph = Object.entries(phases).map(([k, v]) => { v.sort((a, b) => a - b); return { k, avg: v.reduce((a, b) => a + b, 0) / v.length, p95: pct(v, 0.95) }; }).sort((a, b) => b.avg - a.avg);
     const elapsed = iv.reduce((a, b) => a + b, 0) / 1000;
+    const wh = rows.map((r) => r.white).filter((x) => x !== null).sort((a, b) => a - b);
     return { name: st.name, fps: rows.length / elapsed, iv: { p50: pct(iv, 0.5), p95: pct(iv, 0.95), p99: pct(iv, 0.99), max: iv.at(-1), over20: iv.filter((x) => x > 20).length, over34: iv.filter((x) => x > 34).length },
       update: { p50: pct(up, 0.5), p99: pct(up, 0.99), max: up.at(-1) }, render: { p50: pct(rd, 0.5), p95: pct(rd, 0.95), p99: pct(rd, 0.99), max: rd.at(-1) }, phases: ph,
+      white: { p50: pct(wh, 0.5), p95: pct(wh, 0.95), max: wh.at(-1) ?? 0, n: wh.length },
       scene: { enemies: s.enemies.length, surge: s.enemies.filter((e) => e.surge).length, bullets: s.bullets.length, gems: s.gems.length } };
   }
   function text() {
@@ -49,6 +53,7 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
         sync ? '幀間隔：同步模式不量（只量繪製成本）' : `平均 ${f1(r.fps)} fps；幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
         `邏輯 p50 ${r.update.p50.toFixed(2)}／p99 ${r.update.p99.toFixed(2)}／最慢 ${r.update.max.toFixed(2)} ms`,
         `繪製 p50 ${f1(r.render.p50)}／p95 ${f1(r.render.p95)}／p99 ${f1(r.render.p99)}／最慢 ${f1(r.render.max)} ms`,
+        `亮度：過亮（luma ≥ 220）的像素 p50 ${(r.white.p50 * 100).toFixed(1)}%／p95 ${(r.white.p95 * 100).toFixed(1)}%／最高 ${(r.white.max * 100).toFixed(1)}%（${r.white.n} 幀取樣）`,
         `繪製細項（平均／p95 ms）：${r.phases.map((p) => `${p.k} ${p.avg.toFixed(2)}/${p.p95.toFixed(2)}`).join('、')}`);
     }
     return lines.join('\n');
@@ -61,9 +66,10 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
     // 自動移動：繞大圈，讓鏡頭與場面持續變化
     move(s) { const a = s.t * 0.5; return { x: Math.cos(a), y: Math.sin(a) }; },
     // 每幀呼叫：now＝rAF 時間；update／render 為量好的毫秒
-    record(now, update, render, s) {
+    frameNo() { return rec.length; },
+    record(now, update, render, s, white = null) {
       if (done) return;
-      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {} });
+      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white });
       lastNow = now;
       if (rec.length >= stages[stage].frames) {
         results.push(summarize(stages[stage], rec, s));

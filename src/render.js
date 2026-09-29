@@ -45,11 +45,27 @@ export function createRenderer(chapter = CHAPTER1) {
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
     frost: glow('rgba(170,230,255,1)', 16), lava: glow('rgba(255,140,50,1)', 48),
     evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16),
-    blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
+    shade: glow('rgba(5,4,13,0.55)', 28), blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
   const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
+  // 發光預算（M8）：加亮疊加（'lighter'）的裝飾光——共鳴金光、粒子、光屑的光暈——同一幀畫得越多，就一起按比例調淡，
+  // 讓「疊在一起的總亮度」有上限；數量在預算內時（一般場面）完全不變。
+  // 理由：M7 第三批的共鳴金光在滿場時疊成一片白、蓋掉角色（擁有者手機回報）；只把每個光調暗會讓平常的場面也變暗，
+  // 問題出在「數量沒有上限」，所以限制的是總量。tools/glow-check.mjs 量過亮面積、角色周圍亮度，並用「拿掉預算」當對照組。
+  const GLOW = { on: true, evo: 16, parts: 120, gems: 60 };
+  const share = (n, budget) => (n <= budget ? 1 : budget / n);
+  function glowBudget(s, p, onScreen) {
+    let evo = 0, parts = 0, gems = 0;
+    for (const b of s.bullets) if (b.evo && !b.big && onScreen(b.x, b.y)) evo += b.boom ? 3 : 1;
+    for (const w of p.weapons) if (w.evo) evo += w.wisps.length;
+    for (const m of s.mines) if (m.evo) evo++;
+    for (const q of s.sentries) if (q.src.evo) evo++;
+    for (const q of fx.parts) if (q.img === G.evo) evo++; else parts++;
+    for (const gm of s.gems) if (onScreen(gm.x, gm.y)) gems++;
+    return { evo: share(evo, GLOW.evo), parts: share(parts, GLOW.parts), gems: share(gems, GLOW.gems) };
+  }
 
   // ---- 螢幕尺寸相關的快取（效能：量測顯示每幀重建全螢幕漸層與紋理圖樣是繪製的最大成本）----
   // 地面：把 512 的地面磚預先放大到裝置像素，平鋪時 1:1 貼圖、不再每幀重新取樣。
@@ -139,6 +155,7 @@ export function createRenderer(chapter = CHAPTER1) {
     const camX = p.x - VW / 2 + sx, camY = p.y - vh / 2 + sy;
     g.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
+    const glowK = GLOW.on ? glowBudget(s, p, onScreen) : null, kE = glowK?.evo ?? 1, kP = glowK?.parts ?? 1, kG = glowK?.gems ?? 1;
 
     const C = screenCache(W, H, scale);
     if (OFF.has('ground')) { g.fillStyle = '#101020'; g.fillRect(camX, camY, VW, vh); }
@@ -257,8 +274,9 @@ export function createRenderer(chapter = CHAPTER1) {
 
     // 經驗晶
     g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = kG;
     if (!OFF.has('glow')) for (const gm of s.gems) if (onScreen(gm.x, gm.y)) { const k = gm.big ? 2 : 1; g.drawImage(G.gem, gm.x - 12 * k, gm.y - 12 * k, 24 * k, 24 * k); }
-    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
     g.fillStyle = '#bff6ff';
     for (const gm of s.gems) {
       if (!onScreen(gm.x, gm.y)) continue;
@@ -286,13 +304,13 @@ export function createRenderer(chapter = CHAPTER1) {
     }
     for (const m of s.mines) {
       const armed = m.arm <= 0, pulse = armed ? 0.7 + Math.sin(T * 6 + m.x) * 0.3 : 0.35;
-      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; if (m.evo) g.drawImage(G.evo, m.x - 22, m.y - 22, 44, 44); g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.globalCompositeOperation = 'lighter'; if (m.evo) { g.globalAlpha = pulse * kE; g.drawImage(G.evo, m.x - 22, m.y - 22, 44, 44); } g.globalAlpha = pulse; g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
       g.fillStyle = armed ? (m.evo ? '#fff0b0' : '#ffd84a') : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
     }
     // 燈塔哨：小燈塔＋頂端的光（快熄滅時閃爍）；共鳴後多一圈金光
     for (const q of s.sentries) {
       const fade = q.life < 2 ? 0.4 + Math.sin(T * 20) * 0.3 : 1, evo = q.src.evo;
-      g.globalCompositeOperation = 'lighter'; g.globalAlpha = fade; g.drawImage(evo ? G.evo : G.sentry, q.x - 18, q.y - 30, 36, 36); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = fade * (evo ? kE : 1); g.drawImage(evo ? G.evo : G.sentry, q.x - 18, q.y - 30, 36, 36); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
       g.fillStyle = evo ? '#8a6a2a' : '#2a5a3a'; g.beginPath(); g.moveTo(q.x - 6, q.y + 6); g.lineTo(q.x - 3, q.y - 10); g.lineTo(q.x + 3, q.y - 10); g.lineTo(q.x + 6, q.y + 6); g.closePath(); g.fill();
       g.fillStyle = evo ? '#fff0b0' : '#d8ffe0'; g.fillRect(q.x - 3.5, q.y - 15, 7, 5);
     }
@@ -322,14 +340,8 @@ export function createRenderer(chapter = CHAPTER1) {
     // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
     const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
     if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
-    vis.push({ player: true, y: p.y });
     vis.sort((a, b) => a.y - b.y);
     for (const e of vis) {
-      if (e.player) {
-        drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4);
-        if (p.slowT > 0) { g.strokeStyle = `rgba(180,230,255,${0.4 + Math.sin(T * 10) * 0.2})`; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } // 被冰針減速
-        continue;
-      }
       if (e.pillar) {
         const f = e.pillar, img = makePillar(f.r), k = f.r / (Math.round(f.r / 3) * 3);
         g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35 + Math.sin(T * 2 + f.x) * 0.1;
@@ -365,10 +377,10 @@ export function createRenderer(chapter = CHAPTER1) {
     g.lineCap = 'round';
     for (const b of s.bullets) {
       if (!onScreen(b.x, b.y)) continue;
-      if (b.evo && !b.big && !OFF.has('glow')) { const r = (b.size ?? 8) * 2.2 + 8; g.drawImage(G.evo, b.x - r, b.y - r, r * 2, r * 2); } // 共鳴後的投射物：一律多一層金色光暈
+      if (b.evo && !b.big && !OFF.has('glow')) { const r = (b.size ?? 8) * 2.2 + 8; g.globalAlpha = kE; g.drawImage(G.evo, b.x - r, b.y - r, r * 2, r * 2); g.globalAlpha = 1; } // 共鳴後的投射物：一律多一層金色光暈
       if (b.boom) { // 旋轉的新月光刃
         const k = b.size / 11;
-        if (b.evo) for (const [back, al] of [[0.05, 0.45], [0.1, 0.22]]) { g.globalAlpha = al; g.drawImage(G.evo, b.x - b.vx * back - 18 * k, b.y - b.vy * back - 18 * k, 36 * k, 36 * k); } // 共鳴：殘影
+        if (b.evo) for (const [back, al] of [[0.05, 0.45], [0.1, 0.22]]) { g.globalAlpha = al * kE; g.drawImage(G.evo, b.x - b.vx * back - 18 * k, b.y - b.vy * back - 18 * k, 36 * k, 36 * k); } // 共鳴：殘影
         g.globalAlpha = 1;
         g.drawImage(G.blade, b.x - 18 * k, b.y - 18 * k, 36 * k, 36 * k);
         g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = b.evo ? 'rgba(255,245,200,0.98)' : 'rgba(220,255,240,0.95)';
@@ -389,7 +401,7 @@ export function createRenderer(chapter = CHAPTER1) {
     }
     for (const w of p.weapons) {
       for (const q of w.wisps) {
-        if (w.evo) { g.drawImage(G.evo, q.x - 16, q.y - 16, 32, 32); if (Math.random() < 0.15) burst(q.x, q.y, 1, G.evo, 30, 0.3, 7); } // 共鳴「螢群」：金色、拖著光點
+        if (w.evo) { g.globalAlpha = kE; g.drawImage(G.evo, q.x - 16, q.y - 16, 32, 32); g.globalAlpha = 1; if (Math.random() < 0.15) burst(q.x, q.y, 1, G.evo, 30, 0.3, 7); } // 共鳴「螢群」：金色、拖著光點
         g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = w.evo ? '#fff6c8' : '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill();
       }
       if (w.flame) { // 火焰錐：從玩家往火口方向，半透明漸層＋閃爍
@@ -440,8 +452,12 @@ export function createRenderer(chapter = CHAPTER1) {
       g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
-    if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
+    if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    // 角色永遠畫在所有特效之上（M8）：先壓一圈柔和的暗底再畫角色，特效再多角色都看得見
+    g.drawImage(G.shade, p.x - 28, p.y - 26, 56, 56);
+    drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); prof?.mark?.('player', p.x, p.y);
+    if (p.slowT > 0) { g.strokeStyle = `rgba(180,230,255,${0.4 + Math.sin(T * 10) * 0.2})`; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } // 被冰針減速
 
     prof?.lap('子彈與特效');
     // 傷害數字

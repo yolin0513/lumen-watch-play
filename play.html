@@ -102,9 +102,12 @@
   .pending { padding: 10px; border-radius: 14px; border: 1px dashed rgba(255, 200, 90, 0.55); background: rgba(60, 40, 10, 0.25); box-sizing: border-box; }
   .pending:empty { display: none; }
   .pending .bag { width: 100%; margin-top: 8px; } .pending .btn { margin: 8px 0 0; }
-  .batch-bar { position: sticky; bottom: 0; z-index: 4; width: min(380px, 100%); display: none; padding-bottom: env(safe-area-inset-bottom); }
-  .batch-bar.show { display: block; }
-  .batch-card { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 10px; border-radius: 14px; background: #1b1540; border: 1px solid var(--edge); font-size: 13px; text-align: left; }
+  /* 批量分解列：固定在畫面最底（避開 Home 指示條），出現時整頁底部讓出同樣的空間，捲到底時最後一排不會被蓋住；沒勾選任何東西時不出現、不佔位 */
+  .batch-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: none; justify-content: center; box-sizing: border-box;
+    padding: 14px 16px calc(env(safe-area-inset-bottom) + 10px); background: linear-gradient(rgba(5, 4, 13, 0), rgba(5, 4, 13, 0.94) 40%); }
+  .batch-bar.show { display: flex; }
+  #gear.batching { padding-bottom: calc(env(safe-area-inset-bottom) + 96px); }
+  .batch-card { display: flex; align-items: center; gap: 6px; width: min(380px, 100%); box-sizing: border-box; padding: 8px 10px; border-radius: 14px; background: #1b1540; border: 1px solid var(--edge); font-size: 13px; text-align: left; }
   .batch-card span { flex: 1; } .batch-card b { color: var(--gold); } .batch-card .btn { margin: 0; }
   .sheet-p { font-size: 13px; color: #cfd6ff; line-height: 1.55; margin: 6px 0; } .sheet-p.warn, .warn { color: #ffb38a !important; font-weight: 700; }
   .opts { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
@@ -116,13 +119,20 @@
   .asc-title { font-weight: 800; color: var(--gold); font-size: 14px; }
   .perks { list-style: none; padding: 0 !important; margin: 6px 0 !important; font-size: 13px !important; line-height: 1.6 !important; }
   .perks li.on { color: #ffe9a8; } .perks li.off { color: var(--dim); opacity: 0.8; }
+  .asc-sub { display: block; font-size: 11px; color: var(--dim); font-weight: 400; margin-top: 2px; }
+  .stat-block { margin: 6px 0 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.12); }
+  .stat-block.on { background: rgba(120, 230, 160, 0.08); border-color: rgba(120, 230, 160, 0.45); }
+  .stat-block .sb-title { font-size: 12px; font-weight: 700; color: var(--dim); margin-bottom: 2px; } .stat-block.on .sb-title { color: #8cf0b0; }
+  .stat-lines { list-style: none; padding: 0 !important; margin: 0 !important; font-size: 14px; line-height: 1.7; }
+  .stat-lines .tag { float: right; font-size: 11px; color: var(--dim); } .stat-block.on .stat-lines li { color: #eafff0; } .stat-block.on .stat-lines li.mainline { color: #ffe9a8; font-weight: 700; }
+  .stat-block.idle .stat-lines li { color: #cfd6ff; }
   .asc-need { font-size: 12px; color: #cfd6ff; margin: 4px 0; } .asc-hint { font-size: 11px; color: var(--dim); margin-top: 4px; }
   .wbtns { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
   .wslot .ghostbuy { background: rgba(20, 16, 44, 0.8); color: var(--ink); border-color: rgba(160, 170, 255, 0.3); font-size: 12px; }
   .empty-bag { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 12px; }
   .sheet { position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.5); z-index: 5; }
   .sheet.show { display: flex; }
-  .sheet-card { width: min(420px, 100%); box-sizing: border-box; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); border-radius: 18px 18px 0 0;
+  .sheet-card { width: min(420px, 100%); max-height: 88vh; max-height: calc(100dvh - 24px); overflow-y: auto; touch-action: pan-y; box-sizing: border-box; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); border-radius: 18px 18px 0 0;
     background: #141032; border-top: 2px solid var(--c); text-align: left; }
   .sheet-card .name { color: var(--c); font-size: 18px; } .sheet-card .rar { color: var(--dim); font-size: 12px; margin: 2px 0 8px; }
   .sheet-card ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.7; } .sheet-card .mainline { color: #ffe9a8; font-weight: 700; }
@@ -174,7 +184,7 @@
   .gacha-btns { display: flex; gap: 8px; } .gacha-btns .btn { flex: 1; margin: 6px 0; line-height: 1.3; }
   .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); z-index: 6; padding: 16px; box-sizing: border-box; }
   .modal.show { display: flex; }
-  .modal-card { width: min(380px, 100%); max-height: 88vh; overflow-y: auto; touch-action: pan-y; padding: 16px; border-radius: 18px; background: #141032; border: 1px solid var(--edge); text-align: center; }
+  .modal-card { width: min(380px, 100%); max-height: 88vh; max-height: calc(100dvh - 32px); overflow-y: auto; touch-action: pan-y; padding: 16px; border-radius: 18px; background: #141032; border: 1px solid var(--edge); text-align: center; }
   .modal-card h3 { margin: 0 0 8px; color: var(--gold); } .modal-card p { font-size: 14px; color: #cfd6ff; margin: 6px 0; line-height: 1.5; }
   .gacha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
   .gcard { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--c); font-size: 12px; text-align: left; }
@@ -1035,6 +1045,10 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   // shop-test 用「實際開燈核」得到的結果比對提示，兩條路徑分開，提示寫錯或過期才抓得到。
   function resoNeeds(id) { return RESONANCES[id]?.needs; }
   function canEvolve(w) { const r = RESONANCES[w.id]; return r && !w.evo && w.lv >= MAX_LV && (p.passives[r.needs] || 0) > 0; }
+  // 身上每把武器的共鳴進度（提示用）：done 已共鳴／ready 下一個燈核就共鳴（canEvolve）／其他＝還差幾級。
+  // M8：擁有者看到被動卡寫「可與 4 把共鳴」、實際只亮 2 顆★——規則是「一個被動可以讓好幾把共鳴，但要滿級、而且一個燈核只共鳴一把」，
+  // 卡片沒寫條件，看起來像壞掉。
+  function resoState(w) { return w.evo ? 'done' : canEvolve(w) ? 'ready' : 'lv'; }
 
   function options() {
     const out = [];
@@ -1058,14 +1072,17 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     if (isW && RESONANCES[o.id]) {
       const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
       reso = { partners: [need], held: have ? [need] : [] };
-      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」`;
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後，下一個燈核共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name}＋燈核 → 共鳴「${RESONANCES[o.id].name}」`;
     }
     if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
       const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
       if (ws.length) {
-        reso = { partners: ws, held };
-        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name);
-        hint = held.length ? `★ 可與你的 ${held.map(name).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}` : `可與 ${ws.map(name).join('、')} 共鳴`;
+        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name), own = (wid) => p.weapons.find((w) => w.id === wid);
+        const state = Object.fromEntries(held.map((wid) => [wid, resoState(own(wid))]));
+        reso = { partners: ws, held, done: held.filter((w) => state[w] === 'done'), ready: held.filter((w) => state[w] === 'ready') };
+        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・等燈核）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
+        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。武器滿級後，每個燈核共鳴一把`
+          : `可與 ${ws.map(name).join('、')} 共鳴（武器滿級後，每個燈核共鳴一把）`;
       }
     }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
@@ -2300,11 +2317,27 @@ function createRenderer(chapter = CHAPTER1) {
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
     frost: glow('rgba(170,230,255,1)', 16), lava: glow('rgba(255,140,50,1)', 48),
     evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16),
-    blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
+    shade: glow('rgba(5,4,13,0.55)', 28), blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
   const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
   const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
+  // 發光預算（M8）：加亮疊加（'lighter'）的裝飾光——共鳴金光、粒子、光屑的光暈——同一幀畫得越多，就一起按比例調淡，
+  // 讓「疊在一起的總亮度」有上限；數量在預算內時（一般場面）完全不變。
+  // 理由：M7 第三批的共鳴金光在滿場時疊成一片白、蓋掉角色（擁有者手機回報）；只把每個光調暗會讓平常的場面也變暗，
+  // 問題出在「數量沒有上限」，所以限制的是總量。tools/glow-check.mjs 量過亮面積、角色周圍亮度，並用「拿掉預算」當對照組。
+  const GLOW = { on: true, evo: 16, parts: 120, gems: 60 };
+  const share = (n, budget) => (n <= budget ? 1 : budget / n);
+  function glowBudget(s, p, onScreen) {
+    let evo = 0, parts = 0, gems = 0;
+    for (const b of s.bullets) if (b.evo && !b.big && onScreen(b.x, b.y)) evo += b.boom ? 3 : 1;
+    for (const w of p.weapons) if (w.evo) evo += w.wisps.length;
+    for (const m of s.mines) if (m.evo) evo++;
+    for (const q of s.sentries) if (q.src.evo) evo++;
+    for (const q of fx.parts) if (q.img === G.evo) evo++; else parts++;
+    for (const gm of s.gems) if (onScreen(gm.x, gm.y)) gems++;
+    return { evo: share(evo, GLOW.evo), parts: share(parts, GLOW.parts), gems: share(gems, GLOW.gems) };
+  }
 
   // ---- 螢幕尺寸相關的快取（效能：量測顯示每幀重建全螢幕漸層與紋理圖樣是繪製的最大成本）----
   // 地面：把 512 的地面磚預先放大到裝置像素，平鋪時 1:1 貼圖、不再每幀重新取樣。
@@ -2394,6 +2427,7 @@ function createRenderer(chapter = CHAPTER1) {
     const camX = p.x - VW / 2 + sx, camY = p.y - vh / 2 + sy;
     g.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
     const onScreen = (x, y, m = 60) => x > camX - m && x < camX + VW + m && y > camY - m && y < camY + vh + m;
+    const glowK = GLOW.on ? glowBudget(s, p, onScreen) : null, kE = glowK?.evo ?? 1, kP = glowK?.parts ?? 1, kG = glowK?.gems ?? 1;
 
     const C = screenCache(W, H, scale);
     if (OFF.has('ground')) { g.fillStyle = '#101020'; g.fillRect(camX, camY, VW, vh); }
@@ -2512,8 +2546,9 @@ function createRenderer(chapter = CHAPTER1) {
 
     // 經驗晶
     g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = kG;
     if (!OFF.has('glow')) for (const gm of s.gems) if (onScreen(gm.x, gm.y)) { const k = gm.big ? 2 : 1; g.drawImage(G.gem, gm.x - 12 * k, gm.y - 12 * k, 24 * k, 24 * k); }
-    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
     g.fillStyle = '#bff6ff';
     for (const gm of s.gems) {
       if (!onScreen(gm.x, gm.y)) continue;
@@ -2541,13 +2576,13 @@ function createRenderer(chapter = CHAPTER1) {
     }
     for (const m of s.mines) {
       const armed = m.arm <= 0, pulse = armed ? 0.7 + Math.sin(T * 6 + m.x) * 0.3 : 0.35;
-      g.globalCompositeOperation = 'lighter'; g.globalAlpha = pulse; if (m.evo) g.drawImage(G.evo, m.x - 22, m.y - 22, 44, 44); g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.globalCompositeOperation = 'lighter'; if (m.evo) { g.globalAlpha = pulse * kE; g.drawImage(G.evo, m.x - 22, m.y - 22, 44, 44); } g.globalAlpha = pulse; g.drawImage(G.lantern, m.x - 14, m.y - 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
       g.fillStyle = armed ? (m.evo ? '#fff0b0' : '#ffd84a') : '#8a7a3a'; g.beginPath(); g.ellipse(m.x, m.y, 4.5, 5.5, 0, 0, Math.PI * 2); g.fill();
     }
     // 燈塔哨：小燈塔＋頂端的光（快熄滅時閃爍）；共鳴後多一圈金光
     for (const q of s.sentries) {
       const fade = q.life < 2 ? 0.4 + Math.sin(T * 20) * 0.3 : 1, evo = q.src.evo;
-      g.globalCompositeOperation = 'lighter'; g.globalAlpha = fade; g.drawImage(evo ? G.evo : G.sentry, q.x - 18, q.y - 30, 36, 36); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = fade * (evo ? kE : 1); g.drawImage(evo ? G.evo : G.sentry, q.x - 18, q.y - 30, 36, 36); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
       g.fillStyle = evo ? '#8a6a2a' : '#2a5a3a'; g.beginPath(); g.moveTo(q.x - 6, q.y + 6); g.lineTo(q.x - 3, q.y - 10); g.lineTo(q.x + 3, q.y - 10); g.lineTo(q.x + 6, q.y + 6); g.closePath(); g.fill();
       g.fillStyle = evo ? '#fff0b0' : '#d8ffe0'; g.fillRect(q.x - 3.5, q.y - 15, 7, 5);
     }
@@ -2577,14 +2612,8 @@ function createRenderer(chapter = CHAPTER1) {
     // 敵人、晶柱、玩家一起依 y 排序，前後遮擋才自然
     const vis = s.enemies.filter((e) => onScreen(e.x, e.y, e.r * 2));
     if (ter === 'pillars') for (const f of terrainIn('pillars', s.terrainSeed, camX - 60, camY - 40, camX + VW + 60, camY + vh + 90)) vis.push({ pillar: f, y: f.y });
-    vis.push({ player: true, y: p.y });
     vis.sort((a, b) => a.y - b.y);
     for (const e of vis) {
-      if (e.player) {
-        drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4);
-        if (p.slowT > 0) { g.strokeStyle = `rgba(180,230,255,${0.4 + Math.sin(T * 10) * 0.2})`; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } // 被冰針減速
-        continue;
-      }
       if (e.pillar) {
         const f = e.pillar, img = makePillar(f.r), k = f.r / (Math.round(f.r / 3) * 3);
         g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35 + Math.sin(T * 2 + f.x) * 0.1;
@@ -2620,10 +2649,10 @@ function createRenderer(chapter = CHAPTER1) {
     g.lineCap = 'round';
     for (const b of s.bullets) {
       if (!onScreen(b.x, b.y)) continue;
-      if (b.evo && !b.big && !OFF.has('glow')) { const r = (b.size ?? 8) * 2.2 + 8; g.drawImage(G.evo, b.x - r, b.y - r, r * 2, r * 2); } // 共鳴後的投射物：一律多一層金色光暈
+      if (b.evo && !b.big && !OFF.has('glow')) { const r = (b.size ?? 8) * 2.2 + 8; g.globalAlpha = kE; g.drawImage(G.evo, b.x - r, b.y - r, r * 2, r * 2); g.globalAlpha = 1; } // 共鳴後的投射物：一律多一層金色光暈
       if (b.boom) { // 旋轉的新月光刃
         const k = b.size / 11;
-        if (b.evo) for (const [back, al] of [[0.05, 0.45], [0.1, 0.22]]) { g.globalAlpha = al; g.drawImage(G.evo, b.x - b.vx * back - 18 * k, b.y - b.vy * back - 18 * k, 36 * k, 36 * k); } // 共鳴：殘影
+        if (b.evo) for (const [back, al] of [[0.05, 0.45], [0.1, 0.22]]) { g.globalAlpha = al * kE; g.drawImage(G.evo, b.x - b.vx * back - 18 * k, b.y - b.vy * back - 18 * k, 36 * k, 36 * k); } // 共鳴：殘影
         g.globalAlpha = 1;
         g.drawImage(G.blade, b.x - 18 * k, b.y - 18 * k, 36 * k, 36 * k);
         g.save(); g.translate(b.x, b.y); g.rotate(T * 14); g.fillStyle = b.evo ? 'rgba(255,245,200,0.98)' : 'rgba(220,255,240,0.95)';
@@ -2644,7 +2673,7 @@ function createRenderer(chapter = CHAPTER1) {
     }
     for (const w of p.weapons) {
       for (const q of w.wisps) {
-        if (w.evo) { g.drawImage(G.evo, q.x - 16, q.y - 16, 32, 32); if (Math.random() < 0.15) burst(q.x, q.y, 1, G.evo, 30, 0.3, 7); } // 共鳴「螢群」：金色、拖著光點
+        if (w.evo) { g.globalAlpha = kE; g.drawImage(G.evo, q.x - 16, q.y - 16, 32, 32); g.globalAlpha = 1; if (Math.random() < 0.15) burst(q.x, q.y, 1, G.evo, 30, 0.3, 7); } // 共鳴「螢群」：金色、拖著光點
         g.drawImage(G.wisp, q.x - 12, q.y - 12); g.fillStyle = w.evo ? '#fff6c8' : '#f6ffc0'; g.beginPath(); g.arc(q.x, q.y, 2.6, 0, 7); g.fill();
       }
       if (w.flame) { // 火焰錐：從玩家往火口方向，半透明漸層＋閃爍
@@ -2695,8 +2724,12 @@ function createRenderer(chapter = CHAPTER1) {
       g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
-    if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
+    if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    // 角色永遠畫在所有特效之上（M8）：先壓一圈柔和的暗底再畫角色，特效再多角色都看得見
+    g.drawImage(G.shade, p.x - 28, p.y - 26, 56, 56);
+    drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); prof?.mark?.('player', p.x, p.y);
+    if (p.slowT > 0) { g.strokeStyle = `rgba(180,230,255,${0.4 + Math.sin(T * 10) * 0.2})`; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } // 被冰針減速
 
     prof?.lap('子彈與特效');
     // 傷害數字
@@ -3548,7 +3581,7 @@ function createUI(actions) {
   // 身上已有對應的就亮「可共鳴」標記；data-reso-* 讓測試直接比對畫面提示與實際共鳴規則。
   function card(o, i) {
     const r = o.reso, ready = !!r?.held.length;
-    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"` : ''} style="--c:${o.color}">
+    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"${r.ready ? ` data-reso-ready="${r.ready.join(',')}" data-reso-done="${r.done.join(',')}"` : ''}` : ''} style="--c:${o.color}">
       <img src="${iconUrl(o.icon, o.color)}" alt="">
       <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span>${ready ? '<span class="rb">可共鳴</span>' : ''}</div>
       <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}</div></button>`;
@@ -3588,13 +3621,20 @@ function createUI(actions) {
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
   }
 
+  // 裝備的能力區塊（M8）：擁有者第二次看不懂這一頁——滿級傳說只有主屬性是亮色，四條詞條是白字、下面突破又全是 🔒，看起來像詞條沒生效。
+  // 實際上主屬性與詞條「裝備中就全部生效」（meta 的 profileMods；shop-test 用裝上／卸下的合計差額比對）。所以每一行都標狀態，
+  // 區塊標題直接寫「全部生效中」或「裝備後生效」，和下面「突破才解鎖的額外能力」分開。
+  function statBlock(it, on) {
+    return `<div class="stat-block ${on ? 'on' : 'idle'}"><div class="sb-title">${on ? '✓ 全部生效中（已裝備）' : '裝備後全部生效（目前沒有裝備）'}</div>
+      <ul class="stat-lines">${baseGearMods(it).map((m, i) => `<li class="${i ? 'affix' : 'mainline'}" data-line="${i ? 'affix' : 'main'}">${on ? '✓' : '・'} ${esc(fmtMod(m))}<span class="tag">${i ? '詞條' : `主屬性・隨強化成長`}</span></li>`).join('')}</ul></div>`;
+  }
   // 突破區塊：全部五項能力都列出來（已解鎖 ✓、未解鎖 🔒），再寫下一階要什麼材料、現在有多少——擁有者的抱怨是「看不出還有什麼、也不知道怎麼拿到」
   function ascendSection(it, profile, fx) {
     const star = it.star || 0, all = ascendPerks(it, true), c = ascendCost(it);
     const need = it.lv < GEAR_MAX_LV ? `強化到 ${GEAR_MAX_LV} 級後可以突破（目前 ${it.lv} 級）`
       : c ? `下一階（★${c.star}）需要結晶 ×${c.crystals}（你有 ${profile.crystals || 0}）＋燈油 ×${num(c.oil)}` : '已經突破到最高階';
     const can = it.lv >= GEAR_MAX_LV && c && (profile.crystals || 0) >= c.crystals && profile.oil >= c.oil;
-    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span></div>
+    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span><span class="asc-sub">額外能力：突破一階解鎖一項（🔒＝還沒突破，和上面的能力無關）</span></div>
       <ul class="perks">${all.map((m, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(fmtMod(m))}</li>`).join('')}</ul>
       <div class="asc-need">${need}</div>
       ${it.lv >= GEAR_MAX_LV && c ? `<button class="btn small" data-act="gearAscend" data-uid="${it.uid}" ${can ? '' : 'disabled'}>突破</button>` : ''}
@@ -3694,11 +3734,13 @@ function createUI(actions) {
         <div class="bag">${sorted(pending).map((it) => gearTile(it, false, sel, fx?.uid === it.uid)).join('')}</div>` : '';
       $('#gear .bag-head').innerHTML = sel
         ? `<div class="bag-title">批量分解：點裝備勾選，或依稀有度一次選取</div>
-           <div class="pick-tiers">${[0, 1, 2, 3].map((r) => `<button class="chip" data-act="gearPickTier" data-r="${r}" style="--c:${RARITIES[r].color}">${r ? `${RARITIES[r].name}以下` : `只選${RARITIES[0].name}`}</button>`).join('')}<button class="chip" data-act="gearPickTier" data-r="-1">全不選</button></div>`
+           <div class="pick-tiers">${[0, 1, 2, 3].map((r) => `<button class="chip" data-act="gearPickTier" data-r="${r}" style="--c:${RARITIES[r].color}">${r ? `${RARITIES[r].name}以下` : `只選${RARITIES[0].name}`}</button>`).join('')}<button class="chip" data-act="gearPickTier" data-r="-1">全不選</button><button class="chip" data-act="gearBatchCancel">結束批量</button></div>`
         : `<div class="bag-title">背包 ${items.length} / ${MAX_ITEMS}</div>${items.length || pending.length ? '<button class="chip" data-act="gearBatch">批量分解</button>' : ''}`;
       $('#gear .bag-list').innerHTML = sorted(items).map((it) => gearTile(it, isEq(it), sel, fx?.uid === it.uid)).join('') || '<div class="empty-bag">還沒有裝備。打完一章（或撐過 4 分鐘）會掉落。</div>';
-      if (sel) {
-        const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
+      // 底部的批量列：勾了至少一件才出現（沒勾時不佔位；「結束批量」在上面的選取列）；出現時整頁底部讓出空間，不會蓋住最後一排
+      const picked = sel ? [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it)) : [];
+      $('#gear').classList.toggle('batching', picked.length > 0);
+      if (picked.length) {
         const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0);
         $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・燈油 <b>+${num(oil)}</b>・結晶 <b>+${cry}</b></span>
           <button class="btn small" data-act="gearBatchAsk" ${picked.length ? '' : 'disabled'}>分解</button><button class="btn small ghost" data-act="gearBatchCancel">取消</button></div>`;
@@ -3736,7 +3778,7 @@ function createUI(actions) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
         sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
-          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${statBlock(it, on)}
           ${ascendSection(it, profile, f && fx.kind === 'star')}
           <div class="acts">
             <button class="btn small" data-act="${on ? 'gearUnequip' : 'gearEquip'}" data-uid="${it.uid}">${on ? '卸下' : '裝備'}</button>
@@ -3748,7 +3790,7 @@ function createUI(actions) {
         const it = penIt;
         sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
-          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${statBlock(it, false)}
           <div class="acts">
             <button class="btn small" data-act="pendingClaim" data-uid="${it.uid}" ${space.bag ? '' : 'disabled'}>${space.bag ? '收進背包' : '背包已滿'}</button>
             <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
@@ -3900,6 +3942,8 @@ const __m_perf_js = (() => {
 // &off=fog,vignette,glow,particles,ground,filter：A/B 量測，關掉指定的繪製項目（看各項佔多少）
 //   &off=cache：地面／霧／暗角改走優化前的舊做法（每幀重建圖樣與漸層），用來做前後對照
 // &dpr=1：把畫布解析度上限改成指定倍率（看解析度佔多少）
+// &evo=aura,orbit,pulse,wisps：開局就給這些武器（滿級＋共鳴）與四個滿級被動，量後期特效最多的畫面
+// 每段都量「過亮像素比例」（luma ≥ 220）：縮畫到小畫布取樣，不直接讀主畫布
 // &waves=off：關掉菌潮（M7 起第 360 秒剛好有一波菌潮；要和 M7 以前的量測比，就用這個，場面定義才相同）
 // 菌潮開著時多量一段「菌潮滿場」：第 303 秒（第 5 波三批剛湧入完，菌潮怪在上限附近）
 // &sync=1：同步模式——連續畫多幀，每幀畫完把主畫布縮到 1×1 小畫布讀回，逼 GPU 做完再計時（不直接讀主畫布，見 main.js flushGPU）。
@@ -3930,8 +3974,10 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
     for (const r of rows) for (const [k, v] of Object.entries(r.phases)) (phases[k] ||= []).push(v);
     const ph = Object.entries(phases).map(([k, v]) => { v.sort((a, b) => a - b); return { k, avg: v.reduce((a, b) => a + b, 0) / v.length, p95: pct(v, 0.95) }; }).sort((a, b) => b.avg - a.avg);
     const elapsed = iv.reduce((a, b) => a + b, 0) / 1000;
+    const wh = rows.map((r) => r.white).filter((x) => x !== null).sort((a, b) => a - b);
     return { name: st.name, fps: rows.length / elapsed, iv: { p50: pct(iv, 0.5), p95: pct(iv, 0.95), p99: pct(iv, 0.99), max: iv.at(-1), over20: iv.filter((x) => x > 20).length, over34: iv.filter((x) => x > 34).length },
       update: { p50: pct(up, 0.5), p99: pct(up, 0.99), max: up.at(-1) }, render: { p50: pct(rd, 0.5), p95: pct(rd, 0.95), p99: pct(rd, 0.99), max: rd.at(-1) }, phases: ph,
+      white: { p50: pct(wh, 0.5), p95: pct(wh, 0.95), max: wh.at(-1) ?? 0, n: wh.length },
       scene: { enemies: s.enemies.length, surge: s.enemies.filter((e) => e.surge).length, bullets: s.bullets.length, gems: s.gems.length } };
   }
   function text() {
@@ -3941,6 +3987,7 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
         sync ? '幀間隔：同步模式不量（只量繪製成本）' : `平均 ${f1(r.fps)} fps；幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
         `邏輯 p50 ${r.update.p50.toFixed(2)}／p99 ${r.update.p99.toFixed(2)}／最慢 ${r.update.max.toFixed(2)} ms`,
         `繪製 p50 ${f1(r.render.p50)}／p95 ${f1(r.render.p95)}／p99 ${f1(r.render.p99)}／最慢 ${f1(r.render.max)} ms`,
+        `亮度：過亮（luma ≥ 220）的像素 p50 ${(r.white.p50 * 100).toFixed(1)}%／p95 ${(r.white.p95 * 100).toFixed(1)}%／最高 ${(r.white.max * 100).toFixed(1)}%（${r.white.n} 幀取樣）`,
         `繪製細項（平均／p95 ms）：${r.phases.map((p) => `${p.k} ${p.avg.toFixed(2)}/${p.p95.toFixed(2)}`).join('、')}`);
     }
     return lines.join('\n');
@@ -3953,9 +4000,10 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
     // 自動移動：繞大圈，讓鏡頭與場面持續變化
     move(s) { const a = s.t * 0.5; return { x: Math.cos(a), y: Math.sin(a) }; },
     // 每幀呼叫：now＝rAF 時間；update／render 為量好的毫秒
-    record(now, update, render, s) {
+    frameNo() { return rec.length; },
+    record(now, update, render, s, white = null) {
       if (done) return;
-      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {} });
+      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white });
       lastNow = now;
       if (rec.length >= stages[stage].frames) {
         results.push(summarize(stages[stage], rec, s));
@@ -3987,7 +4035,8 @@ const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimD
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
-const params = new URLSearchParams(location.search);
+// 量測用：頁面若先定義 window.LUMEN_PARAMS（本機單檔版以 data: 網址開啟時沒有 query string），就用它；正式網頁不會定義
+const params = new URLSearchParams(window.LUMEN_PARAMS ?? location.search);
 const DEBUG = params.has('debug');
 const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean), params.get('waves') !== 'off') : null; // 效能量測模式，見 perf.js
 
@@ -3998,7 +4047,9 @@ let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
-  const r = canvas.getBoundingClientRect();
+  let r = canvas.getBoundingClientRect();
+  // 量測用：&size=375x812——頁面沒有版面大小時（隱藏的瀏覽器面板裡開的本機單檔版）用指定的 CSS 尺寸；正式遊玩不會帶這個參數
+  if (!r.width && params.get('size')) { const [sw, sh] = params.get('size').split('x').map(Number); r = { width: sw, height: sh }; }
   W = canvas.width = Math.round(r.width * dpr);
   H = canvas.height = Math.round(r.height * dpr);
   scale = W / VW;
@@ -4275,6 +4326,18 @@ function flushGPU() {
   flushCtx.drawImage(canvas, 0, 0, 1, 1); flushCtx.getImageData(0, 0, 1, 1);
 }
 
+// 畫面亮度：把主畫布縮畫到 90 寬的小畫布再讀回（不直接讀主畫布，理由同 flushGPU），回傳「過亮」的像素比例。
+// 「過亮」＝亮度（luma）≥ 220：白、淡金、淡黃都算（加法疊加飽和後就是這些顏色）。M8 擁有者回報特效把畫面變成一團白光，這是瀏覽器裡量它的尺（Node 裡的近似量測見 tools/glow-check.mjs）。
+let whiteCtx = null;
+function measureWhite() {
+  const w = 90, h = Math.max(1, Math.round(90 * H / W));
+  whiteCtx ??= Object.assign(document.createElement('canvas'), { width: w, height: h }).getContext('2d', { willReadFrequently: true });
+  whiteCtx.canvas.height = h; whiteCtx.clearRect(0, 0, w, h); whiteCtx.drawImage(canvas, 0, 0, w, h);
+  const d = whiteCtx.getImageData(0, 0, w, h).data; let n = 0, sum = 0;
+  for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; sum += y; if (y >= 220) n++; }
+  measureWhite.mean = sum / (w * h); // 平均亮度（0～255）：抓「整片灰白霧」這種不到全白、但整體被洗亮的情況
+  return n / (w * h);
+}
 // 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
 function perfFrame(now, dt) {
   const s = sim.state;
@@ -4287,7 +4350,7 @@ function perfFrame(now, dt) {
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
     if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
-    perf.record(now, t1 - t0, t2 - t1, s);
+    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null); // 亮度取樣（不計入繪製時間）
   }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';
@@ -4311,6 +4374,8 @@ function drawStick() {
 
 // 同步量測入口：頁面被判定為隱藏時 rAF 會完全停止，改由外部直接呼叫 window.__perfRun() 一次跑完整段量測
 // budget：這次最多跑幾毫秒（沒跑完就回傳進度，再呼叫一次接著跑）
+// 同步量測模式才有：讓量測腳本能擺出指定場面、畫一幀、量亮度（正式遊玩不會有這個入口）
+if (perf?.sync) window.__perfDebug = { get sim() { return sim; }, frame(n = 1) { for (let i = 0; i < n; i++) { sim.update(1 / 60, { x: 0, y: 0 }); renderer.render(g, sim.state, 1 / 60, W, H, scale, safeTop, true, null); } flushGPU(); return measureWhite(); } };
 if (perf?.sync) window.__perfRun = (budget = 20000) => {
   const end = performance.now() + budget;
   while (!perf.done && performance.now() < end) perfFrame(performance.now(), 1 / 60);
@@ -4318,6 +4383,13 @@ if (perf?.sync) window.__perfRun = (budget = 20000) => {
 };
 if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
   mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true; sim.state.surgeOn = perf.waves;
+  // &evo=aura,orbit,pulse,wisps：量「後期滿配」的畫面——指定的武器全部滿級並共鳴、四個被動滿級（特效最多的情況）
+  if (params.get('evo')) {
+    const p = sim.state.player; p.weapons = [];
+    for (const id of params.get('evo').split(',')) { const w = sim.addWeapon(id); w.lv = 5; w.evo = true; }
+    for (const id of ['lens', 'wick', 'stone', 'ember']) p.passives[id] = 5;
+    sim.recalc(); p.hp = p.maxHp;
+  }
   renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
 } else toMenu();
 if (!perf && LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);

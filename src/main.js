@@ -14,7 +14,8 @@ import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claim
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
 const input = createInput(canvas);
-const params = new URLSearchParams(location.search);
+// 量測用：頁面若先定義 window.LUMEN_PARAMS（本機單檔版以 data: 網址開啟時沒有 query string），就用它；正式網頁不會定義
+const params = new URLSearchParams(window.LUMEN_PARAMS ?? location.search);
 const DEBUG = params.has('debug');
 const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, params.has('sync'), (params.get('off') || '').split(',').filter(Boolean), params.get('waves') !== 'off') : null; // 效能量測模式，見 perf.js
 
@@ -25,7 +26,9 @@ let renderer = null, runSeed = 0, chapterId = 1, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
-  const r = canvas.getBoundingClientRect();
+  let r = canvas.getBoundingClientRect();
+  // 量測用：&size=375x812——頁面沒有版面大小時（隱藏的瀏覽器面板裡開的本機單檔版）用指定的 CSS 尺寸；正式遊玩不會帶這個參數
+  if (!r.width && params.get('size')) { const [sw, sh] = params.get('size').split('x').map(Number); r = { width: sw, height: sh }; }
   W = canvas.width = Math.round(r.width * dpr);
   H = canvas.height = Math.round(r.height * dpr);
   scale = W / VW;
@@ -302,6 +305,18 @@ function flushGPU() {
   flushCtx.drawImage(canvas, 0, 0, 1, 1); flushCtx.getImageData(0, 0, 1, 1);
 }
 
+// 畫面亮度：把主畫布縮畫到 90 寬的小畫布再讀回（不直接讀主畫布，理由同 flushGPU），回傳「過亮」的像素比例。
+// 「過亮」＝亮度（luma）≥ 220：白、淡金、淡黃都算（加法疊加飽和後就是這些顏色）。M8 擁有者回報特效把畫面變成一團白光，這是瀏覽器裡量它的尺（Node 裡的近似量測見 tools/glow-check.mjs）。
+let whiteCtx = null;
+function measureWhite() {
+  const w = 90, h = Math.max(1, Math.round(90 * H / W));
+  whiteCtx ??= Object.assign(document.createElement('canvas'), { width: w, height: h }).getContext('2d', { willReadFrequently: true });
+  whiteCtx.canvas.height = h; whiteCtx.clearRect(0, 0, w, h); whiteCtx.drawImage(canvas, 0, 0, w, h);
+  const d = whiteCtx.getImageData(0, 0, w, h).data; let n = 0, sum = 0;
+  for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; sum += y; if (y >= 220) n++; }
+  measureWhite.mean = sum / (w * h); // 平均亮度（0～255）：抓「整片灰白霧」這種不到全白、但整體被洗亮的情況
+  return n / (w * h);
+}
 // 效能量測模式：自動跑、自動選升級；需要快轉時整段只跑邏輯不畫
 function perfFrame(now, dt) {
   const s = sim.state;
@@ -314,7 +329,7 @@ function perfFrame(now, dt) {
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
     if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
-    perf.record(now, t1 - t0, t2 - t1, s);
+    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null); // 亮度取樣（不計入繪製時間）
   }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';
@@ -338,6 +353,8 @@ function drawStick() {
 
 // 同步量測入口：頁面被判定為隱藏時 rAF 會完全停止，改由外部直接呼叫 window.__perfRun() 一次跑完整段量測
 // budget：這次最多跑幾毫秒（沒跑完就回傳進度，再呼叫一次接著跑）
+// 同步量測模式才有：讓量測腳本能擺出指定場面、畫一幀、量亮度（正式遊玩不會有這個入口）
+if (perf?.sync) window.__perfDebug = { get sim() { return sim; }, frame(n = 1) { for (let i = 0; i < n; i++) { sim.update(1 / 60, { x: 0, y: 0 }); renderer.render(g, sim.state, 1 / 60, W, H, scale, safeTop, true, null); } flushGPU(); return measureWhite(); } };
 if (perf?.sync) window.__perfRun = (budget = 20000) => {
   const end = performance.now() + budget;
   while (!perf.done && performance.now() < end) perfFrame(performance.now(), 1 / 60);
@@ -345,6 +362,13 @@ if (perf?.sync) window.__perfRun = (budget = 20000) => {
 };
 if (perf) { // 量測模式不動存檔：用空白進度、無敵、固定 seed
   mode = 'run'; sim = createSim({ seed: 12345, vh: H / scale, chapter: perf.chapter }); sim.state.god = true; sim.state.surgeOn = perf.waves;
+  // &evo=aura,orbit,pulse,wisps：量「後期滿配」的畫面——指定的武器全部滿級並共鳴、四個被動滿級（特效最多的情況）
+  if (params.get('evo')) {
+    const p = sim.state.player; p.weapons = [];
+    for (const id of params.get('evo').split(',')) { const w = sim.addWeapon(id); w.lv = 5; w.evo = true; }
+    for (const id of ['lens', 'wick', 'stone', 'ember']) p.passives[id] = 5;
+    sim.recalc(); p.hp = p.maxHp;
+  }
   renderer = createRenderer(perf.chapter); ui.hud(); document.getElementById('pauseBtn').style.display = 'none';
 } else toMenu();
 if (!perf && LOAD_NOTICE[loaded.status]) ui.toast(LOAD_NOTICE[loaded.status], 6000);

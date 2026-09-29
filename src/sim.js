@@ -101,6 +101,10 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   // shop-test 用「實際開燈核」得到的結果比對提示，兩條路徑分開，提示寫錯或過期才抓得到。
   function resoNeeds(id) { return RESONANCES[id]?.needs; }
   function canEvolve(w) { const r = RESONANCES[w.id]; return r && !w.evo && w.lv >= MAX_LV && (p.passives[r.needs] || 0) > 0; }
+  // 身上每把武器的共鳴進度（提示用）：done 已共鳴／ready 下一個燈核就共鳴（canEvolve）／其他＝還差幾級。
+  // M8：擁有者看到被動卡寫「可與 4 把共鳴」、實際只亮 2 顆★——規則是「一個被動可以讓好幾把共鳴，但要滿級、而且一個燈核只共鳴一把」，
+  // 卡片沒寫條件，看起來像壞掉。
+  function resoState(w) { return w.evo ? 'done' : canEvolve(w) ? 'ready' : 'lv'; }
 
   function options() {
     const out = [];
@@ -124,14 +128,17 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (isW && RESONANCES[o.id]) {
       const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
       reso = { partners: [need], held: have ? [need] : [] };
-      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」`;
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後，下一個燈核共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name}＋燈核 → 共鳴「${RESONANCES[o.id].name}」`;
     }
     if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
       const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
       if (ws.length) {
-        reso = { partners: ws, held };
-        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name);
-        hint = held.length ? `★ 可與你的 ${held.map(name).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}` : `可與 ${ws.map(name).join('、')} 共鳴`;
+        const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name), own = (wid) => p.weapons.find((w) => w.id === wid);
+        const state = Object.fromEntries(held.map((wid) => [wid, resoState(own(wid))]));
+        reso = { partners: ws, held, done: held.filter((w) => state[w] === 'done'), ready: held.filter((w) => state[w] === 'ready') };
+        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・等燈核）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
+        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。武器滿級後，每個燈核共鳴一把`
+          : `可與 ${ws.map(name).join('、')} 共鳴（武器滿級後，每個燈核共鳴一把）`;
       }
     }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };

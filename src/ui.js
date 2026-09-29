@@ -54,7 +54,7 @@ export function createUI(actions) {
   // 身上已有對應的就亮「可共鳴」標記；data-reso-* 讓測試直接比對畫面提示與實際共鳴規則。
   function card(o, i) {
     const r = o.reso, ready = !!r?.held.length;
-    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"` : ''} style="--c:${o.color}">
+    return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"${r.ready ? ` data-reso-ready="${r.ready.join(',')}" data-reso-done="${r.done.join(',')}"` : ''}` : ''} style="--c:${o.color}">
       <img src="${iconUrl(o.icon, o.color)}" alt="">
       <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span>${ready ? '<span class="rb">可共鳴</span>' : ''}</div>
       <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}</div></button>`;
@@ -94,13 +94,20 @@ export function createUI(actions) {
       <span class="main">${esc(fmtMod(gearMods(it)[0]))}</span>${equipped ? '<span class="eq">裝備中</span>' : ''}</button>`;
   }
 
+  // 裝備的能力區塊（M8）：擁有者第二次看不懂這一頁——滿級傳說只有主屬性是亮色，四條詞條是白字、下面突破又全是 🔒，看起來像詞條沒生效。
+  // 實際上主屬性與詞條「裝備中就全部生效」（meta 的 profileMods；shop-test 用裝上／卸下的合計差額比對）。所以每一行都標狀態，
+  // 區塊標題直接寫「全部生效中」或「裝備後生效」，和下面「突破才解鎖的額外能力」分開。
+  function statBlock(it, on) {
+    return `<div class="stat-block ${on ? 'on' : 'idle'}"><div class="sb-title">${on ? '✓ 全部生效中（已裝備）' : '裝備後全部生效（目前沒有裝備）'}</div>
+      <ul class="stat-lines">${baseGearMods(it).map((m, i) => `<li class="${i ? 'affix' : 'mainline'}" data-line="${i ? 'affix' : 'main'}">${on ? '✓' : '・'} ${esc(fmtMod(m))}<span class="tag">${i ? '詞條' : `主屬性・隨強化成長`}</span></li>`).join('')}</ul></div>`;
+  }
   // 突破區塊：全部五項能力都列出來（已解鎖 ✓、未解鎖 🔒），再寫下一階要什麼材料、現在有多少——擁有者的抱怨是「看不出還有什麼、也不知道怎麼拿到」
   function ascendSection(it, profile, fx) {
     const star = it.star || 0, all = ascendPerks(it, true), c = ascendCost(it);
     const need = it.lv < GEAR_MAX_LV ? `強化到 ${GEAR_MAX_LV} 級後可以突破（目前 ${it.lv} 級）`
       : c ? `下一階（★${c.star}）需要結晶 ×${c.crystals}（你有 ${profile.crystals || 0}）＋燈油 ×${num(c.oil)}` : '已經突破到最高階';
     const can = it.lv >= GEAR_MAX_LV && c && (profile.crystals || 0) >= c.crystals && profile.oil >= c.oil;
-    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span></div>
+    return `<div class="ascend${fx ? ' fx-flash' : ''}"><div class="asc-title">突破 <span class="stars">${'★'.repeat(star)}${'☆'.repeat(GEAR_ASCEND.max - star)}</span><span class="asc-sub">額外能力：突破一階解鎖一項（🔒＝還沒突破，和上面的能力無關）</span></div>
       <ul class="perks">${all.map((m, i) => `<li class="${i < star ? 'on' : 'off'}" data-perk="${i + 1}">${i < star ? '✓' : '🔒'} ★${i + 1}　${esc(fmtMod(m))}</li>`).join('')}</ul>
       <div class="asc-need">${need}</div>
       ${it.lv >= GEAR_MAX_LV && c ? `<button class="btn small" data-act="gearAscend" data-uid="${it.uid}" ${can ? '' : 'disabled'}>突破</button>` : ''}
@@ -200,11 +207,13 @@ export function createUI(actions) {
         <div class="bag">${sorted(pending).map((it) => gearTile(it, false, sel, fx?.uid === it.uid)).join('')}</div>` : '';
       $('#gear .bag-head').innerHTML = sel
         ? `<div class="bag-title">批量分解：點裝備勾選，或依稀有度一次選取</div>
-           <div class="pick-tiers">${[0, 1, 2, 3].map((r) => `<button class="chip" data-act="gearPickTier" data-r="${r}" style="--c:${RARITIES[r].color}">${r ? `${RARITIES[r].name}以下` : `只選${RARITIES[0].name}`}</button>`).join('')}<button class="chip" data-act="gearPickTier" data-r="-1">全不選</button></div>`
+           <div class="pick-tiers">${[0, 1, 2, 3].map((r) => `<button class="chip" data-act="gearPickTier" data-r="${r}" style="--c:${RARITIES[r].color}">${r ? `${RARITIES[r].name}以下` : `只選${RARITIES[0].name}`}</button>`).join('')}<button class="chip" data-act="gearPickTier" data-r="-1">全不選</button><button class="chip" data-act="gearBatchCancel">結束批量</button></div>`
         : `<div class="bag-title">背包 ${items.length} / ${MAX_ITEMS}</div>${items.length || pending.length ? '<button class="chip" data-act="gearBatch">批量分解</button>' : ''}`;
       $('#gear .bag-list').innerHTML = sorted(items).map((it) => gearTile(it, isEq(it), sel, fx?.uid === it.uid)).join('') || '<div class="empty-bag">還沒有裝備。打完一章（或撐過 4 分鐘）會掉落。</div>';
-      if (sel) {
-        const picked = [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it));
+      // 底部的批量列：勾了至少一件才出現（沒勾時不佔位；「結束批量」在上面的選取列）；出現時整頁底部讓出空間，不會蓋住最後一排
+      const picked = sel ? [...items, ...pending].filter((it) => sel.has(it.uid) && !isEq(it)) : [];
+      $('#gear').classList.toggle('batching', picked.length > 0);
+      if (picked.length) {
         const oil = picked.reduce((a, it) => a + salvageValue(it), 0), cry = picked.reduce((a, it) => a + crystalValue(it), 0);
         $('#gear .batch-bar').innerHTML = `<div class="batch-card"><span>已選 <b>${picked.length}</b> 件・燈油 <b>+${num(oil)}</b>・結晶 <b>+${cry}</b></span>
           <button class="btn small" data-act="gearBatchAsk" ${picked.length ? '' : 'disabled'}>分解</button><button class="btn small ghost" data-act="gearBatchCancel">取消</button></div>`;
@@ -242,7 +251,7 @@ export function createUI(actions) {
         const it = bagIt, on = isEq(it), cost = it.lv < GEAR_MAX_LV ? gearUpgradeCost(it.rarity, it.lv) : null, f = fx?.uid === it.uid;
         sheet.innerHTML = `<div class="sheet-card${f ? ' fx-flash' : ''}" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name${f && fx.kind === 'up' ? ' fx-bump' : ''}">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・強化 ${it.lv} / ${GEAR_MAX_LV}</div>
-          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${statBlock(it, on)}
           ${ascendSection(it, profile, f && fx.kind === 'star')}
           <div class="acts">
             <button class="btn small" data-act="${on ? 'gearUnequip' : 'gearEquip'}" data-uid="${it.uid}">${on ? '卸下' : '裝備'}</button>
@@ -254,7 +263,7 @@ export function createUI(actions) {
         const it = penIt;
         sheet.innerHTML = `<div class="sheet-card" data-rar="${it.rarity}" style="--c:${RARITIES[it.rarity].color}">
           <b class="name">${esc(gearName(it))}</b><div class="rar">${RARITIES[it.rarity].name}・${GEAR_SLOTS[it.slot].name}・在暫存區</div>
-          <ul>${baseGearMods(it).map((m, i) => `<li class="${i ? '' : 'mainline'}">${esc(fmtMod(m))}</li>`).join('')}</ul>
+          ${statBlock(it, false)}
           <div class="acts">
             <button class="btn small" data-act="pendingClaim" data-uid="${it.uid}" ${space.bag ? '' : 'disabled'}>${space.bag ? '收進背包' : '背包已滿'}</button>
             <button class="btn small ghost" data-act="gearSalvage" data-uid="${it.uid}">分解（+${num(salvageValue(it))} 燈油、+${crystalValue(it)} 結晶）</button>
