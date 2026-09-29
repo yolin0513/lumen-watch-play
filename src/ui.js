@@ -1,9 +1,9 @@
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, gearUpgradeCost } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost } from './content.js';
 import { makeIcon } from './art.js';
-import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
+import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
 import { aggregate } from './stats.js';
 import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } from './shop.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
@@ -145,18 +145,33 @@ export function createUI(actions) {
       $('#menu .oil-slot').innerHTML = wallet(profile);
       $('#menu [data-act="openShop"] .shop-dot').style.display = dailyReady ? 'inline-block' : 'none';
       $('#menu .gear-dot').style.display = profile.gear.pending.length ? 'inline-block' : 'none'; // 暫存區有東西等玩家處理
-      const cleared = profile.chapters.cleared.length;
-      $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length} 座燈塔` : '尚未點亮任何燈塔';
+      const cleared = CHAPTERS.reduce((a, c) => a + ecoProgress(profile, c.id).cleared.length, 0);
+      $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length * STAGES.count} 座燈塔` : '尚未點亮任何燈塔';
       show('menu');
     },
-    chapters(profile) {
-      $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
-        const open = chapterUnlocked(profile, c.id), done = profile.chapters.cleared.includes(c.id), best = profile.chapters.best[c.id];
-        return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
-          <b>第${'一二三四五六'[c.id - 1]}章・${esc(c.name)}</b>${done ? '<span class="done">已點亮</span>' : ''}
-          <div>${open ? esc(c.tagline) : `通關第${'一二三四五六'[c.id - 2]}章後解鎖`}</div>
-          ${best ? `<div class="best">最快 ${clock(best.t)}・擊倒 ${best.kills}</div>` : ''}</button>`;
-      }).join('');
+    // 選關（M8 第二輪）：兩層。eco＝null 時列 6 個生態系（進度、最深那關的最快紀錄、解鎖條件）；給了 eco 就列那個生態系的 10 關。
+    // 子頁面的返回鍵在左上角：關卡那一層的返回回到生態系列表。
+    chapters(profile, eco = null) {
+      const back = $('#chapters .back'), title = $('#chapters h2');
+      if (eco === null) {
+        back.dataset.act = 'menu'; title.textContent = '選擇燈塔';
+        $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
+          const open = ecoUnlocked(profile, c.id), pr = ecoProgress(profile, c.id), deep = pr.cleared.length, best = deep ? pr.best[deep] : null;
+          return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="openEco" data-id="${c.id}"` : 'disabled'}>
+            <b>${esc(c.name)}</b><span class="done">${deep} / ${STAGES.count}</span>
+            <div>${open ? esc(c.tagline) : `${esc(unlockText(profile, c.id))}後解鎖`}</div>
+            ${best ? `<div class="best">第 ${deep} 關最快 ${clock(best.t)}</div>` : ''}</button>`;
+        }).join('');
+      } else {
+        const c = CHAPTERS.find((x) => x.id === eco), pr = ecoProgress(profile, eco);
+        back.dataset.act = 'ecoBack'; title.textContent = c.name;
+        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。</div>
+          <div class="stages">${Array.from({ length: STAGES.count }, (_, i) => i + 1).map((n) => {
+            const open = stageUnlocked(profile, eco, n), done = stageCleared(profile, eco, n), best = pr.best[n];
+            return `<button class="stage${done ? ' done' : ''}" data-stage="${n}" ${open ? `data-act="startChapter" data-id="${eco}" data-stage="${n}"` : 'disabled'}>
+              <b>${n}</b><span>${done ? `✓ ${best ? clock(best.t) : ''}` : open ? '可挑戰' : `🔒 ${esc(unlockText(profile, eco, n))}`}</span></button>`;
+          }).join('')}</div>`;
+      }
       show('chapters');
     },
     // fxId：剛升級成功的天賦（那一行閃一下、等級數字跳一下）
@@ -384,7 +399,7 @@ export function createUI(actions) {
       const r = $('#result');
       r.className = 'overlay scroll ' + (win ? 'win' : 'lose');
       r.querySelector('h1').textContent = win ? '燈塔重燃' : '燈火熄滅';
-      r.querySelector('.sub').textContent = win ? `${s.chapter.name}的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
+      r.querySelector('.sub').textContent = win ? `${s.chapter.name}第 ${s.chapter.stage ?? 3} 關的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
       r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—']]
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       const pend = summary.drops.filter((it) => it.where === 'pending').length;

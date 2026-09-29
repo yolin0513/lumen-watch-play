@@ -77,6 +77,11 @@
   .chapter b { color: var(--cc, #8fe8ff); font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; line-height: 1.5; }
   .chapter .done { float: right; font-size: 12px; color: #ffe27a; border: 1px solid #ffe27a88; border-radius: 8px; padding: 1px 6px; }
   .chapter .best { color: #cfd6ff; }
+  .stage-note { width: min(340px, 100%); margin: 0 auto 10px; color: var(--dim); font-size: 13px; line-height: 1.5; text-align: left; }
+  .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(340px, 100%); margin: 0 auto; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--edge); color: var(--gold); }
+  .stage b { font-size: 20px; } .stage span { font-size: 10px; color: var(--dim); line-height: 1.3; }
+  .stage.done { border-color: #ffe27a88; } .stage.done span { color: #ffe27a; } .stage:disabled { opacity: 0.55; }
   .ch1 { --cc: #8fe8ff; } .ch2 { --cc: #9fe6a8; } .ch3 { --cc: #e6a0ff; } .ch4 { --cc: #ffab70; } .ch5 { --cc: #bfe6ff; } .ch6 { --cc: #c6e08a; }
 
   .list { width: min(380px, 100%); }
@@ -586,10 +591,12 @@ const RESONANCES = {
                stats: { dmg: 32, count: 7, speed: 360, hitCd: 0.2, seek: 360 } },
   mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
                stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
-  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下七顆星，幾乎不停歇',
-               stats: { dmg: 78, cd: 1.15, count: 7, radius: 80, delay: 0.35 } },
-  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '五把巨大光刃高速來回，範圍與速度都再提升',
-               stats: { dmg: 28, cd: 0.8, count: 5, range: 270, speed: 480, size: 20 } },
+  // M8：共鳴燈核讓共鳴幾乎每局拿得到之後，兩把專屬武器在單武器測試超過專屬上限（1.51、1.57 倍）。
+  // 先試傷害 −4～5%：分數完全沒動（通關記滿分，第三章的陣亡點不變），所以改成每次少一顆星／一把刃。
+  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
+               stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35 } },
+  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
+               stats: { dmg: 28, cd: 0.8, count: 4, range: 270, speed: 480, size: 20 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
 };
@@ -770,12 +777,41 @@ const CHAPTERS = [
 ];
 const CHAPTER1 = CHAPTERS[0];
 
+// ---- 關卡（M8 第二輪）：每個生態系（上面的每一章）10 關，難度遞增 ----
+// 擁有者提案：「每個生態系擴增到 10 關，難度遞增，怪物血量上調」。
+// 第 base 關的數值＝M8 以前的那一章（倍率全部是 1），舊的平衡數字有明確的對應點；其他關只改參數，程式路徑完全相同。
+// 第一批只用簡單的遞增規則（每往後一關乘一次）：血量、出怪速度、怪物傷害三個槓桿一起動，不只調血量。逐關的槓桿設計是第二批。
+const STAGES = {
+  count: 10, base: 3,
+  unlockNext: 3,                        // 通關第幾關開放下一個生態系的第 1 關（主線 6 × 3 關；第 4～10 關是往深處的挑戰）
+  hp: 1.10, spawn: 1.04, dmg: 1.03,     // 每往後一關的倍率（含守衛的血量）
+  oil: 1.10,                            // 通關燈油（一般＋首通）每往後一關的倍率；擊倒燈油本來就隨擊倒的數量變多
+  firstStardustSplit: [0.2, 0.3, 0.5],  // 第 1～3 關的首通星砂合計＝原本一章的首通星砂（舊存檔的第 1～3 關視為已領過）
+  deepFirstStardust: 20,                // 第 4～10 關每關的首通星砂
+};
+const stageMul = (base, n) => base ** (n - STAGES.base);
+// 某生態系的第 n 關：回傳一份 chapter（sim、meta、render 都照原本的方式使用它）
+function stageChapter(ch, n) {
+  const hp = stageMul(STAGES.hp, n), dmg = stageMul(STAGES.dmg, n), spawn = stageMul(STAGES.spawn, n), oil = stageMul(STAGES.oil, n);
+  const r = ch.reward;
+  return {
+    ...ch, stage: n, key: `${ch.id}-${n}`, bossHpMul: hp,
+    hpScale: (t) => ch.hpScale(t) * hp, dmgScale: (t) => ch.dmgScale(t) * dmg, spawnRate: (t) => ch.spawnRate(t) * spawn,
+    reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
+      firstStardust: n <= STAGES.firstStardustSplit.length ? Math.round(r.firstStardust * STAGES.firstStardustSplit[n - 1]) : STAGES.deepFirstStardust },
+  };
+}
+
 // ---- 菌潮（週期性的怪物海）----
 // 從 first 秒開始每 every 秒一波，到守衛出現前 beforeBoss 秒為止；第 k 波（0 起算）共 base＋grow×k 隻潮孢，分 bursts 批從四周湧入。
 // 目的（擁有者回饋）：一局之內升不滿。量測（tools/level-report.mjs）：M7 前過關局結束時組建完成度 81～90%、全滿 0 局。
 // cap：場上「菌潮怪」的上限，和一般怪的上限（章節的 maxEnemies）分開算——若共用同一個上限，菌潮滿場會擠掉本章的招牌怪
 //      （量過：第二章脹孢囊的引信從 136 次掉到 1 次）。實際同屏總數見 tools/level-report 旁的量測與回報。
 //      依據：擁有者手機（第 2 章、DPR 3）重場面 89 隻怪時繪製 p95 2ms、平均 59.5fps；怪物繪製大致隨數量線性增加（推論，要請擁有者重量）。
+// 共鳴燈核（M8）：身上有武器「滿級＋持有對應增幅、還沒共鳴」，而場上的燈核不夠每把一顆時，delay 秒後在玩家附近 dist 處出現一顆燈核。
+// 理由：燈核原本只有精英會掉（每章 2～3 隻、多在武器滿級之前出現），一局 4 把武器共鳴不完；擁有者滿等後仍然共鳴不了。
+// 只補「等著共鳴的那幾把」：沒有武器在等時不出現，所以不會多給一般強化、燈油或經驗。量測見 tools/chest-report.mjs。
+const RESO_CHEST = { delay: 12, dist: 90 };
 const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3, total: 360, reserve: 60 };
 // total：場上怪物總數的硬上限（M7 第三批量到：各類上限只管自己時，第六章同屏衝到 487 隻、邏輯耗時超過門檻）。
 // reserve：菌潮最多只填到 total − reserve，保留給本章的怪（招牌怪不會被菌潮擠掉）。
@@ -906,7 +942,7 @@ const WEAPON_GACHA = {
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
+return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, stageMul, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -947,7 +983,7 @@ const __m_sim_js = (() => {
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST } = __m_content_js;
 const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -1017,6 +1053,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     surge: { idx: 0, queue: [] }, // 菌潮：idx＝已開始幾波；queue＝還沒湧入的批次 [時間, 隻數]
     surgeAlive: 0, // 場上的菌潮怪數（上限 SURGE.cap，和一般怪的上限分開算）
     surgeOn: true, // 量測用：false＝關掉菌潮（tools/level-report.mjs --no-surge 做前後對照）
+    resoChestT: 0,         // 共鳴燈核的計時（RESO_CHEST）
     roots: [], rootT: 0,   // 第六章：移動的菌根牆
     counters: {},          // 各章招牌機制的實際發生次數（量測用：熔坑燒到怪、滑行時間、根牆推擠…）
     autoSpawn: true, god: false, // 測試用
@@ -1048,6 +1085,8 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   // 身上每把武器的共鳴進度（提示用）：done 已共鳴／ready 下一個燈核就共鳴（canEvolve）／其他＝還差幾級。
   // M8：擁有者看到被動卡寫「可與 4 把共鳴」、實際只亮 2 顆★——規則是「一個被動可以讓好幾把共鳴，但要滿級、而且一個燈核只共鳴一把」，
   // 卡片沒寫條件，看起來像壞掉。
+  // 共鳴燈核的規則說明：秒數從 RESO_CHEST 讀（不准手寫；shop-test 用實際計時比對）
+  const RESO_RULE = `武器滿級後約 ${RESO_CHEST.delay} 秒，身邊會出現燈核（精英也會掉），每個燈核共鳴一把`;
   function resoState(w) { return w.evo ? 'done' : canEvolve(w) ? 'ready' : 'lv'; }
 
   function options() {
@@ -1072,7 +1111,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     if (isW && RESONANCES[o.id]) {
       const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
       reso = { partners: [need], held: have ? [need] : [] };
-      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後，下一個燈核共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name}＋燈核 → 共鳴「${RESONANCES[o.id].name}」`;
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後約 ${RESO_CHEST.delay} 秒出現燈核，撿起來共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」（${RESO_RULE}）`;
     }
     if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
       const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
@@ -1080,9 +1119,9 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
         const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name), own = (wid) => p.weapons.find((w) => w.id === wid);
         const state = Object.fromEntries(held.map((wid) => [wid, resoState(own(wid))]));
         reso = { partners: ws, held, done: held.filter((w) => state[w] === 'done'), ready: held.filter((w) => state[w] === 'ready') };
-        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・等燈核）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
-        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。武器滿級後，每個燈核共鳴一把`
-          : `可與 ${ws.map(name).join('、')} 共鳴（武器滿級後，每個燈核共鳴一把）`;
+        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・燈核即將出現）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
+        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。${RESO_RULE}`
+          : `可與 ${ws.map(name).join('、')} 共鳴（${RESO_RULE}）`;
       }
     }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
@@ -1147,7 +1186,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     // 菌潮之後菌群變強：每過一波，一般怪（不含菌潮怪本身、不含守衛）血量 × (1 + SURGE.hpPerWave × 已過波數)。
     // 理由：菌潮給的經驗讓玩家提早變強，若怪不跟著變強，各章的招牌威脅會在靠近前就被打死（量過：第二章脹孢囊引信從 136 次掉到 1 次）。
     const waveMul = kind === SURGE.kind || isBoss(kind) ? 1 : 1 + SURGE.hpPerWave * s.surge.idx;
-    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
+    const hpMul = (isBoss(kind) ? (s.chapter.bossHpMul ?? 1) : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
@@ -1889,6 +1928,25 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       }
     }
     s.pickups = s.pickups.filter((it) => !it.taken);
+    // 共鳴燈核：等著共鳴的武器比場上的燈核多時，計時到了就在玩家附近放一顆（競技場裡放在圈內）
+    const waiting = p.weapons.filter(canEvolve).length, chests = s.pickups.filter((it) => it.type === 'chest').length;
+    if (waiting > chests) {
+      s.resoChestT += dt;
+      if (s.resoChestT >= RESO_CHEST.delay) {
+        s.resoChestT = 0;
+        const a = rand() * TAU;
+        let x = p.x + Math.cos(a) * RESO_CHEST.dist, y = p.y + Math.sin(a) * RESO_CHEST.dist;
+        if (s.arena) { const dx = x - s.arena.x, dy = y - s.arena.y, d = Math.hypot(dx, dy), lim = s.arena.r * 0.7; if (d > lim) { x = s.arena.x + dx / d * lim; y = s.arena.y + dy / d * lim; } }
+        s.pickups.push({ type: 'chest', x, y, reso: true });
+        count('resoChests');
+        s.events.push({ type: 'announce', text: '燈芯共鳴：燈核出現了！' });
+      }
+    } else {
+      s.resoChestT = 0;
+      // 多出來的共鳴燈核收回（例如等著的那把已經被精英的燈核共鳴了）：它只補共鳴，不可以變成額外的一般強化
+      let extra = chests - waiting;
+      if (extra > 0) s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0));
+    }
 
     // 勝利：Boss 倒下後稍等一下讓玩家看到爆炸
     if (s.winT > 0) { s.winT -= dt; if (s.winT <= 0) { s.phase = 'win'; s.events.push({ type: 'win' }); } }
@@ -2901,9 +2959,9 @@ const __m_save_js = (() => {
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
 const { SPEEDS } = __m_clock_js;
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -2912,7 +2970,8 @@ function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null }, pending: [] },
-    chapters: { cleared: [], best: {} },
+    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } } }
+    progress: {},
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
     stardust: 0, tickets: 0,
@@ -2960,6 +3019,15 @@ const MIGRATIONS = {
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
   // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
   5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
+  // v6 → v7：章節 → 生態系＋關卡。舊的「第 c 章已通關」＝生態系 c 的第 1～STAGES.base 關已通關（第 base 關的數值＝舊的那一章），
+  // 舊的最快紀錄記在第 base 關。不合法的內容（不存在的生態系、壞掉的紀錄）交給逐欄修復處理。
+  6: (d) => {
+    const { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
+    const at = (id) => (progress[id] ??= { cleared: [], best: {} });
+    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: STAGES.base }, (_, i) => i + 1);
+    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[STAGES.base] = b;
+    return { ...rest, progress: isObj(d.progress) ? d.progress : progress, v: 7 };
+  },
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -3059,13 +3127,27 @@ function sanitize(d) {
   const nu = nonNegInt(d.nextUid);
   out.nextUid = Math.max(maxUid + 1, nu ?? 1);
 
-  if (isObj(d.chapters)) {
-    const valid = new Set(CHAPTERS.map((c) => c.id));
-    if (Array.isArray(d.chapters.cleared)) out.chapters.cleared = [...new Set(d.chapters.cleared.filter((id) => valid.has(id)))].sort();
-    if (isObj(d.chapters.best)) for (const [id, b] of Object.entries(d.chapters.best)) {
-      if (valid.has(Number(id)) && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) out.chapters.best[id] = { t: b.t, kills: nonNegInt(b.kills) };
+  // 關卡進度：生態系不存在 → 移除；關卡編號超出 1～STAGES.count → 移除；已通關的關卡跳號（例如 1、2、5）→ 以最高的為準補齊（進度不歸零）；
+  // 紀錄壞掉或落在沒通關的關卡 → 移除
+  if (isObj(d.progress)) {
+    const valid = new Set(CHAPTERS.map((c) => c.id)), okStage = (n) => Number.isInteger(n) && n >= 1 && n <= STAGES.count;
+    for (const [k, e] of Object.entries(d.progress)) {
+      const id = Number(k);
+      if (!valid.has(id) || !isObj(e)) { fix(`關卡進度：生態系 ${k} 不存在或格式不對，已移除`); continue; }
+      const raw = Array.isArray(e.cleared) ? e.cleared : [], good = raw.filter(okStage);
+      if (!Array.isArray(e.cleared) && e.cleared !== undefined) fix(`關卡進度：生態系 ${id} 的通關紀錄格式不對，重設`);
+      if (good.length !== raw.length) fix(`關卡進度：生態系 ${id} 有超出範圍的關卡編號，已移除`);
+      const max = good.length ? Math.max(...good) : 0;
+      if (new Set(good).size !== max) fix(`關卡進度：生態系 ${id} 已通關的關卡跳號，已補齊到第 ${max} 關`);
+      const best = {};
+      if (isObj(e.best)) for (const [sk, b] of Object.entries(e.best)) {
+        const n = Number(sk);
+        if (okStage(n) && n <= max && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) best[n] = { t: nonNegInt(b.t), kills: nonNegInt(b.kills) };
+        else fix(`關卡進度：生態系 ${id} 第 ${sk} 關的紀錄不合法，已移除`);
+      }
+      if (max || Object.keys(best).length) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best };
     }
-  } else if (d.chapters !== undefined) fix('chapters 型別不對，重設');
+  } else if (d.progress !== undefined) fix('progress 型別不對，重設');
 
   if (isObj(d.stats)) { out.stats.runs = nonNegInt(d.stats.runs) ?? 0; out.stats.kills = nonNegInt(d.stats.kills) ?? 0; }
 
@@ -3141,7 +3223,7 @@ return { SAVE_KEY, SAVE_VERSION, MAX_HISTORY, MAX_ITEMS, PENDING_MAX, defaultPro
 const __m_meta_js = (() => {
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } = __m_content_js;
+const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, STAGES, stageChapter, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } = __m_content_js;
 const { aggregate } = __m_stats_js;
 const { MAX_ITEMS, PENDING_MAX } = __m_save_js;
 // ---- 加成：天賦＋已裝備的裝備 → modifier 陣列（交給 createSim 的 meta） ----
@@ -3331,9 +3413,10 @@ function computeOil(ledger, chapter, { won, firstClear }, bonusPct) {
 }
 
 // 一局結束：燈油入帳、掉裝備、記通關與最佳紀錄。回傳給結算畫面的摘要。
-function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
-  const chapter = CHAPTERS.find((c) => c.id === chapterId);
-  const firstClear = won && !profile.chapters.cleared.includes(chapterId);
+// stage：生態系的第幾關（M8 第二輪；沒給就是第 STAGES.base 關＝舊的那一章）。獎勵照那一關的數值（stageChapter）。
+function settleRun(profile, { ledger, chapterId, stage = STAGES.base, won, t, kills }, rand) {
+  const chapter = stageChapter(CHAPTERS.find((c) => c.id === chapterId), stage);
+  const firstClear = won && !stageCleared(profile, chapterId, stage);
   const oil = computeOil(ledger, chapter, { won, firstClear }, oilBonus(profile));
   profile.oil += oil.total;
   // 星砂：只有通關才給（首通另加），讓商城的星砂靠正常遊玩就拿得到
@@ -3347,9 +3430,10 @@ function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   let autoSalvage = 0; // 分解成燈油的部分另列，不混進本局燈油（storeGear 已經入帳）
   for (const it of drops) { it.where = storeGear(profile, it); autoSalvage += it.salvaged || 0; }
 
-  if (won && firstClear) profile.chapters.cleared = [...profile.chapters.cleared, chapterId].sort();
-  const best = profile.chapters.best[chapterId];
-  if (won && (!best || t < best.t)) profile.chapters.best[chapterId] = { t: Math.round(t), kills };
+  const pr = (profile.progress[chapterId] ??= { cleared: [], best: {} });
+  if (won && firstClear) pr.cleared = [...pr.cleared, stage].sort((a, b) => a - b);
+  const best = pr.best[stage];
+  if (won && (!best || t < best.t)) pr.best[stage] = { t: Math.round(t), kills };
   profile.stats.runs++; profile.stats.kills += kills;
   return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
@@ -3378,9 +3462,18 @@ function ascendWeapon(profile, id) {
   return { ok: true, ...c };
 }
 
-const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
+// ---- 關卡解鎖（M8 第二輪）：通關第 n 關開第 n+1 關；通關第 STAGES.unlockNext 關開下一個生態系的第 1 關 ----
+const ecoProgress = (profile, id) => profile.progress?.[id] ?? { cleared: [], best: {} };
+const stageCleared = (profile, id, n) => ecoProgress(profile, id).cleared.includes(n);
+const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext);
+const stageUnlocked = (profile, id, n) => ecoUnlocked(profile, id) && Number.isInteger(n) && n >= 1 && n <= STAGES.count && (n === 1 || stageCleared(profile, id, n - 1));
+// 還沒解鎖時，畫面上寫的條件（和上面兩條規則同一個來源）
+function unlockText(profile, id, n = 1) {
+  if (!ecoUnlocked(profile, id)) return `通關${CHAPTERS.find((c) => c.id === id - 1).name}第 ${STAGES.unlockNext} 關`;
+  return n > 1 && !stageCleared(profile, id, n - 1) ? `通關第 ${n - 1} 關` : '';
+}
 
-return { talentMods, baseGearMods, ascendPerks, gearMods, equippedItems, weaponStarMods, profileMods, startBonusOf, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, ascendCost, ascendGear, salvageValue, crystalValue, salvage, salvageMany, claimPending, autoSalvageLevel, gearSpace, storeGear, setAutoSalvage, computeOil, settleRun, startWeaponOf, equipWeapon, unequipWeapon, weaponAscendCost, ascendWeapon, chapterUnlocked };
+return { talentMods, baseGearMods, ascendPerks, gearMods, equippedItems, weaponStarMods, profileMods, startBonusOf, oilBonus, talentCost, buyTalent, rollGear, equip, unequip, upgradeGear, ascendCost, ascendGear, salvageValue, crystalValue, salvage, salvageMany, claimPending, autoSalvageLevel, gearSpace, storeGear, setAutoSalvage, computeOil, settleRun, startWeaponOf, equipWeapon, unequipWeapon, weaponAscendCost, ascendWeapon, ecoProgress, stageCleared, ecoUnlocked, stageUnlocked, unlockText };
 })();
 
 // ---- shop.js
@@ -3529,9 +3622,9 @@ const __m_ui_js = (() => {
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, gearUpgradeCost } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost } = __m_content_js;
 const { makeIcon } = __m_art_js;
-const { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, chapterUnlocked, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } = __m_meta_js;
+const { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } = __m_meta_js;
 const { aggregate } = __m_stats_js;
 const { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } = __m_shop_js;
 const { MAX_ITEMS, PENDING_MAX } = __m_save_js;
@@ -3672,18 +3765,33 @@ function createUI(actions) {
       $('#menu .oil-slot').innerHTML = wallet(profile);
       $('#menu [data-act="openShop"] .shop-dot').style.display = dailyReady ? 'inline-block' : 'none';
       $('#menu .gear-dot').style.display = profile.gear.pending.length ? 'inline-block' : 'none'; // 暫存區有東西等玩家處理
-      const cleared = profile.chapters.cleared.length;
-      $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length} 座燈塔` : '尚未點亮任何燈塔';
+      const cleared = CHAPTERS.reduce((a, c) => a + ecoProgress(profile, c.id).cleared.length, 0);
+      $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length * STAGES.count} 座燈塔` : '尚未點亮任何燈塔';
       show('menu');
     },
-    chapters(profile) {
-      $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
-        const open = chapterUnlocked(profile, c.id), done = profile.chapters.cleared.includes(c.id), best = profile.chapters.best[c.id];
-        return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="startChapter" data-id="${c.id}"` : 'disabled'}>
-          <b>第${'一二三四五六'[c.id - 1]}章・${esc(c.name)}</b>${done ? '<span class="done">已點亮</span>' : ''}
-          <div>${open ? esc(c.tagline) : `通關第${'一二三四五六'[c.id - 2]}章後解鎖`}</div>
-          ${best ? `<div class="best">最快 ${clock(best.t)}・擊倒 ${best.kills}</div>` : ''}</button>`;
-      }).join('');
+    // 選關（M8 第二輪）：兩層。eco＝null 時列 6 個生態系（進度、最深那關的最快紀錄、解鎖條件）；給了 eco 就列那個生態系的 10 關。
+    // 子頁面的返回鍵在左上角：關卡那一層的返回回到生態系列表。
+    chapters(profile, eco = null) {
+      const back = $('#chapters .back'), title = $('#chapters h2');
+      if (eco === null) {
+        back.dataset.act = 'menu'; title.textContent = '選擇燈塔';
+        $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
+          const open = ecoUnlocked(profile, c.id), pr = ecoProgress(profile, c.id), deep = pr.cleared.length, best = deep ? pr.best[deep] : null;
+          return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="openEco" data-id="${c.id}"` : 'disabled'}>
+            <b>${esc(c.name)}</b><span class="done">${deep} / ${STAGES.count}</span>
+            <div>${open ? esc(c.tagline) : `${esc(unlockText(profile, c.id))}後解鎖`}</div>
+            ${best ? `<div class="best">第 ${deep} 關最快 ${clock(best.t)}</div>` : ''}</button>`;
+        }).join('');
+      } else {
+        const c = CHAPTERS.find((x) => x.id === eco), pr = ecoProgress(profile, eco);
+        back.dataset.act = 'ecoBack'; title.textContent = c.name;
+        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。</div>
+          <div class="stages">${Array.from({ length: STAGES.count }, (_, i) => i + 1).map((n) => {
+            const open = stageUnlocked(profile, eco, n), done = stageCleared(profile, eco, n), best = pr.best[n];
+            return `<button class="stage${done ? ' done' : ''}" data-stage="${n}" ${open ? `data-act="startChapter" data-id="${eco}" data-stage="${n}"` : 'disabled'}>
+              <b>${n}</b><span>${done ? `✓ ${best ? clock(best.t) : ''}` : open ? '可挑戰' : `🔒 ${esc(unlockText(profile, eco, n))}`}</span></button>`;
+          }).join('')}</div>`;
+      }
       show('chapters');
     },
     // fxId：剛升級成功的天賦（那一行閃一下、等級數字跳一下）
@@ -3911,7 +4019,7 @@ function createUI(actions) {
       const r = $('#result');
       r.className = 'overlay scroll ' + (win ? 'win' : 'lose');
       r.querySelector('h1').textContent = win ? '燈塔重燃' : '燈火熄滅';
-      r.querySelector('.sub').textContent = win ? `${s.chapter.name}的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
+      r.querySelector('.sub').textContent = win ? `${s.chapter.name}第 ${s.chapter.stage ?? 3} 關的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
       r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—']]
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       const pend = summary.drops.filter((it) => it.where === 'pending').length;
@@ -4026,9 +4134,9 @@ const { createInput } = __m_input_js;
 const { createSim, makeRng, VW } = __m_sim_js;
 const { createRenderer } = __m_render_js;
 const { createUI, gearName, autoSalvageText } = __m_ui_js;
-const { CHAPTERS, CHAPTER1, WEAPON_GACHA } = __m_content_js;
+const { CHAPTERS, CHAPTER1, WEAPON_GACHA, stageChapter } = __m_content_js;
 const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_save_js;
-const { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
+const { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
 const { createPerf } = __m_perf_js;
 const { createClock, SPEEDS } = __m_clock_js;
 const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
@@ -4043,7 +4151,7 @@ const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, pa
 let W = 0, H = 0, scale = 1, safeTop = 0;
 const clock = createClock(); // 固定步長時鐘：倍速只改每幀跑幾步，不改步長
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
-let renderer = null, runSeed = 0, chapterId = 1, settled = null;
+let renderer = null, runSeed = 0, chapterId = 1, stageNo = 3, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
@@ -4104,6 +4212,8 @@ function spaceLines(n) {
 }
 const ui = createUI({
   openChapters: () => { enterSub(); ui.chapters(profile); },
+  openEco: (d) => ui.chapters(profile, Number(d.id)), // 生態系 → 關卡（第二層）
+  ecoBack: () => ui.chapters(profile),
   openTalents: () => { enterSub(); ui.talents(profile); },
   openGear: () => { enterSub(); gearView = { open: null, sel: null, sheet: null, fx: null }; ui.gear(profile, gearView); },
   openShop: () => { enterSub(); refreshShop(); },
@@ -4160,14 +4270,14 @@ const ui = createUI({
   shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
   menu: () => { if (subPushed) { subPushed = false; try { history.back(); } catch { /* 無 */ } } toMenu(); },
   startChapter: (d) => {
-    const id = Number(d.id);
-    if (!chapterUnlocked(profile, id)) return;
+    const id = Number(d.id), n = Number(d.stage);
+    if (!stageUnlocked(profile, id, n)) return;
     // 一局最多掉 3 件；背包與暫存區都放不下時，放不下的只能分解——先問玩家，不在他不知情時發生
     const sp = gearSpace(profile);
     if (sp.total < 3 && !confirm(`背包和暫存區只剩 ${sp.total} 格。\n這局掉落的裝備放不下時，會直接分解成燈油（包括稀有度高的）。\n\n仍要出發嗎？（取消後可以先到「裝備」畫面整理）`)) return;
-    newRun(id);
+    newRun(id, n);
   },
-  retry: () => newRun(chapterId),
+  retry: () => newRun(chapterId, stageNo),
   buyTalent: (d) => { const ok = buyTalent(profile, d.id).ok; if (ok) persist(); ui.talents(profile, ok ? d.id : null); },
   gearOpen: (d) => refreshGear({ open: Number(d.uid), sheet: null }),
   gearClose: () => refreshGear({ open: null, sheet: null }),
@@ -4247,10 +4357,10 @@ function toMenu() {
   }
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
-function newRun(id) {
+function newRun(id, n) {
   clock.reset();
-  chapterId = id;
-  const chapter = CHAPTERS.find((c) => c.id === id);
+  chapterId = id; stageNo = n;
+  const chapter = stageChapter(CHAPTERS.find((c) => c.id === id), n);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
   sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
@@ -4262,7 +4372,7 @@ function newRun(id) {
 function settle() {
   if (settled) return settled;
   const s = sim.state;
-  settled = settleRun(profile, { ledger: s.ledger, chapterId, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
+  settled = settleRun(profile, { ledger: s.ledger, chapterId, stage: stageNo, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
   persist();
   return settled;
 }

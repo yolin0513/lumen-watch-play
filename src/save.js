@@ -7,10 +7,10 @@
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
 import { SPEEDS } from './clock.js';
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -19,7 +19,8 @@ export function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null }, pending: [] },
-    chapters: { cleared: [], best: {} },
+    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } } }
+    progress: {},
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
     stardust: 0, tickets: 0,
@@ -67,6 +68,15 @@ export const MIGRATIONS = {
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
   // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
   5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
+  // v6 → v7：章節 → 生態系＋關卡。舊的「第 c 章已通關」＝生態系 c 的第 1～STAGES.base 關已通關（第 base 關的數值＝舊的那一章），
+  // 舊的最快紀錄記在第 base 關。不合法的內容（不存在的生態系、壞掉的紀錄）交給逐欄修復處理。
+  6: (d) => {
+    const { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
+    const at = (id) => (progress[id] ??= { cleared: [], best: {} });
+    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: STAGES.base }, (_, i) => i + 1);
+    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[STAGES.base] = b;
+    return { ...rest, progress: isObj(d.progress) ? d.progress : progress, v: 7 };
+  },
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -166,13 +176,27 @@ export function sanitize(d) {
   const nu = nonNegInt(d.nextUid);
   out.nextUid = Math.max(maxUid + 1, nu ?? 1);
 
-  if (isObj(d.chapters)) {
-    const valid = new Set(CHAPTERS.map((c) => c.id));
-    if (Array.isArray(d.chapters.cleared)) out.chapters.cleared = [...new Set(d.chapters.cleared.filter((id) => valid.has(id)))].sort();
-    if (isObj(d.chapters.best)) for (const [id, b] of Object.entries(d.chapters.best)) {
-      if (valid.has(Number(id)) && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) out.chapters.best[id] = { t: b.t, kills: nonNegInt(b.kills) };
+  // 關卡進度：生態系不存在 → 移除；關卡編號超出 1～STAGES.count → 移除；已通關的關卡跳號（例如 1、2、5）→ 以最高的為準補齊（進度不歸零）；
+  // 紀錄壞掉或落在沒通關的關卡 → 移除
+  if (isObj(d.progress)) {
+    const valid = new Set(CHAPTERS.map((c) => c.id)), okStage = (n) => Number.isInteger(n) && n >= 1 && n <= STAGES.count;
+    for (const [k, e] of Object.entries(d.progress)) {
+      const id = Number(k);
+      if (!valid.has(id) || !isObj(e)) { fix(`關卡進度：生態系 ${k} 不存在或格式不對，已移除`); continue; }
+      const raw = Array.isArray(e.cleared) ? e.cleared : [], good = raw.filter(okStage);
+      if (!Array.isArray(e.cleared) && e.cleared !== undefined) fix(`關卡進度：生態系 ${id} 的通關紀錄格式不對，重設`);
+      if (good.length !== raw.length) fix(`關卡進度：生態系 ${id} 有超出範圍的關卡編號，已移除`);
+      const max = good.length ? Math.max(...good) : 0;
+      if (new Set(good).size !== max) fix(`關卡進度：生態系 ${id} 已通關的關卡跳號，已補齊到第 ${max} 關`);
+      const best = {};
+      if (isObj(e.best)) for (const [sk, b] of Object.entries(e.best)) {
+        const n = Number(sk);
+        if (okStage(n) && n <= max && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) best[n] = { t: nonNegInt(b.t), kills: nonNegInt(b.kills) };
+        else fix(`關卡進度：生態系 ${id} 第 ${sk} 關的紀錄不合法，已移除`);
+      }
+      if (max || Object.keys(best).length) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best };
     }
-  } else if (d.chapters !== undefined) fix('chapters 型別不對，重設');
+  } else if (d.progress !== undefined) fix('progress 型別不對，重設');
 
   if (isObj(d.stats)) { out.stats.runs = nonNegInt(d.stats.runs) ?? 0; out.stats.kills = nonNegInt(d.stats.kills) ?? 0; }
 

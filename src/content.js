@@ -211,10 +211,12 @@ export const RESONANCES = {
                stats: { dmg: 32, count: 7, speed: 360, hitCd: 0.2, seek: 360 } },
   mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
                stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
-  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下七顆星，幾乎不停歇',
-               stats: { dmg: 78, cd: 1.15, count: 7, radius: 80, delay: 0.35 } },
-  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '五把巨大光刃高速來回，範圍與速度都再提升',
-               stats: { dmg: 28, cd: 0.8, count: 5, range: 270, speed: 480, size: 20 } },
+  // M8：共鳴燈核讓共鳴幾乎每局拿得到之後，兩把專屬武器在單武器測試超過專屬上限（1.51、1.57 倍）。
+  // 先試傷害 −4～5%：分數完全沒動（通關記滿分，第三章的陣亡點不變），所以改成每次少一顆星／一把刃。
+  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
+               stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35 } },
+  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
+               stats: { dmg: 28, cd: 0.8, count: 4, range: 270, speed: 480, size: 20 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
 };
@@ -395,12 +397,41 @@ export const CHAPTERS = [
 ];
 export const CHAPTER1 = CHAPTERS[0];
 
+// ---- 關卡（M8 第二輪）：每個生態系（上面的每一章）10 關，難度遞增 ----
+// 擁有者提案：「每個生態系擴增到 10 關，難度遞增，怪物血量上調」。
+// 第 base 關的數值＝M8 以前的那一章（倍率全部是 1），舊的平衡數字有明確的對應點；其他關只改參數，程式路徑完全相同。
+// 第一批只用簡單的遞增規則（每往後一關乘一次）：血量、出怪速度、怪物傷害三個槓桿一起動，不只調血量。逐關的槓桿設計是第二批。
+export const STAGES = {
+  count: 10, base: 3,
+  unlockNext: 3,                        // 通關第幾關開放下一個生態系的第 1 關（主線 6 × 3 關；第 4～10 關是往深處的挑戰）
+  hp: 1.10, spawn: 1.04, dmg: 1.03,     // 每往後一關的倍率（含守衛的血量）
+  oil: 1.10,                            // 通關燈油（一般＋首通）每往後一關的倍率；擊倒燈油本來就隨擊倒的數量變多
+  firstStardustSplit: [0.2, 0.3, 0.5],  // 第 1～3 關的首通星砂合計＝原本一章的首通星砂（舊存檔的第 1～3 關視為已領過）
+  deepFirstStardust: 20,                // 第 4～10 關每關的首通星砂
+};
+export const stageMul = (base, n) => base ** (n - STAGES.base);
+// 某生態系的第 n 關：回傳一份 chapter（sim、meta、render 都照原本的方式使用它）
+export function stageChapter(ch, n) {
+  const hp = stageMul(STAGES.hp, n), dmg = stageMul(STAGES.dmg, n), spawn = stageMul(STAGES.spawn, n), oil = stageMul(STAGES.oil, n);
+  const r = ch.reward;
+  return {
+    ...ch, stage: n, key: `${ch.id}-${n}`, bossHpMul: hp,
+    hpScale: (t) => ch.hpScale(t) * hp, dmgScale: (t) => ch.dmgScale(t) * dmg, spawnRate: (t) => ch.spawnRate(t) * spawn,
+    reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
+      firstStardust: n <= STAGES.firstStardustSplit.length ? Math.round(r.firstStardust * STAGES.firstStardustSplit[n - 1]) : STAGES.deepFirstStardust },
+  };
+}
+
 // ---- 菌潮（週期性的怪物海）----
 // 從 first 秒開始每 every 秒一波，到守衛出現前 beforeBoss 秒為止；第 k 波（0 起算）共 base＋grow×k 隻潮孢，分 bursts 批從四周湧入。
 // 目的（擁有者回饋）：一局之內升不滿。量測（tools/level-report.mjs）：M7 前過關局結束時組建完成度 81～90%、全滿 0 局。
 // cap：場上「菌潮怪」的上限，和一般怪的上限（章節的 maxEnemies）分開算——若共用同一個上限，菌潮滿場會擠掉本章的招牌怪
 //      （量過：第二章脹孢囊的引信從 136 次掉到 1 次）。實際同屏總數見 tools/level-report 旁的量測與回報。
 //      依據：擁有者手機（第 2 章、DPR 3）重場面 89 隻怪時繪製 p95 2ms、平均 59.5fps；怪物繪製大致隨數量線性增加（推論，要請擁有者重量）。
+// 共鳴燈核（M8）：身上有武器「滿級＋持有對應增幅、還沒共鳴」，而場上的燈核不夠每把一顆時，delay 秒後在玩家附近 dist 處出現一顆燈核。
+// 理由：燈核原本只有精英會掉（每章 2～3 隻、多在武器滿級之前出現），一局 4 把武器共鳴不完；擁有者滿等後仍然共鳴不了。
+// 只補「等著共鳴的那幾把」：沒有武器在等時不出現，所以不會多給一般強化、燈油或經驗。量測見 tools/chest-report.mjs。
+export const RESO_CHEST = { delay: 12, dist: 90 };
 export const SURGE = { first: 60, every: 60, beforeBoss: 15, base: 20, grow: 60, bursts: 3, burstGap: 1.2, cap: 220, kind: 'swarm', hpPerWave: 0.3, total: 360, reserve: 60 };
 // total：場上怪物總數的硬上限（M7 第三批量到：各類上限只管自己時，第六章同屏衝到 487 隻、邏輯耗時超過門檻）。
 // reserve：菌潮最多只填到 total − reserve，保留給本章的怪（招牌怪不會被菌潮擠掉）。

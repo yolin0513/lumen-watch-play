@@ -2,7 +2,7 @@
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST } from './content.js';
 import { aggregate, scaled, reduction, CAPS } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
@@ -73,6 +73,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     surge: { idx: 0, queue: [] }, // 菌潮：idx＝已開始幾波；queue＝還沒湧入的批次 [時間, 隻數]
     surgeAlive: 0, // 場上的菌潮怪數（上限 SURGE.cap，和一般怪的上限分開算）
     surgeOn: true, // 量測用：false＝關掉菌潮（tools/level-report.mjs --no-surge 做前後對照）
+    resoChestT: 0,         // 共鳴燈核的計時（RESO_CHEST）
     roots: [], rootT: 0,   // 第六章：移動的菌根牆
     counters: {},          // 各章招牌機制的實際發生次數（量測用：熔坑燒到怪、滑行時間、根牆推擠…）
     autoSpawn: true, god: false, // 測試用
@@ -104,6 +105,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   // 身上每把武器的共鳴進度（提示用）：done 已共鳴／ready 下一個燈核就共鳴（canEvolve）／其他＝還差幾級。
   // M8：擁有者看到被動卡寫「可與 4 把共鳴」、實際只亮 2 顆★——規則是「一個被動可以讓好幾把共鳴，但要滿級、而且一個燈核只共鳴一把」，
   // 卡片沒寫條件，看起來像壞掉。
+  // 共鳴燈核的規則說明：秒數從 RESO_CHEST 讀（不准手寫；shop-test 用實際計時比對）
+  const RESO_RULE = `武器滿級後約 ${RESO_CHEST.delay} 秒，身邊會出現燈核（精英也會掉），每個燈核共鳴一把`;
   function resoState(w) { return w.evo ? 'done' : canEvolve(w) ? 'ready' : 'lv'; }
 
   function options() {
@@ -128,7 +131,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (isW && RESONANCES[o.id]) {
       const need = resoNeeds(o.id), have = (p.passives[need] || 0) > 0;
       reso = { partners: [need], held: have ? [need] : [] };
-      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後，下一個燈核共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name}＋燈核 → 共鳴「${RESONANCES[o.id].name}」`;
+      hint = have ? `★ 你已有${PASSIVES[need].name}：滿級後約 ${RESO_CHEST.delay} 秒出現燈核，撿起來共鳴「${RESONANCES[o.id].name}」` : `滿級＋${PASSIVES[need].name} → 共鳴「${RESONANCES[o.id].name}」（${RESO_RULE}）`;
     }
     if (!isW) { // 一個被動可以對應好幾把武器：全部列出，玩家身上有的標在前面
       const ws = Object.keys(RESONANCES).filter((wid) => resoNeeds(wid) === o.id), held = ws.filter((wid) => p.weapons.some((w) => w.id === wid));
@@ -136,9 +139,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         const name = (wid) => (RESONANCES[wid] && WEAPONS[wid].name), own = (wid) => p.weapons.find((w) => w.id === wid);
         const state = Object.fromEntries(held.map((wid) => [wid, resoState(own(wid))]));
         reso = { partners: ws, held, done: held.filter((w) => state[w] === 'done'), ready: held.filter((w) => state[w] === 'ready') };
-        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・等燈核）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
-        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。武器滿級後，每個燈核共鳴一把`
-          : `可與 ${ws.map(name).join('、')} 共鳴（武器滿級後，每個燈核共鳴一把）`;
+        const tag = (wid) => state[wid] === 'done' ? `${name(wid)}（已共鳴）` : state[wid] === 'ready' ? `${name(wid)}（滿級・燈核即將出現）` : `${name(wid)}（Lv ${own(wid).lv}/${MAX_LV}）`;
+        hint = held.length ? `★ 可與你的 ${held.map(tag).join('、')} 共鳴${ws.length > held.length ? `（也對應 ${ws.filter((w) => !held.includes(w)).map(name).join('、')}）` : ''}。${RESO_RULE}`
+          : `可與 ${ws.map(name).join('、')} 共鳴（${RESO_RULE}）`;
       }
     }
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
@@ -203,7 +206,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     // 菌潮之後菌群變強：每過一波，一般怪（不含菌潮怪本身、不含守衛）血量 × (1 + SURGE.hpPerWave × 已過波數)。
     // 理由：菌潮給的經驗讓玩家提早變強，若怪不跟著變強，各章的招牌威脅會在靠近前就被打死（量過：第二章脹孢囊引信從 136 次掉到 1 次）。
     const waveMul = kind === SURGE.kind || isBoss(kind) ? 1 : 1 + SURGE.hpPerWave * s.surge.idx;
-    const hpMul = (isBoss(kind) ? 1 : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
+    const hpMul = (isBoss(kind) ? (s.chapter.bossHpMul ?? 1) : s.chapter.hpScale(s.t)) * (elite ? ELITE.hpMul : 1) * waveMul;
     const e = {
       kind, elite, affix, x: x ?? p.x + Math.cos(a) * d, y: y ?? p.y + Math.sin(a) * d,
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
@@ -945,6 +948,25 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       }
     }
     s.pickups = s.pickups.filter((it) => !it.taken);
+    // 共鳴燈核：等著共鳴的武器比場上的燈核多時，計時到了就在玩家附近放一顆（競技場裡放在圈內）
+    const waiting = p.weapons.filter(canEvolve).length, chests = s.pickups.filter((it) => it.type === 'chest').length;
+    if (waiting > chests) {
+      s.resoChestT += dt;
+      if (s.resoChestT >= RESO_CHEST.delay) {
+        s.resoChestT = 0;
+        const a = rand() * TAU;
+        let x = p.x + Math.cos(a) * RESO_CHEST.dist, y = p.y + Math.sin(a) * RESO_CHEST.dist;
+        if (s.arena) { const dx = x - s.arena.x, dy = y - s.arena.y, d = Math.hypot(dx, dy), lim = s.arena.r * 0.7; if (d > lim) { x = s.arena.x + dx / d * lim; y = s.arena.y + dy / d * lim; } }
+        s.pickups.push({ type: 'chest', x, y, reso: true });
+        count('resoChests');
+        s.events.push({ type: 'announce', text: '燈芯共鳴：燈核出現了！' });
+      }
+    } else {
+      s.resoChestT = 0;
+      // 多出來的共鳴燈核收回（例如等著的那把已經被精英的燈核共鳴了）：它只補共鳴，不可以變成額外的一般強化
+      let extra = chests - waiting;
+      if (extra > 0) s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0));
+    }
 
     // 勝利：Boss 倒下後稍等一下讓玩家看到爆炸
     if (s.winT > 0) { s.winT -= dt; if (s.winT <= 0) { s.phase = 'win'; s.events.push({ type: 'win' }); } }

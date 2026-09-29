@@ -1,6 +1,6 @@
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, STAGES, stageChapter, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } from './content.js';
 import { aggregate } from './stats.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
 
@@ -191,9 +191,10 @@ export function computeOil(ledger, chapter, { won, firstClear }, bonusPct) {
 }
 
 // 一局結束：燈油入帳、掉裝備、記通關與最佳紀錄。回傳給結算畫面的摘要。
-export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
-  const chapter = CHAPTERS.find((c) => c.id === chapterId);
-  const firstClear = won && !profile.chapters.cleared.includes(chapterId);
+// stage：生態系的第幾關（M8 第二輪；沒給就是第 STAGES.base 關＝舊的那一章）。獎勵照那一關的數值（stageChapter）。
+export function settleRun(profile, { ledger, chapterId, stage = STAGES.base, won, t, kills }, rand) {
+  const chapter = stageChapter(CHAPTERS.find((c) => c.id === chapterId), stage);
+  const firstClear = won && !stageCleared(profile, chapterId, stage);
   const oil = computeOil(ledger, chapter, { won, firstClear }, oilBonus(profile));
   profile.oil += oil.total;
   // 星砂：只有通關才給（首通另加），讓商城的星砂靠正常遊玩就拿得到
@@ -207,9 +208,10 @@ export function settleRun(profile, { ledger, chapterId, won, t, kills }, rand) {
   let autoSalvage = 0; // 分解成燈油的部分另列，不混進本局燈油（storeGear 已經入帳）
   for (const it of drops) { it.where = storeGear(profile, it); autoSalvage += it.salvaged || 0; }
 
-  if (won && firstClear) profile.chapters.cleared = [...profile.chapters.cleared, chapterId].sort();
-  const best = profile.chapters.best[chapterId];
-  if (won && (!best || t < best.t)) profile.chapters.best[chapterId] = { t: Math.round(t), kills };
+  const pr = (profile.progress[chapterId] ??= { cleared: [], best: {} });
+  if (won && firstClear) pr.cleared = [...pr.cleared, stage].sort((a, b) => a - b);
+  const best = pr.best[stage];
+  if (won && (!best || t < best.t)) pr.best[stage] = { t: Math.round(t), kills };
   profile.stats.runs++; profile.stats.kills += kills;
   return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
@@ -238,4 +240,13 @@ export function ascendWeapon(profile, id) {
   return { ok: true, ...c };
 }
 
-export const chapterUnlocked = (profile, id) => id === 1 || profile.chapters.cleared.includes(id - 1);
+// ---- 關卡解鎖（M8 第二輪）：通關第 n 關開第 n+1 關；通關第 STAGES.unlockNext 關開下一個生態系的第 1 關 ----
+export const ecoProgress = (profile, id) => profile.progress?.[id] ?? { cleared: [], best: {} };
+export const stageCleared = (profile, id, n) => ecoProgress(profile, id).cleared.includes(n);
+export const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext);
+export const stageUnlocked = (profile, id, n) => ecoUnlocked(profile, id) && Number.isInteger(n) && n >= 1 && n <= STAGES.count && (n === 1 || stageCleared(profile, id, n - 1));
+// 還沒解鎖時，畫面上寫的條件（和上面兩條規則同一個來源）
+export function unlockText(profile, id, n = 1) {
+  if (!ecoUnlocked(profile, id)) return `通關${CHAPTERS.find((c) => c.id === id - 1).name}第 ${STAGES.unlockNext} 關`;
+  return n > 1 && !stageCleared(profile, id, n - 1) ? `通關第 ${n - 1} 關` : '';
+}

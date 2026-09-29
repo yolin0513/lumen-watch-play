@@ -4,9 +4,9 @@ import { createInput } from './input.js';
 import { createSim, makeRng, VW } from './sim.js';
 import { createRenderer } from './render.js';
 import { createUI, gearName, autoSalvageText } from './ui.js';
-import { CHAPTERS, CHAPTER1, WEAPON_GACHA } from './content.js';
+import { CHAPTERS, CHAPTER1, WEAPON_GACHA, stageChapter } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
-import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, chapterUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
+import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
 import { createClock, SPEEDS } from './clock.js';
 import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
@@ -22,7 +22,7 @@ const perf = params.has('perf') ? createPerf(Number(params.get('perf')) || 1, pa
 let W = 0, H = 0, scale = 1, safeTop = 0;
 const clock = createClock(); // 固定步長時鐘：倍速只改每幀跑幾步，不改步長
 let sim = null, mode = 'menu', paused = false, shown = null; // mode: menu 主選單類畫面（背景跑展示局）/ run 正式一局
-let renderer = null, runSeed = 0, chapterId = 1, settled = null;
+let renderer = null, runSeed = 0, chapterId = 1, stageNo = 3, settled = null;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 2);
@@ -83,6 +83,8 @@ function spaceLines(n) {
 }
 const ui = createUI({
   openChapters: () => { enterSub(); ui.chapters(profile); },
+  openEco: (d) => ui.chapters(profile, Number(d.id)), // 生態系 → 關卡（第二層）
+  ecoBack: () => ui.chapters(profile),
   openTalents: () => { enterSub(); ui.talents(profile); },
   openGear: () => { enterSub(); gearView = { open: null, sel: null, sheet: null, fx: null }; ui.gear(profile, gearView); },
   openShop: () => { enterSub(); refreshShop(); },
@@ -139,14 +141,14 @@ const ui = createUI({
   shopHistory: () => ui.shopModal({ type: 'history', entries: profile.shop.history }),
   menu: () => { if (subPushed) { subPushed = false; try { history.back(); } catch { /* 無 */ } } toMenu(); },
   startChapter: (d) => {
-    const id = Number(d.id);
-    if (!chapterUnlocked(profile, id)) return;
+    const id = Number(d.id), n = Number(d.stage);
+    if (!stageUnlocked(profile, id, n)) return;
     // 一局最多掉 3 件；背包與暫存區都放不下時，放不下的只能分解——先問玩家，不在他不知情時發生
     const sp = gearSpace(profile);
     if (sp.total < 3 && !confirm(`背包和暫存區只剩 ${sp.total} 格。\n這局掉落的裝備放不下時，會直接分解成燈油（包括稀有度高的）。\n\n仍要出發嗎？（取消後可以先到「裝備」畫面整理）`)) return;
-    newRun(id);
+    newRun(id, n);
   },
-  retry: () => newRun(chapterId),
+  retry: () => newRun(chapterId, stageNo),
   buyTalent: (d) => { const ok = buyTalent(profile, d.id).ok; if (ok) persist(); ui.talents(profile, ok ? d.id : null); },
   gearOpen: (d) => refreshGear({ open: Number(d.uid), sheet: null }),
   gearClose: () => refreshGear({ open: null, sheet: null }),
@@ -226,10 +228,10 @@ function toMenu() {
   }
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
 }
-function newRun(id) {
+function newRun(id, n) {
   clock.reset();
-  chapterId = id;
-  const chapter = CHAPTERS.find((c) => c.id === id);
+  chapterId = id; stageNo = n;
+  const chapter = stageChapter(CHAPTERS.find((c) => c.id === id), n);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
   sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
@@ -241,7 +243,7 @@ function newRun(id) {
 function settle() {
   if (settled) return settled;
   const s = sim.state;
-  settled = settleRun(profile, { ledger: s.ledger, chapterId, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
+  settled = settleRun(profile, { ledger: s.ledger, chapterId, stage: stageNo, won: s.phase === 'win', t: s.t, kills: s.kills }, makeRng(runSeed ^ 0x9e3779b9));
   persist();
   return settled;
 }
