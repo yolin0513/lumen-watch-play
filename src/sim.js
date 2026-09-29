@@ -365,13 +365,15 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   }
 
   // ---------- 傷害 ----------
+  // 這一下傷害是哪一把武器打的（音效依武器種類換音色用）：武器迴圈、子彈、落星、燈籠雷、燃燒各自在呼叫 damage 前設好
+  let dmgSrc = null;
   function damage(e, amount, kx = 0, ky = 0) {
     if (e.hp <= 0) return;
     const aff = e.affix && ELITE_AFFIXES[e.affix];
     const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
-    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 });
+    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind) });
   }
   function ignite(e, dps, dur) { if (dps > (e.burnDps || 0) || (e.burnT || 0) < dur) { e.burnDps = Math.max(dps, e.burnT > 0 ? e.burnDps : 0); e.burnT = dur; } }
   function hurtPlayer(raw, src) {
@@ -493,7 +495,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (const k of s.strikes) {
       k.t -= dt;
       if (k.t > 0) continue;
-      near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
+      dmgSrc = k.src; near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
       s.events.push({ type: 'strike', x: k.x, y: k.y, r: k.r, src: k.src, evo: k.evo });
     }
     s.strikes = s.strikes.filter((k) => k.t > 0);
@@ -548,7 +550,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       let hit = false;
       near(m.x, m.y, (e) => { if (!hit && e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.trigger + e.r) ** 2) hit = true; });
       if (!hit) continue;
-      near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
+      dmgSrc = m.src.id; near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
       s.events.push({ type: 'mineBoom', x: m.x, y: m.y, r: m.r, evo: m.evo });
       m.done = true;
     }
@@ -887,7 +889,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
         e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;
-        if (e.burnAcc >= 0.5) { e.burnAcc -= 0.5; damage(e, e.burnDps * 0.5, 0, 0); }
+        if (e.burnAcc >= 0.5) { e.burnAcc -= 0.5; dmgSrc = 'burn'; damage(e, e.burnDps * 0.5, 0, 0); }
       }
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
       if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
@@ -895,8 +897,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     updateHazards(dt); updateVents(dt); updateRoots(dt);
 
     // 武器
-    for (const w of p.weapons) WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt);
-    updateStrikes(dt); updateMines(dt); updateSentries(dt);
+    for (const w of p.weapons) { dmgSrc = w.id; WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt); }
+    dmgSrc = null; updateStrikes(dt); updateMines(dt); updateSentries(dt);
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -913,7 +915,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < rr * rr) {
           b.hit.add(e);
           const sp = Math.hypot(b.vx, b.vy);
-          damage(e, b.dmg, b.vx / sp, b.vy / sp);
+          dmgSrc = b.src; damage(e, b.dmg, b.vx / sp, b.vy / sp);
           if (b.burn) ignite(e, b.burn, b.burnT);
           if (e.hp <= 0 && b.shard) for (let i = 0; i < b.shard; i++) { const a = rand() * TAU; s.bullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, life: 0.45, dmg: b.dmg * 0.5, pierce: 1, hit: new Set([e]), shard: 0, src: 'shard' }); }
           if (--b.pierce <= 0) b.life = 0;

@@ -1380,13 +1380,15 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   }
 
   // ---------- 傷害 ----------
+  // 這一下傷害是哪一把武器打的（音效依武器種類換音色用）：武器迴圈、子彈、落星、燈籠雷、燃燒各自在呼叫 damage 前設好
+  let dmgSrc = null;
   function damage(e, amount, kx = 0, ky = 0) {
     if (e.hp <= 0) return;
     const aff = e.affix && ELITE_AFFIXES[e.affix];
     const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) { e.x += kx * 6 / e.mass; e.y += ky * 6 / e.mass; }
-    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 });
+    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind) });
   }
   function ignite(e, dps, dur) { if (dps > (e.burnDps || 0) || (e.burnT || 0) < dur) { e.burnDps = Math.max(dps, e.burnT > 0 ? e.burnDps : 0); e.burnT = dur; } }
   function hurtPlayer(raw, src) {
@@ -1508,7 +1510,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     for (const k of s.strikes) {
       k.t -= dt;
       if (k.t > 0) continue;
-      near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
+      dmgSrc = k.src; near(k.x, k.y, (e) => { if (e.hp > 0 && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < (k.r + e.r) ** 2) damage(e, k.dmg, 0, 0); }, Math.ceil(k.r / CELL) + 1);
       s.events.push({ type: 'strike', x: k.x, y: k.y, r: k.r, src: k.src, evo: k.evo });
     }
     s.strikes = s.strikes.filter((k) => k.t > 0);
@@ -1563,7 +1565,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       let hit = false;
       near(m.x, m.y, (e) => { if (!hit && e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.trigger + e.r) ** 2) hit = true; });
       if (!hit) continue;
-      near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
+      dmgSrc = m.src.id; near(m.x, m.y, (e) => { if (e.hp > 0 && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (m.r + e.r) ** 2) damage(e, m.dmg, 0, 0); }, Math.ceil(m.r / CELL) + 1);
       s.events.push({ type: 'mineBoom', x: m.x, y: m.y, r: m.r, evo: m.evo });
       m.done = true;
     }
@@ -1902,7 +1904,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
         e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;
-        if (e.burnAcc >= 0.5) { e.burnAcc -= 0.5; damage(e, e.burnDps * 0.5, 0, 0); }
+        if (e.burnAcc >= 0.5) { e.burnAcc -= 0.5; dmgSrc = 'burn'; damage(e, e.burnDps * 0.5, 0, 0); }
       }
       const d2 = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
       if (e.hp > 0 && d2 < (e.r + 10) ** 2) hurtPlayer(Math.round(ENEMIES[e.kind].dmg * eliteDmg(e) * ch.dmgScale(s.t)), (e.elite ? 'elite-' : '') + e.kind);
@@ -1910,8 +1912,8 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     updateHazards(dt); updateVents(dt); updateRoots(dt);
 
     // 武器
-    for (const w of p.weapons) WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt);
-    updateStrikes(dt); updateMines(dt); updateSentries(dt);
+    for (const w of p.weapons) { dmgSrc = w.id; WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt); }
+    dmgSrc = null; updateStrikes(dt); updateMines(dt); updateSentries(dt);
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -1928,7 +1930,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
         if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < rr * rr) {
           b.hit.add(e);
           const sp = Math.hypot(b.vx, b.vy);
-          damage(e, b.dmg, b.vx / sp, b.vy / sp);
+          dmgSrc = b.src; damage(e, b.dmg, b.vx / sp, b.vy / sp);
           if (b.burn) ignite(e, b.burn, b.burnT);
           if (e.hp <= 0 && b.shard) for (let i = 0; i < b.shard; i++) { const a = rand() * TAU; s.bullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, life: 0.45, dmg: b.dmg * 0.5, pierce: 1, hit: new Set([e]), shard: 0, src: 'shard' }); }
           if (--b.pierce <= 0) b.life = 0;
@@ -4275,54 +4277,87 @@ return { createPerf };
 
 // ---- sfx.js
 const __m_sfx_js = (() => {
-// 音效排程（M8 第三輪第二批）：把每一幀的遊戲事件變成「這一幀要播哪些聲音」。純邏輯、不碰 Web Audio，Node 可以直接測。
+// 音效排程（M8 第三輪第二批，第四輪加變化）：把每一幀的遊戲事件變成「這一幀要播哪些聲音」。純邏輯、不碰 Web Audio，Node 可以直接測。
 // 為什麼要有預算：滿場 300 隻怪、每次命中都播一聲會爆掉（聲音糊成一團、手機也吃不消）——和光暈疊加是同一類問題：數量沒有上限。
 // 規則：
 //   1. 同一種聲音有冷卻（cd 秒）：冷卻中的同類事件不另外發聲，累積起來，下一次發聲時音量隨累積數量變大（但有上限）——「很多下」聽得出來，但不會變成一堆聲音。
 //   2. 同一種聲音同時最多 max 個在響；全部種類加起來最多 VOICES 個。各種類的 max 加總 ≤ VOICES（測試檢查），
 //      所以重要的聲音（升級、共鳴、守衛）一定有自己的位置，不會被一大堆命中聲擠掉。
 //   3. 每一幀依優先序處理（重要的先）。
-const VOICES = 14;
+// 第四輪（擁有者：「打擊音效有一點枯燥」＝變化不足）：
+//   - 命中依「武器種類」分音色（刀刃、射擊、雷、火、光暈類、重擊、光束），一局的聲音隨組建不同；每一種是獨立的聲音，各有冷卻與上限。
+//   - 同一次發聲帶上這段時間內命中的「最重的一下」與「打到精英／守衛」，合成時多疊一層（厚重、金屬、低沉）。
+//   - 擊倒帶「連擊數」：連續擊倒（間隔短）音高逐步上揚，每 10 連擊多一聲清脆的鈴。
+const VOICES = 19; // ＝各種類 max 的加總（meta-test 檢查加總 ≤ VOICES）
 const SFX = {
-  // id:      cd（秒）、dur（響多久，用來算同時發聲）、max（同類同時最多幾個）、prio（大的先處理）、vol（基礎音量 0～1）
-  hit:     { cd: 0.05, dur: 0.09, max: 2, prio: 1, vol: 0.35 },
-  kill:    { cd: 0.07, dur: 0.22, max: 2, prio: 2, vol: 0.5 },
-  gem:     { cd: 0.09, dur: 0.12, max: 1, prio: 1, vol: 0.25 },
-  blast:   { cd: 0.12, dur: 0.45, max: 2, prio: 3, vol: 0.6 },   // 燈籠雷、落星、燈鐘、自爆等爆炸類
-  hurt:    { cd: 0.25, dur: 0.3,  max: 1, prio: 4, vol: 0.7 },
-  level:   { cd: 0.35, dur: 0.9,  max: 1, prio: 6, vol: 0.7 },
-  chest:   { cd: 0.4,  dur: 1.2,  max: 1, prio: 6, vol: 0.75 },
-  evo:     { cd: 0.5,  dur: 1.6,  max: 1, prio: 7, vol: 0.85 },  // 共鳴
-  boss:    { cd: 1.0,  dur: 2.2,  max: 1, prio: 8, vol: 0.8 },   // 守衛出現
-  bossdown:{ cd: 1.0,  dur: 2.5,  max: 1, prio: 9, vol: 0.9 },
-  heal:    { cd: 0.3,  dur: 0.4,  max: 1, prio: 3, vol: 0.45 },
+  // id:         cd（秒）、dur（響多久，用來算同時發聲）、max（同類同時最多幾個）、prio（大的先處理）、vol（基礎音量 0～1）
+  hit_slash:  { cd: 0.06, dur: 0.12, max: 1, prio: 1, vol: 0.4 },   // 刀刃：金屬擦過
+  hit_shot:   { cd: 0.05, dur: 0.09, max: 1, prio: 1, vol: 0.35 },  // 射擊：短促的爆響
+  hit_zap:    { cd: 0.06, dur: 0.1,  max: 1, prio: 1, vol: 0.35 },  // 雷：劈啪
+  hit_fire:   { cd: 0.08, dur: 0.14, max: 1, prio: 1, vol: 0.3 },   // 火：轟
+  hit_soft:   { cd: 0.07, dur: 0.1,  max: 1, prio: 1, vol: 0.3 },   // 光暈、光球、螢蜂：玻璃般的輕敲
+  hit_thump:  { cd: 0.08, dur: 0.14, max: 1, prio: 1, vol: 0.4 },   // 落星、燈籠雷、燈鐘：重擊
+  hit_beam:   { cd: 0.07, dur: 0.12, max: 1, prio: 1, vol: 0.35 },  // 光束：嗡的一聲
+  kill:       { cd: 0.07, dur: 0.22, max: 2, prio: 2, vol: 0.5 },
+  gem:        { cd: 0.09, dur: 0.12, max: 1, prio: 1, vol: 0.25 },
+  blast:      { cd: 0.12, dur: 0.45, max: 2, prio: 3, vol: 0.6 },   // 燈籠雷、落星、燈鐘、自爆等爆炸類
+  hurt:       { cd: 0.25, dur: 0.3,  max: 1, prio: 4, vol: 0.7 },
+  level:      { cd: 0.35, dur: 0.9,  max: 1, prio: 6, vol: 0.7 },
+  chest:      { cd: 0.4,  dur: 1.2,  max: 1, prio: 6, vol: 0.75 },
+  evo:        { cd: 0.5,  dur: 1.6,  max: 1, prio: 7, vol: 0.85 },  // 共鳴
+  boss:       { cd: 1.0,  dur: 2.2,  max: 1, prio: 8, vol: 0.8 },   // 守衛出現
+  bossdown:   { cd: 1.0,  dur: 2.5,  max: 1, prio: 9, vol: 0.9 },
+  heal:       { cd: 0.3,  dur: 0.4,  max: 1, prio: 3, vol: 0.45 },
 };
-// 遊戲事件 → 聲音。沒列的事件不發聲
+// 武器（與其他傷害來源）→ 命中音色。每一把武器都要有（meta-test 的母體檢查：WEAPONS 全部都在這張表裡，含對照組）
+const HIT_FAMILY = {
+  boomerang: 'slash', twinblade: 'slash',
+  bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot',
+  chain: 'zap',
+  flame: 'fire', burn: 'fire',
+  orbit: 'soft', aura: 'soft', wisps: 'soft',
+  mortar: 'thump', starfall: 'thump', mines: 'thump', pulse: 'thump',
+  lance: 'beam',
+};
+const hitSound = (src) => `hit_${HIT_FAMILY[src] ?? 'shot'}`;
+// 其他遊戲事件 → 聲音。沒列的事件不發聲
 const EVENT_SOUND = {
-  hit: 'hit', kill: 'kill', gem: 'gem', blast: 'blast', mineBoom: 'blast', strike: 'blast', pulse: 'blast', hurt: 'hurt',
+  kill: 'kill', gem: 'gem', blast: 'blast', mineBoom: 'blast', strike: 'blast', pulse: 'blast', hurt: 'hurt',
   level: 'level', chest: 'chest', evo: 'evo', bossdown: 'bossdown', revive: 'evo', heal: 'heal',
 };
 // 同一幀／冷卻中累積的次數 → 音量倍率：1 下＝1，之後慢慢變大，最多 MAX_BOOST 倍
 const MAX_BOOST = 1.8;
 const boostOf = (n) => Math.min(MAX_BOOST, 1 + Math.log2(Math.max(1, n)) * 0.25);
+const HEAVY = 30;          // 一下傷害 ≥ 這個值算「重擊」，多疊一層厚重的聲音
+const STREAK_GAP = 0.45;   // 兩次擊倒聲的間隔在這之內算連擊
+const STREAK_MAX = 12;     // 音高最多往上爬幾階
 
 function createMixer() {
-  const last = {}, pending = {}, playing = []; // playing：[{ id, end }]
+  const last = {}, pending = {}, playing = []; // playing：[{ id, end }]；pending[id]：{ n, heavy, elite, boss }
+  let streak = 0, lastKill = -Infinity;
+  const add = (id, e) => {
+    const q = (pending[id] ??= { n: 0, heavy: false, elite: false, boss: false });
+    q.n++;
+    if (e) { if ((e.v ?? 0) >= HEAVY || e.big) q.heavy = true; if (e.elite) q.elite = true; if (e.boss) q.boss = true; }
+  };
   return {
     playing,
-    // events：這一幀的遊戲事件；now：現在的時間（秒，單調遞增）。回傳 [{ id, vol }]
+    get streak() { return streak; },
+    // events：這一幀的遊戲事件；now：現在的時間（秒，單調遞增）。回傳 [{ id, vol, n, heavy, elite, boss, streak }]
     plan(events, now) {
       for (let i = playing.length - 1; i >= 0; i--) if (playing[i].end <= now) playing.splice(i, 1);
       for (const e of events) {
-        const id = e.type === 'announce' && e.big ? 'boss' : EVENT_SOUND[e.type];
-        if (id) pending[id] = (pending[id] || 0) + 1;
+        if (e.type === 'hit') add(hitSound(e.src), e);
+        else { const id = e.type === 'announce' && e.big ? 'boss' : EVENT_SOUND[e.type]; if (id) add(id, e.type === 'kill' ? { elite: e.elite, boss: e.boss } : null); }
       }
       const out = [];
       for (const id of Object.keys(pending).sort((a, b) => SFX[b].prio - SFX[a].prio)) {
-        const d = SFX[id];
+        const d = SFX[id], q = pending[id];
         if (last[id] !== undefined && now - last[id] < d.cd) continue; // 冷卻中：留著，下一次發聲時一起算
         if (playing.filter((v) => v.id === id).length >= d.max || playing.length >= VOICES) continue;
-        out.push({ id, vol: d.vol * boostOf(pending[id]) });
+        const o = { id, vol: d.vol * boostOf(q.n), n: q.n, heavy: q.heavy, elite: q.elite, boss: q.boss };
+        if (id === 'kill') { streak = now - lastKill <= STREAK_GAP ? streak + q.n : q.n; lastKill = now; o.streak = streak; }
+        out.push(o);
         playing.push({ id, end: now + d.dur });
         last[id] = now; delete pending[id];
       }
@@ -4331,7 +4366,7 @@ function createMixer() {
   };
 }
 
-return { VOICES, SFX, EVENT_SOUND, MAX_BOOST, boostOf, createMixer };
+return { VOICES, SFX, HIT_FAMILY, hitSound, EVENT_SOUND, MAX_BOOST, boostOf, HEAVY, STREAK_GAP, STREAK_MAX, createMixer };
 })();
 
 // ---- audio.js
@@ -4345,7 +4380,7 @@ const __m_audio_js = (() => {
 //   - 切到背景／鎖屏：頁面隱藏時 suspend（省電、不在背景出聲），回到前景時 resume；resume 被擋（沒有手勢）就等下一次點畫面。
 //   - 靜音開關：有 navigator.audioSession 的 Safari 設成 'ambient'——跟著手機的靜音開關走（開靜音就不出聲），也不會打斷使用者正在聽的音樂。
 // 發聲預算在 sfx.js（純邏輯）；這裡只負責「照排程發出來」。
-const { createMixer, SFX } = __m_sfx_js;
+const { createMixer, SFX, STREAK_MAX } = __m_sfx_js;
 const AUDIO_DEFAULTS = { musicVol: 0.5, sfxVol: 0.8, muted: false };
 
 function createAudio({ Ctor, doc, win, nav } = {}) {
@@ -4408,11 +4443,35 @@ function createAudio({ Ctor, doc, win, nav } = {}) {
     s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
   }
   const jitter = (x, k = 0.08) => x * (1 + (Math.random() - 0.5) * k); // 同一種聲音每次略有不同，連續命中才不會像機關槍
+  // 命中的額外層（M8 第四輪）：重擊多一層厚重的低音、打到精英多一層金屬餘音、打到守衛多一層低沉的鈍響
+  const extra = (t, v, p) => {
+    if (p.heavy) tone(t, jitter(130), 55, 0.14, 'sine', v * 0.7);
+    if (p.elite) tone(t + 0.005, jitter(1760, 0.04), jitter(1720, 0.04), 0.22, 'triangle', v * 0.22, { attack: 0.002, detune: 9 });
+    if (p.boss) { tone(t, 70, 42, 0.25, 'triangle', v * 0.6); noise(t, 0.12, 'lowpass', 500, 120, v * 0.4); }
+  };
+  // 每一種命中聲都是「音頭＋主體＋尾韻」三層，各層獨立隨機（比只調音高豐富得多）
   const VOICE = {
-    // 命中：短促的「啪」＋往下掉的音頭——要脆、要短
-    hit: (t, v) => { noise(t, 0.05, 'bandpass', jitter(2400), 900, v * 0.9, { q: 1.5 }); tone(t, jitter(620), 220, 0.07, 'triangle', v * 0.6); },
-    // 擊倒：低頻「砰」＋碎裂的高頻
-    kill: (t, v) => { tone(t, jitter(260), 55, 0.18, 'sine', v); noise(t, 0.12, 'highpass', 3000, 1200, v * 0.45); tone(t + 0.01, jitter(1200), 500, 0.06, 'square', v * 0.12); },
+    // 刀刃：高頻擦過的金屬聲＋一聲短促的金屬鳴
+    hit_slash: (t, v, p) => { noise(t, 0.07, 'highpass', jitter(5200, 0.2), jitter(2600, 0.2), v * 0.7); noise(t + 0.01, 0.09, 'bandpass', jitter(3400, 0.2), jitter(1800, 0.2), v * 0.4, { q: 6 }); tone(t, jitter(1900, 0.1), jitter(1500, 0.1), 0.1, 'triangle', v * 0.18, { detune: jitter(12, 1) }); extra(t, v, p); },
+    // 射擊：「啪」的爆響＋往下掉的音頭
+    hit_shot: (t, v, p) => { noise(t, 0.04, 'bandpass', jitter(2600, 0.2), 900, v * 0.9, { q: 1.5 }); tone(t, jitter(700, 0.15), jitter(200, 0.2), 0.07, 'triangle', v * 0.55); noise(t + 0.03, 0.05, 'lowpass', 1200, 400, v * 0.25); extra(t, v, p); },
+    // 雷：方波的劈啪＋雜訊碎響
+    hit_zap: (t, v, p) => { tone(t, jitter(1800, 0.3), jitter(300, 0.3), 0.05, 'square', v * 0.25); tone(t + 0.02, jitter(2400, 0.3), jitter(600, 0.3), 0.04, 'sawtooth', v * 0.18); noise(t, 0.08, 'highpass', 4000, 2000, v * 0.5); extra(t, v, p); },
+    // 火：低沉的轟＋嘶嘶尾韻
+    hit_fire: (t, v, p) => { noise(t, 0.12, 'lowpass', jitter(1600, 0.2), 300, v * 0.8); noise(t + 0.02, 0.1, 'bandpass', jitter(900, 0.2), 500, v * 0.35, { q: 2 }); tone(t, jitter(160, 0.2), 70, 0.1, 'sine', v * 0.4); extra(t, v, p); },
+    // 光暈、光球、螢蜂：玻璃般清脆的輕敲
+    hit_soft: (t, v, p) => { tone(t, jitter(1320, 0.12), jitter(1250, 0.12), 0.09, 'sine', v * 0.6, { attack: 0.002 }); tone(t, jitter(2640, 0.12), jitter(2500, 0.12), 0.05, 'sine', v * 0.2); noise(t, 0.03, 'highpass', 6000, 4000, v * 0.3); extra(t, v, p); },
+    // 重擊：低頻的「咚」＋碎石般的雜訊
+    hit_thump: (t, v, p) => { tone(t, jitter(180, 0.15), 50, 0.14, 'sine', v); noise(t, 0.1, 'lowpass', jitter(900, 0.2), 150, v * 0.6); noise(t + 0.02, 0.06, 'highpass', 2500, 1200, v * 0.2); extra(t, v, p); },
+    // 光束：嗡的一聲往上掃
+    hit_beam: (t, v, p) => { tone(t, jitter(500, 0.15), jitter(1400, 0.15), 0.1, 'sawtooth', v * 0.2, { attack: 0.01 }); tone(t, jitter(1000, 0.1), jitter(2000, 0.1), 0.08, 'sine', v * 0.35); noise(t, 0.05, 'bandpass', 3000, 5000, v * 0.3, { q: 3 }); extra(t, v, p); },
+    // 擊倒：低頻「砰」＋碎裂的高頻；連擊時音高一階階往上（最多 STREAK_MAX 階），每 10 連擊多一聲清脆的鈴
+    kill: (t, v, p) => {
+      const up = 2 ** (Math.min(p.streak ?? 0, STREAK_MAX) / 24); // 每一階四分之一個全音
+      tone(t, jitter(260) * up, 55, 0.18, 'sine', v); noise(t, 0.12, 'highpass', jitter(3000, 0.2), 1200, v * 0.45); tone(t + 0.01, jitter(1200) * up, 500, 0.06, 'square', v * 0.12);
+      if (p.streak && Math.floor(p.streak / 10) > Math.floor((p.streak - p.n) / 10)) [1568, 2093].forEach((f, i) => tone(t + 0.04 + i * 0.05, f, f, 0.3, 'sine', v * 0.35, { attack: 0.003 }));
+      if (p.elite || p.boss) tone(t, 90, 35, 0.35, 'sine', v * 0.8);
+    },
     gem: (t, v) => { tone(t, jitter(1400, 0.15), 2100, 0.09, 'sine', v); },
     blast: (t, v) => { noise(t, 0.4, 'lowpass', 1400, 160, v); tone(t, 110, 38, 0.35, 'sine', v * 0.9); },
     hurt: (t, v) => { tone(t, 150, 70, 0.22, 'sawtooth', v * 0.35); noise(t, 0.15, 'lowpass', 700, 200, v * 0.6); },
@@ -4453,7 +4512,7 @@ function createAudio({ Ctor, doc, win, nav } = {}) {
       const plan = mixer.plan(events, now);
       if (!ctx || ctx.state !== 'running' || settings.muted || settings.sfxVol <= 0) return [];
       const t = ctx.currentTime + 0.005;
-      for (const p of plan) { VOICE[p.id](t, p.vol); stats.started++; }
+      for (const p of plan) { VOICE[p.id](t, p.vol, p); stats.started++; }
       return plan;
     },
     apply(s) { settings = { ...AUDIO_DEFAULTS, ...s }; applyGains(); },

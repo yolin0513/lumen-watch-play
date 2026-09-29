@@ -7,7 +7,7 @@
 //   - 切到背景／鎖屏：頁面隱藏時 suspend（省電、不在背景出聲），回到前景時 resume；resume 被擋（沒有手勢）就等下一次點畫面。
 //   - 靜音開關：有 navigator.audioSession 的 Safari 設成 'ambient'——跟著手機的靜音開關走（開靜音就不出聲），也不會打斷使用者正在聽的音樂。
 // 發聲預算在 sfx.js（純邏輯）；這裡只負責「照排程發出來」。
-import { createMixer, SFX } from './sfx.js';
+import { createMixer, SFX, STREAK_MAX } from './sfx.js';
 
 export const AUDIO_DEFAULTS = { musicVol: 0.5, sfxVol: 0.8, muted: false };
 
@@ -71,11 +71,35 @@ export function createAudio({ Ctor, doc, win, nav } = {}) {
     s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
   }
   const jitter = (x, k = 0.08) => x * (1 + (Math.random() - 0.5) * k); // 同一種聲音每次略有不同，連續命中才不會像機關槍
+  // 命中的額外層（M8 第四輪）：重擊多一層厚重的低音、打到精英多一層金屬餘音、打到守衛多一層低沉的鈍響
+  const extra = (t, v, p) => {
+    if (p.heavy) tone(t, jitter(130), 55, 0.14, 'sine', v * 0.7);
+    if (p.elite) tone(t + 0.005, jitter(1760, 0.04), jitter(1720, 0.04), 0.22, 'triangle', v * 0.22, { attack: 0.002, detune: 9 });
+    if (p.boss) { tone(t, 70, 42, 0.25, 'triangle', v * 0.6); noise(t, 0.12, 'lowpass', 500, 120, v * 0.4); }
+  };
+  // 每一種命中聲都是「音頭＋主體＋尾韻」三層，各層獨立隨機（比只調音高豐富得多）
   const VOICE = {
-    // 命中：短促的「啪」＋往下掉的音頭——要脆、要短
-    hit: (t, v) => { noise(t, 0.05, 'bandpass', jitter(2400), 900, v * 0.9, { q: 1.5 }); tone(t, jitter(620), 220, 0.07, 'triangle', v * 0.6); },
-    // 擊倒：低頻「砰」＋碎裂的高頻
-    kill: (t, v) => { tone(t, jitter(260), 55, 0.18, 'sine', v); noise(t, 0.12, 'highpass', 3000, 1200, v * 0.45); tone(t + 0.01, jitter(1200), 500, 0.06, 'square', v * 0.12); },
+    // 刀刃：高頻擦過的金屬聲＋一聲短促的金屬鳴
+    hit_slash: (t, v, p) => { noise(t, 0.07, 'highpass', jitter(5200, 0.2), jitter(2600, 0.2), v * 0.7); noise(t + 0.01, 0.09, 'bandpass', jitter(3400, 0.2), jitter(1800, 0.2), v * 0.4, { q: 6 }); tone(t, jitter(1900, 0.1), jitter(1500, 0.1), 0.1, 'triangle', v * 0.18, { detune: jitter(12, 1) }); extra(t, v, p); },
+    // 射擊：「啪」的爆響＋往下掉的音頭
+    hit_shot: (t, v, p) => { noise(t, 0.04, 'bandpass', jitter(2600, 0.2), 900, v * 0.9, { q: 1.5 }); tone(t, jitter(700, 0.15), jitter(200, 0.2), 0.07, 'triangle', v * 0.55); noise(t + 0.03, 0.05, 'lowpass', 1200, 400, v * 0.25); extra(t, v, p); },
+    // 雷：方波的劈啪＋雜訊碎響
+    hit_zap: (t, v, p) => { tone(t, jitter(1800, 0.3), jitter(300, 0.3), 0.05, 'square', v * 0.25); tone(t + 0.02, jitter(2400, 0.3), jitter(600, 0.3), 0.04, 'sawtooth', v * 0.18); noise(t, 0.08, 'highpass', 4000, 2000, v * 0.5); extra(t, v, p); },
+    // 火：低沉的轟＋嘶嘶尾韻
+    hit_fire: (t, v, p) => { noise(t, 0.12, 'lowpass', jitter(1600, 0.2), 300, v * 0.8); noise(t + 0.02, 0.1, 'bandpass', jitter(900, 0.2), 500, v * 0.35, { q: 2 }); tone(t, jitter(160, 0.2), 70, 0.1, 'sine', v * 0.4); extra(t, v, p); },
+    // 光暈、光球、螢蜂：玻璃般清脆的輕敲
+    hit_soft: (t, v, p) => { tone(t, jitter(1320, 0.12), jitter(1250, 0.12), 0.09, 'sine', v * 0.6, { attack: 0.002 }); tone(t, jitter(2640, 0.12), jitter(2500, 0.12), 0.05, 'sine', v * 0.2); noise(t, 0.03, 'highpass', 6000, 4000, v * 0.3); extra(t, v, p); },
+    // 重擊：低頻的「咚」＋碎石般的雜訊
+    hit_thump: (t, v, p) => { tone(t, jitter(180, 0.15), 50, 0.14, 'sine', v); noise(t, 0.1, 'lowpass', jitter(900, 0.2), 150, v * 0.6); noise(t + 0.02, 0.06, 'highpass', 2500, 1200, v * 0.2); extra(t, v, p); },
+    // 光束：嗡的一聲往上掃
+    hit_beam: (t, v, p) => { tone(t, jitter(500, 0.15), jitter(1400, 0.15), 0.1, 'sawtooth', v * 0.2, { attack: 0.01 }); tone(t, jitter(1000, 0.1), jitter(2000, 0.1), 0.08, 'sine', v * 0.35); noise(t, 0.05, 'bandpass', 3000, 5000, v * 0.3, { q: 3 }); extra(t, v, p); },
+    // 擊倒：低頻「砰」＋碎裂的高頻；連擊時音高一階階往上（最多 STREAK_MAX 階），每 10 連擊多一聲清脆的鈴
+    kill: (t, v, p) => {
+      const up = 2 ** (Math.min(p.streak ?? 0, STREAK_MAX) / 24); // 每一階四分之一個全音
+      tone(t, jitter(260) * up, 55, 0.18, 'sine', v); noise(t, 0.12, 'highpass', jitter(3000, 0.2), 1200, v * 0.45); tone(t + 0.01, jitter(1200) * up, 500, 0.06, 'square', v * 0.12);
+      if (p.streak && Math.floor(p.streak / 10) > Math.floor((p.streak - p.n) / 10)) [1568, 2093].forEach((f, i) => tone(t + 0.04 + i * 0.05, f, f, 0.3, 'sine', v * 0.35, { attack: 0.003 }));
+      if (p.elite || p.boss) tone(t, 90, 35, 0.35, 'sine', v * 0.8);
+    },
     gem: (t, v) => { tone(t, jitter(1400, 0.15), 2100, 0.09, 'sine', v); },
     blast: (t, v) => { noise(t, 0.4, 'lowpass', 1400, 160, v); tone(t, 110, 38, 0.35, 'sine', v * 0.9); },
     hurt: (t, v) => { tone(t, 150, 70, 0.22, 'sawtooth', v * 0.35); noise(t, 0.15, 'lowpass', 700, 200, v * 0.6); },
@@ -116,7 +140,7 @@ export function createAudio({ Ctor, doc, win, nav } = {}) {
       const plan = mixer.plan(events, now);
       if (!ctx || ctx.state !== 'running' || settings.muted || settings.sfxVol <= 0) return [];
       const t = ctx.currentTime + 0.005;
-      for (const p of plan) { VOICE[p.id](t, p.vol); stats.started++; }
+      for (const p of plan) { VOICE[p.id](t, p.vol, p); stats.started++; }
       return plan;
     },
     apply(s) { settings = { ...AUDIO_DEFAULTS, ...s }; applyGains(); },
