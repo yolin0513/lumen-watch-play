@@ -10,7 +10,7 @@ import { SPEEDS } from './clock.js';
 import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -19,7 +19,7 @@ export function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null }, pending: [] },
-    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } } }
+    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } }, open: 這個生態系已開放（v8） }
     progress: {},
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
@@ -68,14 +68,29 @@ export const MIGRATIONS = {
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
   // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
   5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
-  // v6 → v7：章節 → 生態系＋關卡。舊的「第 c 章已通關」＝生態系 c 的第 1～STAGES.base 關已通關（第 base 關的數值＝舊的那一章），
-  // 舊的最快紀錄記在第 base 關。不合法的內容（不存在的生態系、壞掉的紀錄）交給逐欄修復處理。
+  // v6 → v7：章節 → 生態系＋關卡。v7 的定義是「第 3 關＝舊的那一章」，所以舊的「第 c 章已通關」＝生態系 c 的第 1～3 關已通關，
+  // 舊的最快紀錄記在第 3 關。這裡寫死 v7 當時的定義（不讀 STAGES.base）：之後 base 改了，舊存檔仍要先照 v7 的意思升上來，再由下一步換算。
   6: (d) => {
-    const { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
+    const V7_BASE = 3, { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
     const at = (id) => (progress[id] ??= { cleared: [], best: {} });
-    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: STAGES.base }, (_, i) => i + 1);
-    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[STAGES.base] = b;
+    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: V7_BASE }, (_, i) => i + 1);
+    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[V7_BASE] = b;
     return { ...rest, progress: isObj(d.progress) ? d.progress : progress, v: 7 };
+  },
+  // v7 → v8（擁有者選「B」：第 1 關＝原本的難度）：v7 的第 k 關＝v8 的第 k−2 關（同樣的難度），通關與最快紀錄都照這個換算；
+  // v7 的第 1～2 關比原本容易，在 v8 沒有對應的關卡，不算通關。另外把「v7 時已經開放的生態系」記成 open，
+  // 免得新的解鎖條件（上一個生態系通關第 3 關）把已經玩到的生態系鎖回去。
+  7: (d) => {
+    const SHIFT = 2, V7_UNLOCK = 3, progress = {}, old = isObj(d.progress) ? d.progress : {};
+    const ids = Object.keys(old).map(Number).filter(Number.isInteger).sort((a, b) => a - b);
+    for (const id of ids) {
+      const e = isObj(old[id]) ? old[id] : {}, cl = Array.isArray(e.cleared) ? e.cleared.filter(Number.isInteger) : [], max = cl.length ? Math.max(...cl) : 0;
+      const best = {};
+      if (isObj(e.best)) for (const [k, b] of Object.entries(e.best)) if (Number(k) - SHIFT >= 1) best[Number(k) - SHIFT] = b;
+      progress[id] = { cleared: Array.from({ length: Math.max(0, max - SHIFT) }, (_, i) => i + 1), best, open: true };
+      if (max >= V7_UNLOCK) progress[id + 1] = { cleared: [], best: {}, ...(progress[id + 1] ?? {}), open: true }; // v7 裡它開放了下一個生態系
+    }
+    return { ...d, progress, v: 8 };
   },
 };
 
@@ -194,7 +209,9 @@ export function sanitize(d) {
         if (okStage(n) && n <= max && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) best[n] = { t: nonNegInt(b.t), kills: nonNegInt(b.kills) };
         else fix(`關卡進度：生態系 ${id} 第 ${sk} 關的紀錄不合法，已移除`);
       }
-      if (max || Object.keys(best).length) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best };
+      if (e.open !== undefined && typeof e.open !== 'boolean') fix(`關卡進度：生態系 ${id} 的開放標記不合法，當作沒有`);
+      const open = e.open === true;
+      if (max || Object.keys(best).length || open) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best, ...(open ? { open } : {}) };
     }
   } else if (d.progress !== undefined) fix('progress 型別不對，重設');
 

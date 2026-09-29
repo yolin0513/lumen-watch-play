@@ -780,14 +780,14 @@ const CHAPTER1 = CHAPTERS[0];
 // ---- 關卡（M8 第二輪）：每個生態系（上面的每一章）10 關，難度遞增 ----
 // 擁有者提案：「每個生態系擴增到 10 關，難度遞增，怪物血量上調」。
 // 第 base 關的數值＝M8 以前的那一章（倍率全部是 1），舊的平衡數字有明確的對應點；其他關只改參數，程式路徑完全相同。
+// M8 第三輪（擁有者選「B」）：第 1 關就是原本的難度，之後每關更難——不設比原本容易的關卡（唯一的玩家是擁有者，不為假想的新手暖身）。
 // 第一批只用簡單的遞增規則（每往後一關乘一次）：血量、出怪速度、怪物傷害三個槓桿一起動，不只調血量。逐關的槓桿設計是第二批。
 const STAGES = {
-  count: 10, base: 3,
+  count: 10, base: 1,
   unlockNext: 3,                        // 通關第幾關開放下一個生態系的第 1 關（主線 6 × 3 關；第 4～10 關是往深處的挑戰）
   hp: 1.10, spawn: 1.04, dmg: 1.03,     // 每往後一關的倍率（含守衛的血量）
   oil: 1.10,                            // 通關燈油（一般＋首通）每往後一關的倍率；擊倒燈油本來就隨擊倒的數量變多
-  firstStardustSplit: [0.2, 0.3, 0.5],  // 第 1～3 關的首通星砂合計＝原本一章的首通星砂（舊存檔的第 1～3 關視為已領過）
-  deepFirstStardust: 20,                // 第 4～10 關每關的首通星砂
+  deepFirstStardust: 20,                // 第 2～10 關每關的首通星砂（第 1 關＝原本一章的首通星砂；舊存檔的第 1 關視為已領過）
 };
 const stageMul = (base, n) => base ** (n - STAGES.base);
 // 某生態系的第 n 關：回傳一份 chapter（sim、meta、render 都照原本的方式使用它）
@@ -798,7 +798,7 @@ function stageChapter(ch, n) {
     ...ch, stage: n, key: `${ch.id}-${n}`, bossHpMul: hp,
     hpScale: (t) => ch.hpScale(t) * hp, dmgScale: (t) => ch.dmgScale(t) * dmg, spawnRate: (t) => ch.spawnRate(t) * spawn,
     reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
-      firstStardust: n <= STAGES.firstStardustSplit.length ? Math.round(r.firstStardust * STAGES.firstStardustSplit[n - 1]) : STAGES.deepFirstStardust },
+      firstStardust: n === STAGES.base ? r.firstStardust : STAGES.deepFirstStardust },
   };
 }
 
@@ -1158,6 +1158,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
 
   // 燈核：有可共鳴武器就進化，否則隨機強化最多 3 項已持有的東西
   function openChest() {
+    count('chestsOpened'); // 結算畫面給擁有者看「出現幾顆、撿到幾顆」（燈核指引有沒有用，只能靠真人玩的數字）
     const evo = p.weapons.find(canEvolve);
     let result;
     if (evo) {
@@ -1835,11 +1836,17 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       if (e.hp <= 0) continue;
       const [vx, vy] = enemyMove(e, dt);
       let sx = 0, sy = 0;
-      near(e.x, e.y, (o) => {
-        if (o === e) return;
-        const ox = e.x - o.x, oy = e.y - o.y, od = ox * ox + oy * oy, min = e.r + o.r;
-        if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
-      });
+      // 互推：和 near() 完全相同的格子順序、同一格內的順序、同樣的算式（結果逐位元相同），只是不經過回呼——
+      // M8 第三輪：第 10 關怪最多時，這段佔邏輯耗時的大半，回呼的額外成本讓 p99 超過 2ms
+      const gx = Math.floor(e.x / CELL), gy = Math.floor(e.y / CELL);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const b = grid.get(key(gx + i, gy + j)); if (!b) continue;
+        for (let n = 0; n < b.length; n++) {
+          const o = b[n]; if (o === e) continue;
+          const ox = e.x - o.x, oy = e.y - o.y, od = ox * ox + oy * oy, min = e.r + o.r;
+          if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
+        }
+      }
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
       if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
@@ -1938,14 +1945,14 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
         let x = p.x + Math.cos(a) * RESO_CHEST.dist, y = p.y + Math.sin(a) * RESO_CHEST.dist;
         if (s.arena) { const dx = x - s.arena.x, dy = y - s.arena.y, d = Math.hypot(dx, dy), lim = s.arena.r * 0.7; if (d > lim) { x = s.arena.x + dx / d * lim; y = s.arena.y + dy / d * lim; } }
         s.pickups.push({ type: 'chest', x, y, reso: true });
-        count('resoChests');
+        count('resoChests'); count('chestsDropped');
         s.events.push({ type: 'announce', text: '燈芯共鳴：燈核出現了！' });
       }
     } else {
       s.resoChestT = 0;
       // 多出來的共鳴燈核收回（例如等著的那把已經被精英的燈核共鳴了）：它只補共鳴，不可以變成額外的一般強化
       let extra = chests - waiting;
-      if (extra > 0) s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0));
+      if (extra > 0) { const before = s.pickups.length; s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0)); count('chestsWithdrawn', before - s.pickups.length); }
     }
 
     // 勝利：Boss 倒下後稍等一下讓玩家看到爆炸
@@ -1977,7 +1984,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     else s.ledger.kills[e.kind] = (s.ledger.kills[e.kind] || 0) + 1;
     s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
     s.gems.push({ x: e.x, y: e.y, v: t.xp * (e.elite ? ELITE.xpMul : 1), pull: false });
-    if (e.elite) s.pickups.push({ type: 'chest', x: e.x, y: e.y });
+    if (e.elite) { s.pickups.push({ type: 'chest', x: e.x, y: e.y }); count('chestsDropped'); s.events.push({ type: 'announce', text: '精英掉了燈核！跟著金色箭頭去撿' }); }
     else {
       const r = rand();
       if (r < 0.006) s.pickups.push({ type: 'heal', x: e.x, y: e.y });
@@ -2327,12 +2334,44 @@ function makeChest() {
 return { rng, glow, makeGround, makeCreature, drawPlayer, PALETTES, makePillar, makeIcon, makeChest };
 })();
 
+// ---- guide.js
+const __m_guide_js = (() => {
+// 燈核指引（M8 第三輪）：擁有者回報「精英掉的寶箱發現不了，還是無法共鳴全部武器」。
+// 先前只有一個 10px 的小三角形、位置是用夾擠估的（斜方向時會偏）。這裡算出每一顆燈核（精英掉的、共鳴燈核）的：
+//   距離與方向（從角色算）、在不在畫面裡（被頂部 HUD 蓋住的也算不在）、不在畫面裡時箭頭放在哪（角色→燈核的射線和內縮邊框的交點）。
+// 純函式、不碰 DOM：render 照這裡的結果畫，也把結果回傳；shop-test 用自己算的座標比對（指引必須由實際座標算出，不能是裝飾）。
+const GUIDE = { margin: 28, hudTop: 92 };
+
+// 座標都用「邏輯單位」（和世界座標同尺度，camX/camY 是畫面左上角的世界座標）。w、h：畫面的邏輯寬高；top：HUD 佔掉的頂部高度
+function chestGuides(pickups, player, camX, camY, w, h, top = GUIDE.hudTop) {
+  const out = [], px = player.x - camX, py = player.y - camY, m = GUIDE.margin;
+  const L = m, R = w - m, T = top + m, B = h - m;
+  for (const it of pickups) {
+    if (it.type !== 'chest') continue;
+    const sx = it.x - camX, sy = it.y - camY, dx = it.x - player.x, dy = it.y - player.y;
+    const dist = Math.hypot(dx, dy), angle = Math.atan2(dy, dx), onScreen = sx >= 0 && sx <= w && sy >= top && sy <= h;
+    let ex = sx, ey = sy;
+    if (!onScreen) {
+      const c = Math.cos(angle), s = Math.sin(angle); let t = Infinity;
+      if (c > 1e-9) t = Math.min(t, (R - px) / c); else if (c < -1e-9) t = Math.min(t, (L - px) / c);
+      if (s > 1e-9) t = Math.min(t, (B - py) / s); else if (s < -1e-9) t = Math.min(t, (T - py) / s);
+      ex = px + c * t; ey = py + s * t;
+    }
+    out.push({ reso: !!it.reso, onScreen, sx, sy, ex, ey, angle, dist });
+  }
+  return out;
+}
+
+return { GUIDE, chestGuides };
+})();
+
 // ---- render.js
 const __m_render_js = (() => {
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
 const { VW, terrainIn, ventState } = __m_sim_js;
 const { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } = __m_content_js;
 const { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } = __m_art_js;
+const { chestGuides, GUIDE } = __m_guide_js;
 // shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
   mite:     { seed: 11, radius: 11, hue: 290, eyes: 1, shared: true },
@@ -2473,8 +2512,11 @@ function createRenderer(chapter = CHAPTER1) {
   }
 
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
+  let lastGuides = [];
+  // 回傳這一幀畫了哪些燈核指引（shop-test 拿去和自己算的座標比對；平常沒人用）
   function render(g, s, dt, W, H, scale, safeTop = 0, hud = true, prof = null) {
     prof?.start();
+    lastGuides = [];
     const OFF = prof?.off ?? NONE; // 效能量測的 A/B：關掉指定的繪製項目，看總時間少多少（平常是空集合）
     consume(s, dt);
     prof?.lap('特效更新');
@@ -2621,7 +2663,12 @@ function createRenderer(chapter = CHAPTER1) {
       const gl = it.type === 'chest' ? G.gold : it.type === 'heal' ? G.heal : G.magnet;
       g.globalAlpha = 0.7 + Math.sin(T * 6) * 0.2; g.drawImage(gl, it.x - gl.width / 2, it.y - gl.height / 2 + bob); g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
-      if (it.type === 'chest') g.drawImage(chestImg, it.x - 20, it.y - 22 + bob);
+      if (it.type === 'chest') { // M8 第三輪：燈核上方加一道光柱，遠遠就看得到
+        const beam = g.createLinearGradient(0, it.y - 150, 0, it.y);
+        beam.addColorStop(0, 'rgba(255,220,120,0)'); beam.addColorStop(1, `rgba(255,220,120,${0.35 + Math.sin(T * 4) * 0.12})`);
+        g.globalCompositeOperation = 'lighter'; g.fillStyle = beam; g.fillRect(it.x - 7, it.y - 150, 14, 150); g.globalCompositeOperation = 'source-over';
+        g.drawImage(chestImg, it.x - 20, it.y - 22 + bob);
+      }
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
@@ -2833,6 +2880,7 @@ function createRenderer(chapter = CHAPTER1) {
     prof?.lap('暗角與閃光');
     if (hud) renderHud(g, s, W, H, scale, camX, camY, vh, safeTop); // 主選單背景的展示局不畫 HUD，免得疊到標題
     prof?.lap('HUD');
+    return { guides: lastGuides };
   }
 
   function renderHud(g, s, W, H, k, camX, camY, vh, safeTop) {
@@ -2876,17 +2924,25 @@ function createRenderer(chapter = CHAPTER1) {
       g.font = '700 11px system-ui'; g.textAlign = 'center'; g.fillStyle = '#ffd6f0'; shadowText(g, ENEMIES[b.kind].name, w / 2, by - 3);
     }
 
-    // 畫面外燈核指示
-    for (const it of s.pickups) {
-      if (it.type !== 'chest') continue;
-      const sx = it.x - camX, sy = it.y - camY;
-      if (sx > 0 && sx < w && sy > 0 && sy < vh) continue;
-      const cx = w / 2, cy = h / 2, a = Math.atan2(sy - cy, sx - cx);
-      const ex = Math.min(w - 20, Math.max(20, cx + Math.cos(a) * w)), ey = Math.min(h - 20, Math.max(90 + safeTop, cy + Math.sin(a) * h));
-      g.save(); g.translate(ex, ey); g.rotate(a);
-      g.fillStyle = `rgba(255,210,90,${0.7 + Math.sin(T * 8) * 0.3})`; g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -7); g.lineTo(-6, 7); g.closePath(); g.fill();
+    // 燈核指引（M8 第三輪，src/guide.js）：畫面內→上方跳動的「燈核」字樣；畫面外→邊緣的大箭頭＋距離。位置全部照 chestGuides 的結果畫
+    const guides = chestGuides(s.pickups, p, camX, camY, w, h, GUIDE.hudTop + safeTop), pulse = 0.75 + Math.sin(T * 6) * 0.25;
+    for (const gd of guides) {
+      g.font = '800 12px system-ui'; g.textAlign = 'center';
+      if (gd.onScreen) {
+        const yy = gd.sy - 40 + Math.sin(T * 5) * 4;
+        g.fillStyle = '#ffe27a'; shadowText(g, gd.reso ? '共鳴燈核' : '燈核', gd.sx, yy);
+        g.beginPath(); g.moveTo(gd.sx - 6, yy + 5); g.lineTo(gd.sx + 6, yy + 5); g.lineTo(gd.sx, yy + 12); g.closePath(); g.fill();
+        continue;
+      }
+      g.fillStyle = `rgba(20,12,40,${0.75 * pulse})`; g.beginPath(); g.arc(gd.ex, gd.ey, 19, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(255,220,120,${pulse})`; g.lineWidth = 2; g.stroke();
+      g.save(); g.translate(gd.ex, gd.ey); g.rotate(gd.angle);
+      g.fillStyle = `rgba(255,214,100,${pulse})`; g.beginPath(); g.moveTo(16, 0); g.lineTo(4, -9); g.lineTo(4, 9); g.closePath(); g.fill();
       g.restore();
+      g.drawImage(chestImg, gd.ex - 10, gd.ey - 11, 20, 22);
+      g.fillStyle = '#ffe9a8'; shadowText(g, `${gd.reso ? '共鳴 ' : ''}${Math.round(gd.dist / 10)}m`, gd.ex, gd.ey + (gd.ey > h / 2 ? -24 : 32));
     }
+    lastGuides = guides;
 
     // 升級字樣
     if (fx.levelFlash > 0) {
@@ -2961,7 +3017,7 @@ const __m_save_js = (() => {
 const { SPEEDS } = __m_clock_js;
 const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 7;
+const SAVE_VERSION = 8;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -2970,7 +3026,7 @@ function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
     gear: { items: [], equipped: { lamp: null, cloak: null, charm: null, boots: null }, pending: [] },
-    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } } }
+    // v7：關卡進度。progress[生態系 id] = { cleared: [已通關的關卡，永遠是 1..n 連續], best: { 關卡: { t, kills } }, open: 這個生態系已開放（v8） }
     progress: {},
     stats: { runs: 0, kills: 0 },
     // v2（M3 商城）
@@ -3019,14 +3075,29 @@ const MIGRATIONS = {
   4: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), speed: 1 }, v: 5 }),
   // v5 → v6：加入進階（結晶、星核、專屬武器星數；裝備的星數由逐欄修復補 0），原有進度原樣保留
   5: (d) => ({ ...d, crystals: 0, weapons: { ...(isObj(d.weapons) ? d.weapons : {}), shards: {}, stars: {} }, v: 6 }),
-  // v6 → v7：章節 → 生態系＋關卡。舊的「第 c 章已通關」＝生態系 c 的第 1～STAGES.base 關已通關（第 base 關的數值＝舊的那一章），
-  // 舊的最快紀錄記在第 base 關。不合法的內容（不存在的生態系、壞掉的紀錄）交給逐欄修復處理。
+  // v6 → v7：章節 → 生態系＋關卡。v7 的定義是「第 3 關＝舊的那一章」，所以舊的「第 c 章已通關」＝生態系 c 的第 1～3 關已通關，
+  // 舊的最快紀錄記在第 3 關。這裡寫死 v7 當時的定義（不讀 STAGES.base）：之後 base 改了，舊存檔仍要先照 v7 的意思升上來，再由下一步換算。
   6: (d) => {
-    const { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
+    const V7_BASE = 3, { chapters, ...rest } = d, progress = {}, ch = isObj(chapters) ? chapters : {};
     const at = (id) => (progress[id] ??= { cleared: [], best: {} });
-    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: STAGES.base }, (_, i) => i + 1);
-    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[STAGES.base] = b;
+    if (Array.isArray(ch.cleared)) for (const id of ch.cleared) at(id).cleared = Array.from({ length: V7_BASE }, (_, i) => i + 1);
+    if (isObj(ch.best)) for (const [id, b] of Object.entries(ch.best)) at(id).best[V7_BASE] = b;
     return { ...rest, progress: isObj(d.progress) ? d.progress : progress, v: 7 };
+  },
+  // v7 → v8（擁有者選「B」：第 1 關＝原本的難度）：v7 的第 k 關＝v8 的第 k−2 關（同樣的難度），通關與最快紀錄都照這個換算；
+  // v7 的第 1～2 關比原本容易，在 v8 沒有對應的關卡，不算通關。另外把「v7 時已經開放的生態系」記成 open，
+  // 免得新的解鎖條件（上一個生態系通關第 3 關）把已經玩到的生態系鎖回去。
+  7: (d) => {
+    const SHIFT = 2, V7_UNLOCK = 3, progress = {}, old = isObj(d.progress) ? d.progress : {};
+    const ids = Object.keys(old).map(Number).filter(Number.isInteger).sort((a, b) => a - b);
+    for (const id of ids) {
+      const e = isObj(old[id]) ? old[id] : {}, cl = Array.isArray(e.cleared) ? e.cleared.filter(Number.isInteger) : [], max = cl.length ? Math.max(...cl) : 0;
+      const best = {};
+      if (isObj(e.best)) for (const [k, b] of Object.entries(e.best)) if (Number(k) - SHIFT >= 1) best[Number(k) - SHIFT] = b;
+      progress[id] = { cleared: Array.from({ length: Math.max(0, max - SHIFT) }, (_, i) => i + 1), best, open: true };
+      if (max >= V7_UNLOCK) progress[id + 1] = { cleared: [], best: {}, ...(progress[id + 1] ?? {}), open: true }; // v7 裡它開放了下一個生態系
+    }
+    return { ...d, progress, v: 8 };
   },
 };
 
@@ -3145,7 +3216,9 @@ function sanitize(d) {
         if (okStage(n) && n <= max && isObj(b) && nonNegInt(b.t) !== null && nonNegInt(b.kills) !== null) best[n] = { t: nonNegInt(b.t), kills: nonNegInt(b.kills) };
         else fix(`關卡進度：生態系 ${id} 第 ${sk} 關的紀錄不合法，已移除`);
       }
-      if (max || Object.keys(best).length) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best };
+      if (e.open !== undefined && typeof e.open !== 'boolean') fix(`關卡進度：生態系 ${id} 的開放標記不合法，當作沒有`);
+      const open = e.open === true;
+      if (max || Object.keys(best).length || open) out.progress[id] = { cleared: Array.from({ length: max }, (_, i) => i + 1), best, ...(open ? { open } : {}) };
     }
   } else if (d.progress !== undefined) fix('progress 型別不對，重設');
 
@@ -3465,7 +3538,8 @@ function ascendWeapon(profile, id) {
 // ---- 關卡解鎖（M8 第二輪）：通關第 n 關開第 n+1 關；通關第 STAGES.unlockNext 關開下一個生態系的第 1 關 ----
 const ecoProgress = (profile, id) => profile.progress?.[id] ?? { cleared: [], best: {} };
 const stageCleared = (profile, id, n) => ecoProgress(profile, id).cleared.includes(n);
-const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext);
+// 生態系開放：第一個永遠開；或上一個生態系通關第 unlockNext 關；或存檔記著它已經開放過（v8 升級時保留舊進度）
+const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext) || ecoProgress(profile, id).open === true;
 const stageUnlocked = (profile, id, n) => ecoUnlocked(profile, id) && Number.isInteger(n) && n >= 1 && n <= STAGES.count && (n === 1 || stageCleared(profile, id, n - 1));
 // 還沒解鎖時，畫面上寫的條件（和上面兩條規則同一個來源）
 function unlockText(profile, id, n = 1) {
@@ -4020,7 +4094,9 @@ function createUI(actions) {
       r.className = 'overlay scroll ' + (win ? 'win' : 'lose');
       r.querySelector('h1').textContent = win ? '燈塔重燃' : '燈火熄滅';
       r.querySelector('.sub').textContent = win ? `${s.chapter.name}第 ${s.chapter.stage ?? 3} 關的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
-      r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—']]
+      // 燈核：出現幾顆（精英掉的＋共鳴燈核，不含多出來被收回的）、撿到幾顆——燈核指引有沒有用，自動玩家量不出來，只能看真人玩的這個數字
+      const cn = s.counters || {}, shown = (cn.chestsDropped || 0) - (cn.chestsWithdrawn || 0);
+      r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—'], ['燈核', shown ? `撿到 ${cn.chestsOpened || 0} / 出現 ${shown}` : '—']]
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       const pend = summary.drops.filter((it) => it.where === 'pending').length;
       r.querySelector('.ledger').innerHTML = summary.oil.lines.map((l) => `<div><span>${esc(l.label)}</span><b>+${num(l.amount)}</b></div>`).join('')

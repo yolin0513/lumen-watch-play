@@ -400,14 +400,14 @@ export const CHAPTER1 = CHAPTERS[0];
 // ---- 關卡（M8 第二輪）：每個生態系（上面的每一章）10 關，難度遞增 ----
 // 擁有者提案：「每個生態系擴增到 10 關，難度遞增，怪物血量上調」。
 // 第 base 關的數值＝M8 以前的那一章（倍率全部是 1），舊的平衡數字有明確的對應點；其他關只改參數，程式路徑完全相同。
+// M8 第三輪（擁有者選「B」）：第 1 關就是原本的難度，之後每關更難——不設比原本容易的關卡（唯一的玩家是擁有者，不為假想的新手暖身）。
 // 第一批只用簡單的遞增規則（每往後一關乘一次）：血量、出怪速度、怪物傷害三個槓桿一起動，不只調血量。逐關的槓桿設計是第二批。
 export const STAGES = {
-  count: 10, base: 3,
+  count: 10, base: 1,
   unlockNext: 3,                        // 通關第幾關開放下一個生態系的第 1 關（主線 6 × 3 關；第 4～10 關是往深處的挑戰）
   hp: 1.10, spawn: 1.04, dmg: 1.03,     // 每往後一關的倍率（含守衛的血量）
   oil: 1.10,                            // 通關燈油（一般＋首通）每往後一關的倍率；擊倒燈油本來就隨擊倒的數量變多
-  firstStardustSplit: [0.2, 0.3, 0.5],  // 第 1～3 關的首通星砂合計＝原本一章的首通星砂（舊存檔的第 1～3 關視為已領過）
-  deepFirstStardust: 20,                // 第 4～10 關每關的首通星砂
+  deepFirstStardust: 20,                // 第 2～10 關每關的首通星砂（第 1 關＝原本一章的首通星砂；舊存檔的第 1 關視為已領過）
 };
 export const stageMul = (base, n) => base ** (n - STAGES.base);
 // 某生態系的第 n 關：回傳一份 chapter（sim、meta、render 都照原本的方式使用它）
@@ -418,7 +418,7 @@ export function stageChapter(ch, n) {
     ...ch, stage: n, key: `${ch.id}-${n}`, bossHpMul: hp,
     hpScale: (t) => ch.hpScale(t) * hp, dmgScale: (t) => ch.dmgScale(t) * dmg, spawnRate: (t) => ch.spawnRate(t) * spawn,
     reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
-      firstStardust: n <= STAGES.firstStardustSplit.length ? Math.round(r.firstStardust * STAGES.firstStardustSplit[n - 1]) : STAGES.deepFirstStardust },
+      firstStardust: n === STAGES.base ? r.firstStardust : STAGES.deepFirstStardust },
   };
 }
 

@@ -178,6 +178,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
 
   // 燈核：有可共鳴武器就進化，否則隨機強化最多 3 項已持有的東西
   function openChest() {
+    count('chestsOpened'); // 結算畫面給擁有者看「出現幾顆、撿到幾顆」（燈核指引有沒有用，只能靠真人玩的數字）
     const evo = p.weapons.find(canEvolve);
     let result;
     if (evo) {
@@ -855,11 +856,17 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (e.hp <= 0) continue;
       const [vx, vy] = enemyMove(e, dt);
       let sx = 0, sy = 0;
-      near(e.x, e.y, (o) => {
-        if (o === e) return;
-        const ox = e.x - o.x, oy = e.y - o.y, od = ox * ox + oy * oy, min = e.r + o.r;
-        if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
-      });
+      // 互推：和 near() 完全相同的格子順序、同一格內的順序、同樣的算式（結果逐位元相同），只是不經過回呼——
+      // M8 第三輪：第 10 關怪最多時，這段佔邏輯耗時的大半，回呼的額外成本讓 p99 超過 2ms
+      const gx = Math.floor(e.x / CELL), gy = Math.floor(e.y / CELL);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const b = grid.get(key(gx + i, gy + j)); if (!b) continue;
+        for (let n = 0; n < b.length; n++) {
+          const o = b[n]; if (o === e) continue;
+          const ox = e.x - o.x, oy = e.y - o.y, od = ox * ox + oy * oy, min = e.r + o.r;
+          if (od < min * min && od > 0.01) { const k = (min - Math.sqrt(od)) / min * (o.mass / (e.mass + o.mass)) * 2; sx += ox * k; sy += oy * k; }
+        }
+      }
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
       if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
@@ -958,14 +965,14 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         let x = p.x + Math.cos(a) * RESO_CHEST.dist, y = p.y + Math.sin(a) * RESO_CHEST.dist;
         if (s.arena) { const dx = x - s.arena.x, dy = y - s.arena.y, d = Math.hypot(dx, dy), lim = s.arena.r * 0.7; if (d > lim) { x = s.arena.x + dx / d * lim; y = s.arena.y + dy / d * lim; } }
         s.pickups.push({ type: 'chest', x, y, reso: true });
-        count('resoChests');
+        count('resoChests'); count('chestsDropped');
         s.events.push({ type: 'announce', text: '燈芯共鳴：燈核出現了！' });
       }
     } else {
       s.resoChestT = 0;
       // 多出來的共鳴燈核收回（例如等著的那把已經被精英的燈核共鳴了）：它只補共鳴，不可以變成額外的一般強化
       let extra = chests - waiting;
-      if (extra > 0) s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0));
+      if (extra > 0) { const before = s.pickups.length; s.pickups = s.pickups.filter((it) => !(it.reso && extra-- > 0)); count('chestsWithdrawn', before - s.pickups.length); }
     }
 
     // 勝利：Boss 倒下後稍等一下讓玩家看到爆炸
@@ -997,7 +1004,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     else s.ledger.kills[e.kind] = (s.ledger.kills[e.kind] || 0) + 1;
     s.events.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite });
     s.gems.push({ x: e.x, y: e.y, v: t.xp * (e.elite ? ELITE.xpMul : 1), pull: false });
-    if (e.elite) s.pickups.push({ type: 'chest', x: e.x, y: e.y });
+    if (e.elite) { s.pickups.push({ type: 'chest', x: e.x, y: e.y }); count('chestsDropped'); s.events.push({ type: 'announce', text: '精英掉了燈核！跟著金色箭頭去撿' }); }
     else {
       const r = rand();
       if (r < 0.006) s.pickups.push({ type: 'heal', x: e.x, y: e.y });

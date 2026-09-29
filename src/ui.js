@@ -400,7 +400,9 @@ export function createUI(actions) {
       r.className = 'overlay scroll ' + (win ? 'win' : 'lose');
       r.querySelector('h1').textContent = win ? '燈塔重燃' : '燈火熄滅';
       r.querySelector('.sub').textContent = win ? `${s.chapter.name}第 ${s.chapter.stage ?? 3} 關的燈塔再次亮起。${summary.firstClear ? '（首次點亮！）' : ''}` : (s.quit ? '你提前撤離了。' : '菌潮吞沒了光……再試一次吧。');
-      r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—']]
+      // 燈核：出現幾顆（精英掉的＋共鳴燈核，不含多出來被收回的）、撿到幾顆——燈核指引有沒有用，自動玩家量不出來，只能看真人玩的這個數字
+      const cn = s.counters || {}, shown = (cn.chestsDropped || 0) - (cn.chestsWithdrawn || 0);
+      r.querySelector('.stats').innerHTML = [['存活', clock(s.t)], ['擊倒', s.kills], ['等級', s.player.level], ['共鳴', s.player.weapons.filter((w) => w.evo).length || '—'], ['燈核', shown ? `撿到 ${cn.chestsOpened || 0} / 出現 ${shown}` : '—']]
         .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       const pend = summary.drops.filter((it) => it.where === 'pending').length;
       r.querySelector('.ledger').innerHTML = summary.oil.lines.map((l) => `<div><span>${esc(l.label)}</span><b>+${num(l.amount)}</b></div>`).join('')

@@ -2,6 +2,7 @@
 import { VW, terrainIn, ventState } from './sim.js';
 import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } from './content.js';
 import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } from './art.js';
+import { chestGuides, GUIDE } from './guide.js';
 
 // shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
 const CREATURE_ART = {
@@ -143,8 +144,11 @@ export function createRenderer(chapter = CHAPTER1) {
   }
 
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
+  let lastGuides = [];
+  // 回傳這一幀畫了哪些燈核指引（shop-test 拿去和自己算的座標比對；平常沒人用）
   function render(g, s, dt, W, H, scale, safeTop = 0, hud = true, prof = null) {
     prof?.start();
+    lastGuides = [];
     const OFF = prof?.off ?? NONE; // 效能量測的 A/B：關掉指定的繪製項目，看總時間少多少（平常是空集合）
     consume(s, dt);
     prof?.lap('特效更新');
@@ -291,7 +295,12 @@ export function createRenderer(chapter = CHAPTER1) {
       const gl = it.type === 'chest' ? G.gold : it.type === 'heal' ? G.heal : G.magnet;
       g.globalAlpha = 0.7 + Math.sin(T * 6) * 0.2; g.drawImage(gl, it.x - gl.width / 2, it.y - gl.height / 2 + bob); g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
-      if (it.type === 'chest') g.drawImage(chestImg, it.x - 20, it.y - 22 + bob);
+      if (it.type === 'chest') { // M8 第三輪：燈核上方加一道光柱，遠遠就看得到
+        const beam = g.createLinearGradient(0, it.y - 150, 0, it.y);
+        beam.addColorStop(0, 'rgba(255,220,120,0)'); beam.addColorStop(1, `rgba(255,220,120,${0.35 + Math.sin(T * 4) * 0.12})`);
+        g.globalCompositeOperation = 'lighter'; g.fillStyle = beam; g.fillRect(it.x - 7, it.y - 150, 14, 150); g.globalCompositeOperation = 'source-over';
+        g.drawImage(chestImg, it.x - 20, it.y - 22 + bob);
+      }
       else { const ic = makeIcon(it.type === 'heal' ? 'heal' : 'stone', it.type === 'heal' ? '#ff9fb4' : '#7fd6ff', 24); g.drawImage(ic, it.x - 12, it.y - 12 + bob); }
     }
 
@@ -503,6 +512,7 @@ export function createRenderer(chapter = CHAPTER1) {
     prof?.lap('暗角與閃光');
     if (hud) renderHud(g, s, W, H, scale, camX, camY, vh, safeTop); // 主選單背景的展示局不畫 HUD，免得疊到標題
     prof?.lap('HUD');
+    return { guides: lastGuides };
   }
 
   function renderHud(g, s, W, H, k, camX, camY, vh, safeTop) {
@@ -546,17 +556,25 @@ export function createRenderer(chapter = CHAPTER1) {
       g.font = '700 11px system-ui'; g.textAlign = 'center'; g.fillStyle = '#ffd6f0'; shadowText(g, ENEMIES[b.kind].name, w / 2, by - 3);
     }
 
-    // 畫面外燈核指示
-    for (const it of s.pickups) {
-      if (it.type !== 'chest') continue;
-      const sx = it.x - camX, sy = it.y - camY;
-      if (sx > 0 && sx < w && sy > 0 && sy < vh) continue;
-      const cx = w / 2, cy = h / 2, a = Math.atan2(sy - cy, sx - cx);
-      const ex = Math.min(w - 20, Math.max(20, cx + Math.cos(a) * w)), ey = Math.min(h - 20, Math.max(90 + safeTop, cy + Math.sin(a) * h));
-      g.save(); g.translate(ex, ey); g.rotate(a);
-      g.fillStyle = `rgba(255,210,90,${0.7 + Math.sin(T * 8) * 0.3})`; g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -7); g.lineTo(-6, 7); g.closePath(); g.fill();
+    // 燈核指引（M8 第三輪，src/guide.js）：畫面內→上方跳動的「燈核」字樣；畫面外→邊緣的大箭頭＋距離。位置全部照 chestGuides 的結果畫
+    const guides = chestGuides(s.pickups, p, camX, camY, w, h, GUIDE.hudTop + safeTop), pulse = 0.75 + Math.sin(T * 6) * 0.25;
+    for (const gd of guides) {
+      g.font = '800 12px system-ui'; g.textAlign = 'center';
+      if (gd.onScreen) {
+        const yy = gd.sy - 40 + Math.sin(T * 5) * 4;
+        g.fillStyle = '#ffe27a'; shadowText(g, gd.reso ? '共鳴燈核' : '燈核', gd.sx, yy);
+        g.beginPath(); g.moveTo(gd.sx - 6, yy + 5); g.lineTo(gd.sx + 6, yy + 5); g.lineTo(gd.sx, yy + 12); g.closePath(); g.fill();
+        continue;
+      }
+      g.fillStyle = `rgba(20,12,40,${0.75 * pulse})`; g.beginPath(); g.arc(gd.ex, gd.ey, 19, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(255,220,120,${pulse})`; g.lineWidth = 2; g.stroke();
+      g.save(); g.translate(gd.ex, gd.ey); g.rotate(gd.angle);
+      g.fillStyle = `rgba(255,214,100,${pulse})`; g.beginPath(); g.moveTo(16, 0); g.lineTo(4, -9); g.lineTo(4, 9); g.closePath(); g.fill();
       g.restore();
+      g.drawImage(chestImg, gd.ex - 10, gd.ey - 11, 20, 22);
+      g.fillStyle = '#ffe9a8'; shadowText(g, `${gd.reso ? '共鳴 ' : ''}${Math.round(gd.dist / 10)}m`, gd.ex, gd.ey + (gd.ey > h / 2 ? -24 : 32));
     }
+    lastGuides = guides;
 
     // 升級字樣
     if (fx.levelFlash > 0) {

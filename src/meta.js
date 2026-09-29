@@ -243,7 +243,8 @@ export function ascendWeapon(profile, id) {
 // ---- 關卡解鎖（M8 第二輪）：通關第 n 關開第 n+1 關；通關第 STAGES.unlockNext 關開下一個生態系的第 1 關 ----
 export const ecoProgress = (profile, id) => profile.progress?.[id] ?? { cleared: [], best: {} };
 export const stageCleared = (profile, id, n) => ecoProgress(profile, id).cleared.includes(n);
-export const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext);
+// 生態系開放：第一個永遠開；或上一個生態系通關第 unlockNext 關；或存檔記著它已經開放過（v8 升級時保留舊進度）
+export const ecoUnlocked = (profile, id) => id === CHAPTERS[0].id || stageCleared(profile, id - 1, STAGES.unlockNext) || ecoProgress(profile, id).open === true;
 export const stageUnlocked = (profile, id, n) => ecoUnlocked(profile, id) && Number.isInteger(n) && n >= 1 && n <= STAGES.count && (n === 1 || stageCleared(profile, id, n - 1));
 // 還沒解鎖時，畫面上寫的條件（和上面兩條規則同一個來源）
 export function unlockText(profile, id, n = 1) {
