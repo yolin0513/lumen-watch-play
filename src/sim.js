@@ -194,6 +194,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     }
     s.chest = result; s.phase = 'chest';
     s.events.push({ type: 'chest', x: p.x, y: p.y });
+    if (evo) s.events.push({ type: 'evo' }); // 共鳴音效
   }
   function closeChest() { if (s.phase !== 'chest') return; s.chest = null; s.phase = 'play'; nextChoice(); }
 
@@ -939,7 +940,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (d < p.magnet) g.pull = true;
       else if (d < GEM_DRIFT.range) { g.x += dx / d * GEM_DRIFT.speed * dt; g.y += dy / d * GEM_DRIFT.speed * dt; }
       if (g.pull && d > 0) { g.sp = Math.min(700, (g.sp || 200) + 900 * dt); const v = Math.min(d, g.sp * dt); g.x += dx / d * v; g.y += dy / d * v; }
-      if (d < 16) { gainXp(g.v); g.v = 0; }
+      if (d < 16) { gainXp(g.v); g.v = 0; s.events.push({ type: 'gem' }); } // gem：拾取音效用（音效排程會合併）
     }
     s.gems = s.gems.filter((g) => g.v > 0);
     if (s.gems.length > 350) mergeGems();

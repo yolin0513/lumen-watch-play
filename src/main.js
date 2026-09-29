@@ -9,6 +9,7 @@ import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from 
 import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
 import { createPerf } from './perf.js';
 import { createClock, SPEEDS } from './clock.js';
+import { createAudio } from './audio.js';
 import { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } from './shop.js';
 
 const canvas = document.getElementById('game');
@@ -44,6 +45,9 @@ addEventListener('resize', resize);
 const store = createStore(() => window.localStorage);
 const loaded = loadProfile(store);
 let profile = loaded.profile, writable = loaded.writable, warnedSave = false;
+// 聲音（src/audio.js）：第一次點畫面才真的建立並解鎖（iOS 的規定），之後手勢／回到前景時自動恢復
+const audio = createAudio({ Ctor: window.AudioContext || window.webkitAudioContext, doc: document, win: window, nav: navigator });
+audio.apply(profile.settings);
 const LOAD_NOTICE = {
   corrupt: '存檔損壞，已另外備份並重新開始。',
   repaired: '部分存檔資料不正確，已自動修正。',
@@ -188,11 +192,14 @@ const ui = createUI({
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
     store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
-    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now()));
+    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now())); audio.apply(profile.settings); ui.sound(profile);
   },
   choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
-  resume: () => { paused = false; input.reset(); sync(); },
+  resume: () => { paused = false; audio.setMode('run'); input.reset(); sync(); },
+  // 聲音：一鍵全部靜音、音量一格 0.1（0～1）。改完存檔並立刻套用
+  soundMute: () => { profile.settings.muted = !profile.settings.muted; persist(); audio.apply(profile.settings); ui.sound(profile); },
+  vol: (d) => { const k = d.k === 'musicVol' ? 'musicVol' : 'sfxVol'; profile.settings[k] = Math.round(Math.min(1, Math.max(0, profile.settings[k] + Number(d.d) * 0.1)) * 10) / 10; persist(); audio.apply(profile.settings); ui.sound(profile); },
   quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
@@ -204,11 +211,11 @@ speedBtn.addEventListener('click', () => { profile.settings.speed = SPEEDS[(SPEE
 showSpeed();
 addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' && e.code !== 'KeyP') return;
-  if (paused) { paused = false; input.reset(); sync(); } else pause();
+  if (paused) { paused = false; audio.setMode('run'); input.reset(); sync(); } else pause();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
-function pause() { if (mode !== 'run' || sim.state.phase !== 'play') return; paused = true; sync(); }
+function pause() { if (mode !== 'run' || sim.state.phase !== 'play') return; paused = true; audio.setMode('pause'); ui.sound(profile); sync(); }
 
 // 新版 Service Worker 接手後重新載入拿新檔案；遊戲中不打斷，等回主選單再載入。
 // 第一次安裝（原本沒有 controller）不需要重載。
@@ -227,10 +234,12 @@ function toMenu() {
     renderer = createRenderer(CHAPTER1);
   }
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
+  audio.setMode('menu'); ui.sound(profile);
 }
 function newRun(id, n) {
   clock.reset();
   chapterId = id; stageNo = n;
+  audio.setMode('run'); audio.setEco(id);
   const chapter = stageChapter(CHAPTERS.find((c) => c.id === id), n);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
@@ -285,6 +294,10 @@ function frame(now) {
     for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(sdt, input.move);
     sync();
   } else { clock.reset(); if (!paused) sync(); } // 選卡／燈核／暫停時不累積時間，回來不會一口氣補一大段
+  // 音效：只在正式一局出聲（主選單背景的展示局不出聲）；要在 render 之前讀，render 會把這一幀的事件清掉
+  const ta = performance.now();
+  audio.onEvents(mode === 'run' ? sim.state.events : [], now / 1000);
+  fps.audio = performance.now() - ta;
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt * (mode === 'run' ? speed() : 1), W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
@@ -328,10 +341,11 @@ function perfFrame(now, dt) {
     auto();
     const step = perf.sync ? 1 / 60 : dt;
     const t0 = performance.now(); sim.update(step, perf.move(s)); const t1 = performance.now();
+    const ta = performance.now(); audio.onEvents(s.events, s.t); const aud = { ms: performance.now() - ta, voices: audio.mixer.playing.length, live: audio.ctx?.state === 'running' }; // 音效也照正式遊玩的方式跑（先點一下畫面才會真的發聲）
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
     if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
-    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null); // 亮度取樣（不計入繪製時間）
+    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null, aud); // 亮度取樣（不計入繪製時間）
   }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';

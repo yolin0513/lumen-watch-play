@@ -41,9 +41,11 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
     const ph = Object.entries(phases).map(([k, v]) => { v.sort((a, b) => a - b); return { k, avg: v.reduce((a, b) => a + b, 0) / v.length, p95: pct(v, 0.95) }; }).sort((a, b) => b.avg - a.avg);
     const elapsed = iv.reduce((a, b) => a + b, 0) / 1000;
     const wh = rows.map((r) => r.white).filter((x) => x !== null).sort((a, b) => a - b);
+    const au = rows.map((r) => r.aud?.ms ?? 0).sort((a, b) => a - b), voices = Math.max(0, ...rows.map((r) => r.aud?.voices ?? 0)), live = rows.some((r) => r.aud?.live);
     return { name: st.name, fps: rows.length / elapsed, iv: { p50: pct(iv, 0.5), p95: pct(iv, 0.95), p99: pct(iv, 0.99), max: iv.at(-1), over20: iv.filter((x) => x > 20).length, over34: iv.filter((x) => x > 34).length },
       update: { p50: pct(up, 0.5), p99: pct(up, 0.99), max: up.at(-1) }, render: { p50: pct(rd, 0.5), p95: pct(rd, 0.95), p99: pct(rd, 0.99), max: rd.at(-1) }, phases: ph,
       white: { p50: pct(wh, 0.5), p95: pct(wh, 0.95), max: wh.at(-1) ?? 0, n: wh.length },
+      audio: { p50: pct(au, 0.5), p99: pct(au, 0.99), max: au.at(-1) ?? 0, voices, live },
       scene: { enemies: s.enemies.length, surge: s.enemies.filter((e) => e.surge).length, bullets: s.bullets.length, gems: s.gems.length } };
   }
   function text() {
@@ -53,6 +55,7 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
         sync ? '幀間隔：同步模式不量（只量繪製成本）' : `平均 ${f1(r.fps)} fps；幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
         `邏輯 p50 ${r.update.p50.toFixed(2)}／p99 ${r.update.p99.toFixed(2)}／最慢 ${r.update.max.toFixed(2)} ms`,
         `繪製 p50 ${f1(r.render.p50)}／p95 ${f1(r.render.p95)}／p99 ${f1(r.render.p99)}／最慢 ${f1(r.render.max)} ms`,
+        `音效（排程＋合成）p50 ${r.audio.p50.toFixed(2)}／p99 ${r.audio.p99.toFixed(2)}／最慢 ${r.audio.max.toFixed(2)} ms；同時發聲最多 ${r.audio.voices}${r.audio.live ? '' : '（音效還沒解鎖：只量到排程，量合成要先點一下畫面）'}`,
         `亮度：過亮（luma ≥ 220）的像素 p50 ${(r.white.p50 * 100).toFixed(1)}%／p95 ${(r.white.p95 * 100).toFixed(1)}%／最高 ${(r.white.max * 100).toFixed(1)}%（${r.white.n} 幀取樣）`,
         `繪製細項（平均／p95 ms）：${r.phases.map((p) => `${p.k} ${p.avg.toFixed(2)}/${p.p95.toFixed(2)}`).join('、')}`);
     }
@@ -67,9 +70,9 @@ export function createPerf(chapterId, sync = false, off = [], waves = true) {
     move(s) { const a = s.t * 0.5; return { x: Math.cos(a), y: Math.sin(a) }; },
     // 每幀呼叫：now＝rAF 時間；update／render 為量好的毫秒
     frameNo() { return rec.length; },
-    record(now, update, render, s, white = null) {
+    record(now, update, render, s, white = null, aud = null) {
       if (done) return;
-      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white });
+      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white, aud });
       lastNow = now;
       if (rec.length >= stages[stage].frames) {
         results.push(summarize(stages[stage], rec, s));

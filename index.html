@@ -79,6 +79,11 @@
   .chapter b { color: var(--cc, #8fe8ff); font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; line-height: 1.5; }
   .chapter .done { float: right; font-size: 12px; color: #ffe27a; border: 1px solid #ffe27a88; border-radius: 8px; padding: 1px 6px; }
   .chapter .best { color: #cfd6ff; }
+  /* 聲音設定：一鍵全部靜音＋音樂／音效各 10 格（用按鈕，不用輸入欄位） */
+  .sound { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; font-size: 13px; color: var(--dim); }
+  .sound .mute { min-width: 96px; } .sound .vol { display: inline-flex; align-items: center; gap: 4px; }
+  .sound .vol b { min-width: 16px; color: var(--gold); text-align: center; } .sound .vol button { width: 30px; height: 30px; padding: 0; }
+  .sound.off .vol { opacity: 0.45; }
   .stage-note { width: min(340px, 100%); margin: 0 auto 10px; color: var(--dim); font-size: 13px; line-height: 1.5; text-align: left; }
   .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(340px, 100%); margin: 0 auto; }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--edge); color: var(--gold); }
@@ -237,6 +242,7 @@
     <div class="oil-slot"></div>
     <div class="progress"></div>
     <button class="btn" data-act="openChapters">點燈出發</button>
+    <div class="sound"></div>
     <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備<span class="shop-dot gear-dot"></span></button><button class="btn ghost" data-act="openShop">商城<span class="shop-dot"></span></button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
     <button class="linkish" data-act="resetSave">清除進度</button>
@@ -286,6 +292,7 @@
   <div id="pause" class="overlay">
     <h2>暫停</h2>
     <div class="build"></div>
+    <div class="sound"></div>
     <button class="btn" data-act="resume">繼續</button>
     <button class="btn ghost" data-act="quit">撤離（結算已擊倒的燈油）</button>
   </div>

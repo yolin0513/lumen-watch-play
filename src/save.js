@@ -10,7 +10,7 @@ import { SPEEDS } from './clock.js';
 import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -31,7 +31,7 @@ export function defaultProfile() {
     weapons: { owned: [], equipped: null, shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
     crystals: 0, // v6：燈芯結晶（進階材料，分解裝備取得）
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
-    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）
+    settings: { autoSalvage: -1, skipAnim: false, speed: 1, musicVol: 0.5, sfxVol: 0.8, muted: false }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）；v9：音樂／音效音量（0～1，每格 0.1）、全部靜音
   };
 }
 
@@ -92,6 +92,8 @@ export const MIGRATIONS = {
     }
     return { ...d, progress, v: 8 };
   },
+  // v8 → v9：加入聲音設定（音樂 0.5、音效 0.8、沒有靜音），原有設定原樣保留
+  8: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), musicVol: 0.5, sfxVol: 0.8, muted: false }, v: 9 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -269,6 +271,17 @@ export function sanitize(d) {
     out.settings.skipAnim = d.settings.skipAnim === true;
     const sp = d.settings.speed;
     if (SPEEDS.includes(sp)) out.settings.speed = sp; else if (sp !== undefined) fix(`倍速設定不合法（${JSON.stringify(sp)}），改為 1 倍`);
+    // 音量：0～1 的數字，對齊到每格 0.1；不是數字就用預設、超出範圍就夾回範圍內（都記下 notes）
+    for (const k of ['musicVol', 'sfxVol']) {
+      const v = d.settings[k];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v)) { fix(`${k} 不合法（${JSON.stringify(v)}），用預設值`); continue; }
+      const c = Math.round(Math.min(1, Math.max(0, v)) * 10) / 10;
+      if (c !== v) fix(`${k} ${v} 超出範圍或不在格子上，改為 ${c}`);
+      out.settings[k] = c;
+    }
+    if (d.settings.muted !== undefined && typeof d.settings.muted !== 'boolean') fix('靜音設定不合法，改為不靜音');
+    out.settings.muted = d.settings.muted === true;
   } else if (d.settings !== undefined) fix('settings 型別不對，重設');
   return { profile: out, notes };
 }

@@ -77,6 +77,11 @@
   .chapter b { color: var(--cc, #8fe8ff); font-size: 18px; } .chapter div { color: var(--dim); font-size: 13px; margin-top: 4px; line-height: 1.5; }
   .chapter .done { float: right; font-size: 12px; color: #ffe27a; border: 1px solid #ffe27a88; border-radius: 8px; padding: 1px 6px; }
   .chapter .best { color: #cfd6ff; }
+  /* 聲音設定：一鍵全部靜音＋音樂／音效各 10 格（用按鈕，不用輸入欄位） */
+  .sound { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; font-size: 13px; color: var(--dim); }
+  .sound .mute { min-width: 96px; } .sound .vol { display: inline-flex; align-items: center; gap: 4px; }
+  .sound .vol b { min-width: 16px; color: var(--gold); text-align: center; } .sound .vol button { width: 30px; height: 30px; padding: 0; }
+  .sound.off .vol { opacity: 0.45; }
   .stage-note { width: min(340px, 100%); margin: 0 auto 10px; color: var(--dim); font-size: 13px; line-height: 1.5; text-align: left; }
   .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(340px, 100%); margin: 0 auto; }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--edge); color: var(--gold); }
@@ -235,6 +240,7 @@
     <div class="oil-slot"></div>
     <div class="progress"></div>
     <button class="btn" data-act="openChapters">點燈出發</button>
+    <div class="sound"></div>
     <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備<span class="shop-dot gear-dot"></span></button><button class="btn ghost" data-act="openShop">商城<span class="shop-dot"></span></button></div>
     <div class="hint">按住畫面任一處拖曳移動・武器自動攻擊<br>桌機：WASD／方向鍵・Esc 暫停</div>
     <button class="linkish" data-act="resetSave">清除進度</button>
@@ -284,6 +290,7 @@
   <div id="pause" class="overlay">
     <h2>暫停</h2>
     <div class="build"></div>
+    <div class="sound"></div>
     <button class="btn" data-act="resume">繼續</button>
     <button class="btn ghost" data-act="quit">撤離（結算已擊倒的燈油）</button>
   </div>
@@ -1174,6 +1181,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     }
     s.chest = result; s.phase = 'chest';
     s.events.push({ type: 'chest', x: p.x, y: p.y });
+    if (evo) s.events.push({ type: 'evo' }); // 共鳴音效
   }
   function closeChest() { if (s.phase !== 'chest') return; s.chest = null; s.phase = 'play'; nextChoice(); }
 
@@ -1919,7 +1927,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       if (d < p.magnet) g.pull = true;
       else if (d < GEM_DRIFT.range) { g.x += dx / d * GEM_DRIFT.speed * dt; g.y += dy / d * GEM_DRIFT.speed * dt; }
       if (g.pull && d > 0) { g.sp = Math.min(700, (g.sp || 200) + 900 * dt); const v = Math.min(d, g.sp * dt); g.x += dx / d * v; g.y += dy / d * v; }
-      if (d < 16) { gainXp(g.v); g.v = 0; }
+      if (d < 16) { gainXp(g.v); g.v = 0; s.events.push({ type: 'gem' }); } // gem：拾取音效用（音效排程會合併）
     }
     s.gems = s.gems.filter((g) => g.v > 0);
     if (s.gems.length > 350) mergeGems();
@@ -3017,7 +3025,7 @@ const __m_save_js = (() => {
 const { SPEEDS } = __m_clock_js;
 const { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } = __m_content_js;
 const SAVE_KEY = 'lumen.save';
-const SAVE_VERSION = 8;
+const SAVE_VERSION = 9;
 const MAX_HISTORY = 50;
 const MAX_ITEMS = 60;
 const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
@@ -3038,7 +3046,7 @@ function defaultProfile() {
     weapons: { owned: [], equipped: null, shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
     crystals: 0, // v6：燈芯結晶（進階材料，分解裝備取得）
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
-    settings: { autoSalvage: -1, skipAnim: false, speed: 1 }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）
+    settings: { autoSalvage: -1, skipAnim: false, speed: 1, musicVol: 0.5, sfxVol: 0.8, muted: false }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）；v9：音樂／音效音量（0～1，每格 0.1）、全部靜音
   };
 }
 
@@ -3099,6 +3107,8 @@ const MIGRATIONS = {
     }
     return { ...d, progress, v: 8 };
   },
+  // v8 → v9：加入聲音設定（音樂 0.5、音效 0.8、沒有靜音），原有設定原樣保留
+  8: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), musicVol: 0.5, sfxVol: 0.8, muted: false }, v: 9 }),
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -3276,6 +3286,17 @@ function sanitize(d) {
     out.settings.skipAnim = d.settings.skipAnim === true;
     const sp = d.settings.speed;
     if (SPEEDS.includes(sp)) out.settings.speed = sp; else if (sp !== undefined) fix(`倍速設定不合法（${JSON.stringify(sp)}），改為 1 倍`);
+    // 音量：0～1 的數字，對齊到每格 0.1；不是數字就用預設、超出範圍就夾回範圍內（都記下 notes）
+    for (const k of ['musicVol', 'sfxVol']) {
+      const v = d.settings[k];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v)) { fix(`${k} 不合法（${JSON.stringify(v)}），用預設值`); continue; }
+      const c = Math.round(Math.min(1, Math.max(0, v)) * 10) / 10;
+      if (c !== v) fix(`${k} ${v} 超出範圍或不在格子上，改為 ${c}`);
+      out.settings[k] = c;
+    }
+    if (d.settings.muted !== undefined && typeof d.settings.muted !== 'boolean') fix('靜音設定不合法，改為不靜音');
+    out.settings.muted = d.settings.muted === true;
   } else if (d.settings !== undefined) fix('settings 型別不對，重設');
   return { profile: out, notes };
 }
@@ -4088,6 +4109,13 @@ function createUI(actions) {
       show('chest');
     },
     pause(s) { $('#pause .build').innerHTML = buildHtml(s.player); show('pause'); },
+    // 聲音設定（主選單與暫停畫面同一份）：一鍵全部靜音、音樂與音效各 0～10 格
+    sound(profile) {
+      const st = profile.settings, lv = (v) => Math.round((v ?? 0) * 10);
+      const vol = (k, name) => `<span class="vol">${name}<button class="chip" data-act="vol" data-k="${k}" data-d="-1" aria-label="${name}小聲" ${lv(st[k]) <= 0 ? 'disabled' : ''}>−</button><b>${lv(st[k])}</b><button class="chip" data-act="vol" data-k="${k}" data-d="1" aria-label="${name}大聲" ${lv(st[k]) >= 10 ? 'disabled' : ''}>+</button></span>`;
+      const html = `<button class="chip mute" data-act="soundMute">${st.muted ? '🔇 已靜音' : '🔊 聲音開'}</button>${vol('musicVol', '音樂')}${vol('sfxVol', '音效')}`;
+      for (const sel of ['#menu .sound', '#pause .sound']) { const el = $(sel); el.innerHTML = html; el.classList.toggle('off', !!st.muted); }
+    },
     result(s, summary, profile) {
       const win = s.phase === 'win';
       const r = $('#result');
@@ -4159,9 +4187,11 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
     const ph = Object.entries(phases).map(([k, v]) => { v.sort((a, b) => a - b); return { k, avg: v.reduce((a, b) => a + b, 0) / v.length, p95: pct(v, 0.95) }; }).sort((a, b) => b.avg - a.avg);
     const elapsed = iv.reduce((a, b) => a + b, 0) / 1000;
     const wh = rows.map((r) => r.white).filter((x) => x !== null).sort((a, b) => a - b);
+    const au = rows.map((r) => r.aud?.ms ?? 0).sort((a, b) => a - b), voices = Math.max(0, ...rows.map((r) => r.aud?.voices ?? 0)), live = rows.some((r) => r.aud?.live);
     return { name: st.name, fps: rows.length / elapsed, iv: { p50: pct(iv, 0.5), p95: pct(iv, 0.95), p99: pct(iv, 0.99), max: iv.at(-1), over20: iv.filter((x) => x > 20).length, over34: iv.filter((x) => x > 34).length },
       update: { p50: pct(up, 0.5), p99: pct(up, 0.99), max: up.at(-1) }, render: { p50: pct(rd, 0.5), p95: pct(rd, 0.95), p99: pct(rd, 0.99), max: rd.at(-1) }, phases: ph,
       white: { p50: pct(wh, 0.5), p95: pct(wh, 0.95), max: wh.at(-1) ?? 0, n: wh.length },
+      audio: { p50: pct(au, 0.5), p99: pct(au, 0.99), max: au.at(-1) ?? 0, voices, live },
       scene: { enemies: s.enemies.length, surge: s.enemies.filter((e) => e.surge).length, bullets: s.bullets.length, gems: s.gems.length } };
   }
   function text() {
@@ -4171,6 +4201,7 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
         sync ? '幀間隔：同步模式不量（只量繪製成本）' : `平均 ${f1(r.fps)} fps；幀間隔 p50 ${f1(r.iv.p50)}／p95 ${f1(r.iv.p95)}／p99 ${f1(r.iv.p99)}／最慢 ${f1(r.iv.max)} ms；超過 20ms 的幀 ${r.iv.over20}、超過 34ms 的幀 ${r.iv.over34}`,
         `邏輯 p50 ${r.update.p50.toFixed(2)}／p99 ${r.update.p99.toFixed(2)}／最慢 ${r.update.max.toFixed(2)} ms`,
         `繪製 p50 ${f1(r.render.p50)}／p95 ${f1(r.render.p95)}／p99 ${f1(r.render.p99)}／最慢 ${f1(r.render.max)} ms`,
+        `音效（排程＋合成）p50 ${r.audio.p50.toFixed(2)}／p99 ${r.audio.p99.toFixed(2)}／最慢 ${r.audio.max.toFixed(2)} ms；同時發聲最多 ${r.audio.voices}${r.audio.live ? '' : '（音效還沒解鎖：只量到排程，量合成要先點一下畫面）'}`,
         `亮度：過亮（luma ≥ 220）的像素 p50 ${(r.white.p50 * 100).toFixed(1)}%／p95 ${(r.white.p95 * 100).toFixed(1)}%／最高 ${(r.white.max * 100).toFixed(1)}%（${r.white.n} 幀取樣）`,
         `繪製細項（平均／p95 ms）：${r.phases.map((p) => `${p.k} ${p.avg.toFixed(2)}/${p.p95.toFixed(2)}`).join('、')}`);
     }
@@ -4185,9 +4216,9 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
     move(s) { const a = s.t * 0.5; return { x: Math.cos(a), y: Math.sin(a) }; },
     // 每幀呼叫：now＝rAF 時間；update／render 為量好的毫秒
     frameNo() { return rec.length; },
-    record(now, update, render, s, white = null) {
+    record(now, update, render, s, white = null, aud = null) {
       if (done) return;
-      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white });
+      if (sync || lastNow !== null) rec.push({ interval: sync ? 16.7 : now - lastNow, update, render, phases: curPhases || {}, white, aud });
       lastNow = now;
       if (rec.length >= stages[stage].frames) {
         results.push(summarize(stages[stage], rec, s));
@@ -4200,6 +4231,200 @@ function createPerf(chapterId, sync = false, off = [], waves = true) {
 }
 
 return { createPerf };
+})();
+
+// ---- sfx.js
+const __m_sfx_js = (() => {
+// 音效排程（M8 第三輪第二批）：把每一幀的遊戲事件變成「這一幀要播哪些聲音」。純邏輯、不碰 Web Audio，Node 可以直接測。
+// 為什麼要有預算：滿場 300 隻怪、每次命中都播一聲會爆掉（聲音糊成一團、手機也吃不消）——和光暈疊加是同一類問題：數量沒有上限。
+// 規則：
+//   1. 同一種聲音有冷卻（cd 秒）：冷卻中的同類事件不另外發聲，累積起來，下一次發聲時音量隨累積數量變大（但有上限）——「很多下」聽得出來，但不會變成一堆聲音。
+//   2. 同一種聲音同時最多 max 個在響；全部種類加起來最多 VOICES 個。各種類的 max 加總 ≤ VOICES（測試檢查），
+//      所以重要的聲音（升級、共鳴、守衛）一定有自己的位置，不會被一大堆命中聲擠掉。
+//   3. 每一幀依優先序處理（重要的先）。
+const VOICES = 14;
+const SFX = {
+  // id:      cd（秒）、dur（響多久，用來算同時發聲）、max（同類同時最多幾個）、prio（大的先處理）、vol（基礎音量 0～1）
+  hit:     { cd: 0.05, dur: 0.09, max: 2, prio: 1, vol: 0.35 },
+  kill:    { cd: 0.07, dur: 0.22, max: 2, prio: 2, vol: 0.5 },
+  gem:     { cd: 0.09, dur: 0.12, max: 1, prio: 1, vol: 0.25 },
+  blast:   { cd: 0.12, dur: 0.45, max: 2, prio: 3, vol: 0.6 },   // 燈籠雷、落星、燈鐘、自爆等爆炸類
+  hurt:    { cd: 0.25, dur: 0.3,  max: 1, prio: 4, vol: 0.7 },
+  level:   { cd: 0.35, dur: 0.9,  max: 1, prio: 6, vol: 0.7 },
+  chest:   { cd: 0.4,  dur: 1.2,  max: 1, prio: 6, vol: 0.75 },
+  evo:     { cd: 0.5,  dur: 1.6,  max: 1, prio: 7, vol: 0.85 },  // 共鳴
+  boss:    { cd: 1.0,  dur: 2.2,  max: 1, prio: 8, vol: 0.8 },   // 守衛出現
+  bossdown:{ cd: 1.0,  dur: 2.5,  max: 1, prio: 9, vol: 0.9 },
+  heal:    { cd: 0.3,  dur: 0.4,  max: 1, prio: 3, vol: 0.45 },
+};
+// 遊戲事件 → 聲音。沒列的事件不發聲
+const EVENT_SOUND = {
+  hit: 'hit', kill: 'kill', gem: 'gem', blast: 'blast', mineBoom: 'blast', strike: 'blast', pulse: 'blast', hurt: 'hurt',
+  level: 'level', chest: 'chest', evo: 'evo', bossdown: 'bossdown', revive: 'evo', heal: 'heal',
+};
+// 同一幀／冷卻中累積的次數 → 音量倍率：1 下＝1，之後慢慢變大，最多 MAX_BOOST 倍
+const MAX_BOOST = 1.8;
+const boostOf = (n) => Math.min(MAX_BOOST, 1 + Math.log2(Math.max(1, n)) * 0.25);
+
+function createMixer() {
+  const last = {}, pending = {}, playing = []; // playing：[{ id, end }]
+  return {
+    playing,
+    // events：這一幀的遊戲事件；now：現在的時間（秒，單調遞增）。回傳 [{ id, vol }]
+    plan(events, now) {
+      for (let i = playing.length - 1; i >= 0; i--) if (playing[i].end <= now) playing.splice(i, 1);
+      for (const e of events) {
+        const id = e.type === 'announce' && e.big ? 'boss' : EVENT_SOUND[e.type];
+        if (id) pending[id] = (pending[id] || 0) + 1;
+      }
+      const out = [];
+      for (const id of Object.keys(pending).sort((a, b) => SFX[b].prio - SFX[a].prio)) {
+        const d = SFX[id];
+        if (last[id] !== undefined && now - last[id] < d.cd) continue; // 冷卻中：留著，下一次發聲時一起算
+        if (playing.filter((v) => v.id === id).length >= d.max || playing.length >= VOICES) continue;
+        out.push({ id, vol: d.vol * boostOf(pending[id]) });
+        playing.push({ id, end: now + d.dur });
+        last[id] = now; delete pending[id];
+      }
+      return out;
+    },
+  };
+}
+
+return { VOICES, SFX, EVENT_SOUND, MAX_BOOST, boostOf, createMixer };
+})();
+
+// ---- audio.js
+const __m_audio_js = (() => {
+// 音效與背景音樂（M8 第三輪第二批）：全部用 Web Audio 當場合成——不下載、不附帶任何音檔，沒有版權疑慮，離線也有聲音。
+// 瀏覽器的東西（AudioContext、document、window、navigator）一律由外面傳進來：meta-test 用假的 AudioContext 測解鎖、背景恢復、靜音、預算。
+//
+// iPhone Safari（擁有者主要的遊玩環境）的限制，先處理：
+//   - 音訊要由使用者手勢啟動：第一次點畫面（例如「點燈出發」）時建立並 resume AudioContext，並播一個極短的無聲緩衝（iOS 的慣用解鎖法）。
+//     手勢監聽不拿掉：之後被來電、鬧鐘打斷（iOS 的 'interrupted'）或被系統暫停時，下一次點畫面就再 resume。
+//   - 切到背景／鎖屏：頁面隱藏時 suspend（省電、不在背景出聲），回到前景時 resume；resume 被擋（沒有手勢）就等下一次點畫面。
+//   - 靜音開關：有 navigator.audioSession 的 Safari 設成 'ambient'——跟著手機的靜音開關走（開靜音就不出聲），也不會打斷使用者正在聽的音樂。
+// 發聲預算在 sfx.js（純邏輯）；這裡只負責「照排程發出來」。
+const { createMixer, SFX } = __m_sfx_js;
+const AUDIO_DEFAULTS = { musicVol: 0.5, sfxVol: 0.8, muted: false };
+
+function createAudio({ Ctor, doc, win, nav } = {}) {
+  let ctx = null, master = null, sfxBus = null, musicBus = null, noiseBuf = null, settings = { ...AUDIO_DEFAULTS }, mode = 'menu', eco = 1;
+  const mixer = createMixer(), stats = { started: 0, resumes: 0, suspends: 0, unlocks: 0 };
+  let music = null;
+
+  function build() {
+    ctx = new Ctor();
+    const comp = ctx.createDynamicsCompressor(); comp.connect(ctx.destination); // 很多聲音同時響時不爆音
+    master = ctx.createGain(); master.connect(comp);
+    sfxBus = ctx.createGain(); sfxBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.connect(master);
+    const n = Math.floor(ctx.sampleRate * 0.5); noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const ch = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) ch[i] = Math.random() * 2 - 1;
+    ctx.onstatechange = () => { if (ctx.state === 'running') ensureMusic(); };
+    applyGains();
+  }
+  function applyGains() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    master.gain.setTargetAtTime(settings.muted ? 0 : 1, t, 0.02);
+    sfxBus.gain.setTargetAtTime(settings.sfxVol, t, 0.02);
+    musicBus.gain.setTargetAtTime(settings.musicVol * (mode === 'pause' ? 0.35 : 1), t, 0.1);
+  }
+  function resume() { if (ctx && ctx.state !== 'running' && !(doc?.hidden)) { stats.resumes++; ctx.resume()?.catch?.(() => {}); } }
+  // 手勢：第一次建立並解鎖；之後每次手勢都檢查一下，被打斷就恢復
+  function unlock() {
+    if (!Ctor) return;
+    if (!ctx) {
+      build(); stats.unlocks++;
+      const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, ctx.sampleRate); b.connect(ctx.destination); b.start(0); // iOS 解鎖用的無聲緩衝
+      try { if (nav?.audioSession) nav.audioSession.type = 'ambient'; } catch { /* 舊版 Safari 沒有 */ }
+    }
+    resume(); // 每次手勢都檢查一次：被打斷（interrupted）或被系統暫停就恢復
+  }
+  function onVisibility() {
+    if (!ctx) return;
+    if (doc.hidden) { if (ctx.state === 'running') { stats.suspends++; ctx.suspend()?.catch?.(() => {}); } }
+    else resume();
+  }
+  if (doc && win) {
+    for (const ev of ['pointerdown', 'touchend', 'keydown', 'click']) win.addEventListener(ev, unlock, { capture: true, passive: true });
+    doc.addEventListener('visibilitychange', onVisibility);
+    win.addEventListener('pagehide', () => { if (ctx && ctx.state === 'running') { stats.suspends++; ctx.suspend()?.catch?.(() => {}); } });
+    win.addEventListener('pageshow', () => resume());
+  }
+
+  // ---- 合成：兩種積木（音調、雜訊），每種聲音是幾塊積木的組合 ----
+  function tone(t, f0, f1, dur, type, vol, { attack = 0.004, dest = sfxBus, detune = 0 } = {}) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.detune.value = detune; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(t, dur, filter, f0, f1, vol, { q = 1, dest = sfxBus } = {}) {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noiseBuf; f.type = filter; f.Q.value = q; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
+  }
+  const jitter = (x, k = 0.08) => x * (1 + (Math.random() - 0.5) * k); // 同一種聲音每次略有不同，連續命中才不會像機關槍
+  const VOICE = {
+    // 命中：短促的「啪」＋往下掉的音頭——要脆、要短
+    hit: (t, v) => { noise(t, 0.05, 'bandpass', jitter(2400), 900, v * 0.9, { q: 1.5 }); tone(t, jitter(620), 220, 0.07, 'triangle', v * 0.6); },
+    // 擊倒：低頻「砰」＋碎裂的高頻
+    kill: (t, v) => { tone(t, jitter(260), 55, 0.18, 'sine', v); noise(t, 0.12, 'highpass', 3000, 1200, v * 0.45); tone(t + 0.01, jitter(1200), 500, 0.06, 'square', v * 0.12); },
+    gem: (t, v) => { tone(t, jitter(1400, 0.15), 2100, 0.09, 'sine', v); },
+    blast: (t, v) => { noise(t, 0.4, 'lowpass', 1400, 160, v); tone(t, 110, 38, 0.35, 'sine', v * 0.9); },
+    hurt: (t, v) => { tone(t, 150, 70, 0.22, 'sawtooth', v * 0.35); noise(t, 0.15, 'lowpass', 700, 200, v * 0.6); },
+    // 升級：明亮的上行琶音
+    level: (t, v) => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(t + i * 0.06, f, f, 0.35, 'triangle', v * 0.55, { attack: 0.005 })); },
+    chest: (t, v) => { [784, 988, 1175, 1568].forEach((f, i) => { tone(t + i * 0.09, f, f * 1.002, 0.9, 'sine', v * 0.35, { attack: 0.02 }); tone(t + i * 0.09, f * 2, f * 2, 0.5, 'sine', v * 0.1); }); },
+    // 共鳴：往上掃的音＋和弦
+    evo: (t, v) => { tone(t, 220, 880, 0.6, 'sawtooth', v * 0.2, { attack: 0.3 }); [440, 554, 659, 880].forEach((f) => tone(t + 0.55, f, f, 1.0, 'triangle', v * 0.3, { attack: 0.02 })); },
+    boss: (t, v) => { tone(t, 55, 52, 2.0, 'sawtooth', v * 0.3, { attack: 0.6 }); tone(t, 82, 78, 2.0, 'sawtooth', v * 0.22, { attack: 0.6, detune: 7 }); noise(t, 1.2, 'lowpass', 300, 80, v * 0.3); },
+    bossdown: (t, v) => { noise(t, 0.8, 'lowpass', 2000, 120, v * 0.8); tone(t, 90, 30, 0.8, 'sine', v); [1047, 1319, 1568, 2093].forEach((f, i) => tone(t + 0.3 + i * 0.12, f, f, 1.2, 'sine', v * 0.3, { attack: 0.01 })); },
+    heal: (t, v) => { tone(t, 660, 990, 0.3, 'sine', v * 0.7, { attack: 0.02 }); },
+  };
+
+  // ---- 背景音樂（樸素：柔和的和弦＋低音脈動＋偶爾的鈴聲；打擊音效優先，所以音樂刻意安靜、不搶頻率） ----
+  const ROOT = { 1: 57, 2: 55, 3: 60, 4: 52, 5: 59, 6: 53 }; // 每個生態系一個調（MIDI 音高）
+  const PROG = [[0, 3, 7], [-4, 0, 3], [-2, 2, 5], [-5, -2, 2]]; // 小調的四個和弦（相對根音）
+  const hz = (m) => 440 * 2 ** ((m - 69) / 12);
+  function ensureMusic() {
+    if (music || !ctx || ctx.state !== 'running' || !win) return;
+    const beat = 60 / 76; let next = ctx.currentTime + 0.1, step = 0;
+    music = win.setInterval(() => {
+      if (!ctx || ctx.state !== 'running' || settings.muted || settings.musicVol <= 0) { next = ctx ? ctx.currentTime + 0.1 : next; return; }
+      while (next < ctx.currentTime + 0.6) {
+        const bar = Math.floor(step / 4) % PROG.length, root = ROOT[eco] ?? 57, chord = PROG[bar];
+        if (step % 8 === 0) for (const iv of chord) { tone(next, hz(root + iv), hz(root + iv), beat * 8, 'triangle', 0.05, { attack: 1.2, dest: musicBus }); tone(next, hz(root + iv + 12), hz(root + iv + 12), beat * 8, 'sine', 0.02, { attack: 1.5, dest: musicBus, detune: 6 }); }
+        tone(next, hz(root - 12 + chord[0]), hz(root - 12 + chord[0]), beat * 0.9, 'sine', mode === 'run' ? 0.09 : 0.05, { attack: 0.01, dest: musicBus });
+        if (step % 2 === 1 && Math.random() < 0.35) { const iv = chord[Math.floor(Math.random() * 3)]; tone(next, hz(root + 12 + iv), hz(root + 12 + iv), beat * 2, 'sine', 0.03, { attack: 0.005, dest: musicBus }); }
+        next += beat; step++;
+      }
+    }, 150);
+  }
+
+  return {
+    unlock, stats, mixer,
+    get ctx() { return ctx; },
+    // 這一幀的遊戲事件 → 依預算發聲（靜音、音效音量 0、還沒解鎖、在背景時都不建立任何聲音節點）
+    onEvents(events, now) {
+      const plan = mixer.plan(events, now);
+      if (!ctx || ctx.state !== 'running' || settings.muted || settings.sfxVol <= 0) return [];
+      const t = ctx.currentTime + 0.005;
+      for (const p of plan) { VOICE[p.id](t, p.vol); stats.started++; }
+      return plan;
+    },
+    apply(s) { settings = { ...AUDIO_DEFAULTS, ...s }; applyGains(); },
+    setMode(m) { mode = m; applyGains(); },
+    setEco(id) { eco = id; },
+    get settings() { return settings; },
+  };
+}
+const SOUND_IDS = Object.keys(SFX);
+
+return { AUDIO_DEFAULTS, createAudio, SOUND_IDS };
 })();
 
 // ---- main.js
@@ -4215,6 +4440,7 @@ const { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } = __m_
 const { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon } = __m_meta_js;
 const { createPerf } = __m_perf_js;
 const { createClock, SPEEDS } = __m_clock_js;
+const { createAudio } = __m_audio_js;
 const { drawGacha, drawWeaponGacha, gachaPay, gachaCost, buyItem, canBuy, claimDaily, canClaimDaily, shopItem } = __m_shop_js;
 const canvas = document.getElementById('game');
 const g = canvas.getContext('2d');
@@ -4249,6 +4475,9 @@ addEventListener('resize', resize);
 const store = createStore(() => window.localStorage);
 const loaded = loadProfile(store);
 let profile = loaded.profile, writable = loaded.writable, warnedSave = false;
+// 聲音（src/audio.js）：第一次點畫面才真的建立並解鎖（iOS 的規定），之後手勢／回到前景時自動恢復
+const audio = createAudio({ Ctor: window.AudioContext || window.webkitAudioContext, doc: document, win: window, nav: navigator });
+audio.apply(profile.settings);
 const LOAD_NOTICE = {
   corrupt: '存檔損壞，已另外備份並重新開始。',
   repaired: '部分存檔資料不正確，已自動修正。',
@@ -4393,11 +4622,14 @@ const ui = createUI({
   resetSave: () => {
     if (!confirm('清除所有進度（燈油、天賦、裝備、通關紀錄）？\n舊進度會另外備份一份在瀏覽器裡。')) return;
     store.set(`${SAVE_KEY}.before-reset`, JSON.stringify(profile));
-    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now()));
+    profile = defaultProfile(); persist(); ui.menu(profile, canClaimDaily(profile, Date.now())); audio.apply(profile.settings); ui.sound(profile);
   },
   choose: (d) => { sim.choose(Number(d.i)); input.reset(); shown = null; sync(); }, // 連續升級時 phase 仍是 choice，要強制重畫
   chestClose: () => { sim.closeChest(); input.reset(); sync(); },
-  resume: () => { paused = false; input.reset(); sync(); },
+  resume: () => { paused = false; audio.setMode('run'); input.reset(); sync(); },
+  // 聲音：一鍵全部靜音、音量一格 0.1（0～1）。改完存檔並立刻套用
+  soundMute: () => { profile.settings.muted = !profile.settings.muted; persist(); audio.apply(profile.settings); ui.sound(profile); },
+  vol: (d) => { const k = d.k === 'musicVol' ? 'musicVol' : 'sfxVol'; profile.settings[k] = Math.round(Math.min(1, Math.max(0, profile.settings[k] + Number(d.d) * 0.1)) * 10) / 10; persist(); audio.apply(profile.settings); ui.sound(profile); },
   quit: () => { if (mode !== 'run') return; sim.state.phase = 'lose'; sim.state.quit = true; paused = false; sync(); },
 });
 document.getElementById('pauseBtn').addEventListener('click', () => pause());
@@ -4409,11 +4641,11 @@ speedBtn.addEventListener('click', () => { profile.settings.speed = SPEEDS[(SPEE
 showSpeed();
 addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' && e.code !== 'KeyP') return;
-  if (paused) { paused = false; input.reset(); sync(); } else pause();
+  if (paused) { paused = false; audio.setMode('run'); input.reset(); sync(); } else pause();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
-function pause() { if (mode !== 'run' || sim.state.phase !== 'play') return; paused = true; sync(); }
+function pause() { if (mode !== 'run' || sim.state.phase !== 'play') return; paused = true; audio.setMode('pause'); ui.sound(profile); sync(); }
 
 // 新版 Service Worker 接手後重新載入拿新檔案；遊戲中不打斷，等回主選單再載入。
 // 第一次安裝（原本沒有 controller）不需要重載。
@@ -4432,10 +4664,12 @@ function toMenu() {
     renderer = createRenderer(CHAPTER1);
   }
   shown = null; ui.shopModal(null); ui.menu(profile, canClaimDaily(profile, Date.now()));
+  audio.setMode('menu'); ui.sound(profile);
 }
 function newRun(id, n) {
   clock.reset();
   chapterId = id; stageNo = n;
+  audio.setMode('run'); audio.setEco(id);
   const chapter = stageChapter(CHAPTERS.find((c) => c.id === id), n);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
@@ -4490,6 +4724,10 @@ function frame(now) {
     for (let i = 0; i < steps && sim.state.phase === 'play'; i++) sim.update(sdt, input.move);
     sync();
   } else { clock.reset(); if (!paused) sync(); } // 選卡／燈核／暫停時不累積時間，回來不會一口氣補一大段
+  // 音效：只在正式一局出聲（主選單背景的展示局不出聲）；要在 render 之前讀，render 會把這一幀的事件清掉
+  const ta = performance.now();
+  audio.onEvents(mode === 'run' ? sim.state.events : [], now / 1000);
+  fps.audio = performance.now() - ta;
   renderer.render(g, sim.state, paused || sim.state.phase !== 'play' ? 0 : dt * (mode === 'run' ? speed() : 1), W, H, scale, safeTop, mode === 'run');
   if (input.stick.active && mode === 'run' && sim.state.phase === 'play' && !paused) drawStick();
   const cost = performance.now() - t0;
@@ -4533,10 +4771,11 @@ function perfFrame(now, dt) {
     auto();
     const step = perf.sync ? 1 / 60 : dt;
     const t0 = performance.now(); sim.update(step, perf.move(s)); const t1 = performance.now();
+    const ta = performance.now(); audio.onEvents(s.events, s.t); const aud = { ms: performance.now() - ta, voices: audio.mixer.playing.length, live: audio.ctx?.state === 'running' }; // 音效也照正式遊玩的方式跑（先點一下畫面才會真的發聲）
     renderer.render(g, s, step, W, H, scale, safeTop, true, perf.done ? null : perf.prof);
     if (perf.sync) flushGPU(); // 逼 GPU 把這一幀做完，計時才包含真正的繪製
     const t2 = performance.now();
-    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null); // 亮度取樣（不計入繪製時間）
+    perf.record(now, t1 - t0, t2 - t1, s, perf.frameNo() % 6 === 0 ? measureWhite() : null, aud); // 亮度取樣（不計入繪製時間）
   }
   const box = document.getElementById('perfBox');
   box.style.display = 'block';

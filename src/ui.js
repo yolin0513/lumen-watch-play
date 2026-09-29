@@ -394,6 +394,13 @@ export function createUI(actions) {
       show('chest');
     },
     pause(s) { $('#pause .build').innerHTML = buildHtml(s.player); show('pause'); },
+    // 聲音設定（主選單與暫停畫面同一份）：一鍵全部靜音、音樂與音效各 0～10 格
+    sound(profile) {
+      const st = profile.settings, lv = (v) => Math.round((v ?? 0) * 10);
+      const vol = (k, name) => `<span class="vol">${name}<button class="chip" data-act="vol" data-k="${k}" data-d="-1" aria-label="${name}小聲" ${lv(st[k]) <= 0 ? 'disabled' : ''}>−</button><b>${lv(st[k])}</b><button class="chip" data-act="vol" data-k="${k}" data-d="1" aria-label="${name}大聲" ${lv(st[k]) >= 10 ? 'disabled' : ''}>+</button></span>`;
+      const html = `<button class="chip mute" data-act="soundMute">${st.muted ? '🔇 已靜音' : '🔊 聲音開'}</button>${vol('musicVol', '音樂')}${vol('sfxVol', '音效')}`;
+      for (const sel of ['#menu .sound', '#pause .sound']) { const el = $(sel); el.innerHTML = html; el.classList.toggle('off', !!st.muted); }
+    },
     result(s, summary, profile) {
       const win = s.phase === 'win';
       const r = $('#result');
