@@ -201,7 +201,17 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   // ---------- 生怪 ----------
   const isBoss = (kind) => ENEMIES[kind].ai === 'boss';
   function spawnDist() { return Math.hypot(VW, s.vh) / 2 + 30; }
-  function spawnEnemy(kind, { angle, dist, x, y, elite = false, affix = null } = {}) {
+  // 場上怪物總數硬上限（SURGE.total）守在這裡——所有生怪路徑都經過 spawnEnemy，任何一條都繞不過去。
+  // M8：先前上限寫在各個呼叫者（一般生怪、菌潮、菌巢），時間軸事件（成群的 ring／rush）、分裂、守衛召喚都沒守，
+  //     深根城第 10 關第 395 秒的事件一次生了 15～18 隻，場上衝到 376 隻。
+  // 場上滿了的時候：一般的生怪直接不生（回傳 null）；force（守衛、精英——精英會掉燈核，不能被擋掉）先把離玩家最遠的一隻普通怪移走（不給獎勵）騰出位子。
+  function spawnEnemy(kind, { angle, dist, x, y, elite = false, affix = null, force = false } = {}) {
+    if (s.enemies.length >= SURGE.total) {
+      if (!force) { count('spawnsBlocked'); return null; }
+      let far = -1, fd = -1;
+      s.enemies.forEach((o, i) => { if (o.elite || isBoss(o.kind) || ENEMIES[o.kind].ai === 'hive') return; const d = (o.x - p.x) ** 2 + (o.y - p.y) ** 2; if (d > fd) { fd = d; far = i; } });
+      if (far >= 0) { s.enemies.splice(far, 1); count('spawnsEvicted'); }
+    }
     const t = ENEMIES[kind];
     const a = angle ?? rand() * TAU;
     const d = dist ?? spawnDist();
@@ -234,7 +244,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       for (let i = 0; i < ev.n; i++) { const off = (i / (ev.n - 1) - 0.5) * 360; spawnEnemy(ev.kind, { x: cx - Math.sin(a) * off, y: cy + Math.cos(a) * off }); }
     } else if (ev.type === 'elite') {
       const affix = pick(Object.keys(ELITE_AFFIXES));
-      spawnEnemy(ev.kind, { elite: true, affix, dist: ENEMIES[ev.kind].ai === 'turret' ? 200 : undefined });
+      spawnEnemy(ev.kind, { elite: true, affix, dist: ENEMIES[ev.kind].ai === 'turret' ? 200 : undefined, force: true });
       s.events.push({ type: 'announce', text: `精英出現：${ELITE_AFFIXES[affix].name}${ENEMIES[ev.kind].name}` });
     } else if (ev.type === 'boss') startBoss(ev.kind);
     s.events.push({ type: 'wave', kind: ev.type });
@@ -250,7 +260,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     }
     while (sg.queue.length && s.t >= sg.queue[0][0]) {
       const [, cnt] = sg.queue.shift(), off = rand() * TAU;
-      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && s.enemies.length < SURGE.total - SURGE.reserve && !s.boss; i++) { spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }).surge = true; s.surgeAlive++; }
+      for (let i = 0; i < cnt && s.surgeAlive < SURGE.cap && s.enemies.length < SURGE.total - SURGE.reserve && !s.boss; i++) { const m = spawnEnemy(SURGE.kind, { angle: off + (i / cnt) * TAU, dist: spawnDist() + (i % 3) * 22 }); if (m) { m.surge = true; s.surgeAlive++; } }
     }
   }
   function startBoss(kind) {
@@ -262,7 +272,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       return inside;
     });
     s.ebullets.length = 0; s.hazards.length = 0; s.roots.length = 0; s.rootT = 3; s.mines = s.mines.filter((m) => Math.hypot(m.x - s.arena.x, m.y - s.arena.y) < s.arena.r);
-    s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7 });
+    s.boss = spawnEnemy(kind, { x: p.x, y: p.y - s.arena.r * 0.7, force: true });
     s.events.push({ type: 'announce', text: `燈塔守衛：${ENEMIES[kind].name}`, big: true });
   }
 
@@ -600,11 +610,13 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (const off of spread) { const c = Math.cos(off), sn = Math.sin(off); s.ebullets.push({ x: e.x, y: e.y, vx: (ux * c - uy * sn) * speed, vy: (uy * c + ux * sn) * speed, life: 4, dmg, r, ...extra }); }
   }
   const eliteDmg = (e) => (e.elite ? ELITE.dmgMul : 1);
+  // 關卡槓桿（content.js 的 STAGE_LEVERS）：怪的移動速度、攻擊冷卻（除以 cdMul＝更常出手）。守衛有自己的節奏，不套用
+  const ecd = (x) => x / (s.chapter.cdMul ?? 1);
   function enemyMove(e, dt) {
     const t = ENEMIES[e.kind];
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    const spd = t.speed * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
+    const spd = t.speed * (isBoss(e.kind) ? 1 : s.chapter.speedMul ?? 1) * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
     let vx = ux, vy = uy;
     e.cdT -= dt; e.modeT -= dt;
     switch (t.ai) {
@@ -614,17 +626,17 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         const side = Math.sin(e.seed) > 0 ? 1 : -1;
         vx = ux * dir - uy * side * 0.5; vy = uy * dir + ux * side * 0.5;
         e.fireT -= dt;
-        if (e.fireT <= 0 && d < 320) { e.fireT = t.fireCd; shoot(e, ux, uy, t.shotSpeed ?? 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0], t.slowShot ? { slow: t.slowShot, src: 'frost', frost: true } : null); }
+        if (e.fireT <= 0 && d < 320) { e.fireT = ecd(t.fireCd); shoot(e, ux, uy, t.shotSpeed ?? 110, t.shotDmg * eliteDmg(e), e.elite ? 8 : 5, e.elite ? [-0.35, 0, 0.35] : [0], t.slowShot ? { slow: t.slowShot, src: 'frost', frost: true } : null); }
         break;
       }
       case 'turret': {
         e.fireT -= dt;
-        if (e.fireT <= 0 && d < 360) { e.fireT = t.fireCd; shoot(e, ux, uy, 120, t.shotDmg * eliteDmg(e), 6, e.elite ? [-0.5, -0.25, 0, 0.25, 0.5] : [-0.3, 0, 0.3]); s.events.push({ type: 'burst', x: e.x, y: e.y, small: true }); }
+        if (e.fireT <= 0 && d < 360) { e.fireT = ecd(t.fireCd); shoot(e, ux, uy, 120, t.shotDmg * eliteDmg(e), 6, e.elite ? [-0.5, -0.25, 0, 0.25, 0.5] : [-0.3, 0, 0.3]); s.events.push({ type: 'burst', x: e.x, y: e.y, small: true }); }
         return [0, 0];
       }
       case 'lunge': { // 靠近 → 蓄力（原地、顯示預警線）→ 高速撲擊 → 冷卻
         if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'lunge'; e.modeT = t.lungeT; e.tele = null; } return [0, 0]; }
-        if (e.mode === 'lunge') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = t.lungeCd; } return [e.dirX * t.lungeSpeed, e.dirY * t.lungeSpeed]; }
+        if (e.mode === 'lunge') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = ecd(t.lungeCd); } return [e.dirX * t.lungeSpeed, e.dirY * t.lungeSpeed]; }
         if (d < t.range && e.cdT <= 0) { e.mode = 'windup'; e.modeT = t.windup; e.dirX = ux; e.dirY = uy; e.tele = { dx: ux, dy: uy, len: t.lungeSpeed * t.lungeT, w: e.r }; return [0, 0]; }
         break;
       }
@@ -634,12 +646,12 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         break;
       }
       case 'blink': { // 預警標記出現在玩家身邊，時間到瞬移過去
-        if (e.warn) { e.warn.t -= dt; if (e.warn.t <= 0) { e.x = e.warn.x; e.y = e.warn.y; e.warn = null; e.cdT = t.blinkCd; s.events.push({ type: 'blink', x: e.x, y: e.y }); } return [0, 0]; }
+        if (e.warn) { e.warn.t -= dt; if (e.warn.t <= 0) { e.x = e.warn.x; e.y = e.warn.y; e.warn = null; e.cdT = ecd(t.blinkCd); s.events.push({ type: 'blink', x: e.x, y: e.y }); } return [0, 0]; }
         if (e.cdT <= 0 && d < 420 && d > 90) { const a = rand() * TAU; e.warn = { x: p.x + Math.cos(a) * 70, y: p.y + Math.sin(a) * 70, t: t.blinkWarn }; return [0, 0]; }
         break;
       }
       case 'slam': { // 焦岩獸：靠近後原地蓄力（地面預警圈），砸下震波
-        if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = t.slamCd; } return [0, 0]; }
+        if (e.mode === 'windup') { if (e.modeT <= 0) { e.mode = 'move'; e.cdT = ecd(t.slamCd); } return [0, 0]; }
         if (d < t.slamR * 0.85 && e.cdT <= 0) {
           e.mode = 'windup'; e.modeT = t.windup;
           s.hazards.push({ type: 'zone', x: e.x, y: e.y, r: t.slamR, arm: t.windup, dur: 0.15, t: 0, dmg: Math.round(t.slamDmg * eliteDmg(e)), src: 'slam' }); count('slams');
@@ -649,11 +661,11 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       }
       case 'hive': { // 菌巢：不動，每隔一段時間生出小怪（同時存活有上限）；不先拆掉它，怪會一直冒
         if (e.cdT <= 0) {
-          e.cdT = t.spawnCd;
+          e.cdT = ecd(t.spawnCd);
           const alive = s.enemies.filter((o) => o.hive === e && o.hp > 0).length;
           // 菌巢生的怪也算進本章一般怪的上限（量過：不算的話第六章同屏衝到 425 隻、邏輯耗時超過門檻）
           const room = Math.min(s.chapter.maxEnemies - (s.enemies.length - s.surgeAlive), SURGE.total - s.enemies.length);
-          for (let i = 0; i < t.spawn.n && alive + i < t.spawn.max && i < room; i++) { const a = rand() * TAU; spawnEnemy(t.spawn.kind, { x: e.x + Math.cos(a) * (e.r + 14), y: e.y + Math.sin(a) * (e.r + 14) }).hive = e; count('hiveSpawns'); }
+          for (let i = 0; i < t.spawn.n && alive + i < t.spawn.max && i < room; i++) { const a = rand() * TAU; const m = spawnEnemy(t.spawn.kind, { x: e.x + Math.cos(a) * (e.r + 14), y: e.y + Math.sin(a) * (e.r + 14) }); if (m) { m.hive = e; count('hiveSpawns'); } }
         }
         return [0, 0];
       }
@@ -847,7 +859,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (s.autoSpawn && !s.boss) {
       s.spawnAcc += dt * ch.spawnRate(s.t);
       // 一般生怪只看「非菌潮」的怪數：菌潮滿場時照樣出本章的怪，否則每章的招牌怪（脹孢囊、沼蛭…）會被菌潮擠掉（M7 量過：第二章脹孢囊引信從 136 次掉到 1 次）
-      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies && s.enemies.length < SURGE.total) spawnEnemy(rosterPick()); }
+      while (s.spawnAcc >= 1) { s.spawnAcc -= 1; if (s.enemies.length - s.surgeAlive < ch.maxEnemies) spawnEnemy(rosterPick()); } // 總數上限由 spawnEnemy 守
     }
 
     buildGrid();
@@ -1015,7 +1027,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (t.split) for (let i = 0; i < t.split.n; i++) {
       const a = (i / t.split.n) * TAU;
       const m = spawnEnemy(t.split.kind, { x: e.x + Math.cos(a) * 12, y: e.y + Math.sin(a) * 12 });
-      m.r *= 0.8; m.hp = m.maxHp = m.hp * 0.6;
+      if (m) { m.r *= 0.8; m.hp = m.maxHp = m.hp * 0.6; }
     }
   }
 

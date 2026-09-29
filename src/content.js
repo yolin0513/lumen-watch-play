@@ -218,7 +218,7 @@ export const RESONANCES = {
   twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
                stats: { dmg: 28, cd: 0.8, count: 4, range: 270, speed: 480, size: 20 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
-               stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 16, burnT: 3.5 } },
+               stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 14, burnT: 3.5 } }, // M8：燃燒 16 → 14（脹孢囊變快變多後，它的燃燒特別剋脹孢囊，單武器測試 1.50 倍碰到專屬上限）
 };
 
 // ---- 怪物 ----
@@ -233,7 +233,7 @@ export const ENEMIES = {
   splitter: { name: '裂囊',   r: 15, hp: 34,  speed: 48,  dmg: 8,  xp: 3, oil: 2, ai: 'chase', split: { kind: 'mite', n: 3 } },
   // 第二章：霧沼
   leech:    { name: '沼蛭',   r: 12, hp: 26,  speed: 55,  dmg: 9,  xp: 2, oil: 2, ai: 'lunge', lungeSpeed: 360, windup: 0.6, lungeT: 0.35, lungeCd: 2.6, range: 150 },
-  bloater:  { name: '脹孢囊', r: 16, hp: 45,  speed: 50,  dmg: 6,  xp: 3, oil: 2, ai: 'bomber', fuse: 1.0, blastR: 72, blastDmg: 22, blastHurtsEnemies: 60 },
+  bloater:  { name: '脹孢囊', r: 16, hp: 45,  speed: 85,  dmg: 6,  xp: 3, oil: 2, ai: 'bomber', fuse: 1.0, blastR: 72, blastDmg: 22, blastHurtsEnemies: 60 },
   // 第三章：晶窟
   turret:   { name: '晶刺',   r: 14, hp: 60,  speed: 0,   dmg: 8,  xp: 4, oil: 3, ai: 'turret', fireCd: 2.8, shotDmg: 8, mass: 99 },
   blinker:  { name: '閃晶蛾', r: 10, hp: 16,  speed: 80,  dmg: 7,  xp: 2, oil: 2, ai: 'blink', blinkCd: 3.6, blinkWarn: 0.8 },
@@ -297,13 +297,14 @@ export const CHAPTERS = [
     dmgScale: (t) => 1.05 + t / 330,
     spawnRate: (t) => 1.5 + t * 0.02 + (t > 240 ? (t - 240) * 0.016 : 0),
     maxEnemies: 300,
-    roster: [[0, 'mite', 8], [20, 'leech', 4], [90, 'moth', 4], [140, 'bloater', 3], [220, 'spitter', 2], [300, 'leech', 3]],
+    roster: [[0, 'mite', 8], [20, 'leech', 4], [90, 'moth', 4], [140, 'bloater', 8], [220, 'spitter', 2], [300, 'leech', 3]], // M8：脹孢囊 3 → 8（和速度 50 → 85、第 300 秒多一波包圍一起，讓引信回到 M7 水準；量測見回報）
     events: [
       { at: 75,  type: 'rush',  kind: 'leech', n: 12 },
       { at: 130, type: 'elite', kind: 'leech' },
       { at: 180, type: 'ring',  kind: 'bloater', n: 12 },
       { at: 240, type: 'rush',  kind: 'moth', n: 30 },
       { at: 280, type: 'elite', kind: 'bloater' },
+      { at: 300, type: 'ring',  kind: 'bloater', n: 14 },
       { at: 330, type: 'ring',  kind: 'leech', n: 24 },
       { at: 365, type: 'elite', kind: 'spitter' },
       { at: 395, type: 'ring',  kind: 'mite', n: 44 },
@@ -405,18 +406,45 @@ export const CHAPTER1 = CHAPTERS[0];
 export const STAGES = {
   count: 10, base: 1,
   unlockNext: 3,                        // 通關第幾關開放下一個生態系的第 1 關（主線 6 × 3 關；第 4～10 關是往深處的挑戰）
-  hp: 1.10, spawn: 1.04, dmg: 1.03,     // 每往後一關的倍率（含守衛的血量）
   oil: 1.10,                            // 通關燈油（一般＋首通）每往後一關的倍率；擊倒燈油本來就隨擊倒的數量變多
   deepFirstStardust: 20,                // 第 2～10 關每關的首通星砂（第 1 關＝原本一章的首通星砂；舊存檔的第 1 關視為已領過）
 };
-export const stageMul = (base, n) => base ** (n - STAGES.base);
+// 逐關的難度槓桿（M8 第三輪第三批）。北極星：擁有者不要「無腦加怪物血量」——血量是最後才動的槓桿（第 5 關起才加、第 10 關只到 1.25 倍）。
+// 每一關的主要槓桿寫在最後一欄（回報與選關畫面都照這裡說）。欄位：
+//   spawn 出怪密度、speed 怪的移動速度、cd 怪的攻擊冷卻（除以它＝更常出手）、sig 招牌機制強度（招牌怪在名單與成群事件裡的份量、
+//   深根城根牆的頻率）、elites 多出現的精英隻數（會掉燈核）、dmg 怪的傷害、hp 怪的血量（含守衛）
+// 量過（M8 第三輪）：舊規則每關血量 ×1.10，第 10 關 2.36 倍——凍星原、深根城 asc2 在 3～4 分鐘就被一般小怪磨死、招牌機制反而變少。
+export const STAGE_LEVERS = [
+  { n: 1,  spawn: 1.00, speed: 1.00, cd: 1.00, sig: 1.0, elites: 0, dmg: 1.00, hp: 1.00, main: '原本的難度' },
+  { n: 2,  spawn: 1.08, speed: 1.00, cd: 1.00, sig: 1.3, elites: 0, dmg: 1.00, hp: 1.00, main: '招牌機制變多、出怪變密' },
+  { n: 3,  spawn: 1.14, speed: 1.04, cd: 1.05, sig: 1.5, elites: 0, dmg: 1.03, hp: 1.00, main: '招牌機制、怪變快' },
+  { n: 4,  spawn: 1.18, speed: 1.07, cd: 1.10, sig: 1.7, elites: 1, dmg: 1.05, hp: 1.00, main: '怪更常出手、多一隻精英' },
+  { n: 5,  spawn: 1.22, speed: 1.09, cd: 1.14, sig: 1.9, elites: 1, dmg: 1.08, hp: 1.05, main: '怪的行為更凶' },
+  { n: 6,  spawn: 1.26, speed: 1.11, cd: 1.18, sig: 2.1, elites: 1, dmg: 1.11, hp: 1.08, main: '招牌機制加倍' },
+  { n: 7,  spawn: 1.30, speed: 1.13, cd: 1.21, sig: 2.3, elites: 2, dmg: 1.14, hp: 1.11, main: '再多一隻精英、出怪更密' },
+  { n: 8,  spawn: 1.34, speed: 1.15, cd: 1.24, sig: 2.5, elites: 2, dmg: 1.18, hp: 1.15, main: '全面加壓' },
+  { n: 9,  spawn: 1.38, speed: 1.17, cd: 1.27, sig: 2.7, elites: 2, dmg: 1.22, hp: 1.20, main: '全面加壓' },
+  { n: 10, spawn: 1.42, speed: 1.20, cd: 1.30, sig: 3.0, elites: 2, dmg: 1.26, hp: 1.25, main: '最終試煉：招牌機制三倍' },
+];
+// 各生態系的招牌怪（sig 放大它們在名單與成群事件裡的份量）；螢苔原的招牌是精英，所以它的 sig 換成多一隻精英
+export const SIGNATURE = { 1: [], 2: ['bloater'], 3: ['blinker'], 4: ['cinder', 'golem'], 5: ['frostmoth', 'glider'], 6: ['rooter', 'hive'] };
+// 多出來的精英：在菌潮最後幾波附近出現（組建已成形、燈核用得到）；種類用本章最後一隻精英
+const EXTRA_ELITE_AT = [335, 385, 250]; // 最多 3 隻（螢苔原的招牌是精英，第 7 關起會用到第 3 個時間點）
 // 某生態系的第 n 關：回傳一份 chapter（sim、meta、render 都照原本的方式使用它）
 export function stageChapter(ch, n) {
-  const hp = stageMul(STAGES.hp, n), dmg = stageMul(STAGES.dmg, n), spawn = stageMul(STAGES.spawn, n), oil = stageMul(STAGES.oil, n);
-  const r = ch.reward;
+  const L = STAGE_LEVERS[n - 1], oil = STAGES.oil ** (n - STAGES.base), sigKinds = SIGNATURE[ch.id] ?? [], r = ch.reward;
+  const lastElite = [...ch.events].reverse().find((e) => e.type === 'elite')?.kind;
+  const extra = (L.elites + (ch.id === 1 && L.sig >= 2 ? 1 : 0));
+  const events = [
+    ...ch.events.map((e) => ((e.type === 'ring' || e.type === 'rush') && sigKinds.includes(e.kind) ? { ...e, n: Math.round(e.n * L.sig) } : e)),
+    ...EXTRA_ELITE_AT.slice(0, extra).map((at) => ({ at, type: 'elite', kind: lastElite })),
+  ].sort((a, b) => a.at - b.at);
   return {
-    ...ch, stage: n, key: `${ch.id}-${n}`, bossHpMul: hp,
-    hpScale: (t) => ch.hpScale(t) * hp, dmgScale: (t) => ch.dmgScale(t) * dmg, spawnRate: (t) => ch.spawnRate(t) * spawn,
+    ...ch, stage: n, key: `${ch.id}-${n}`, levers: L, bossHpMul: L.hp, speedMul: L.speed, cdMul: L.cd,
+    hpScale: (t) => ch.hpScale(t) * L.hp, dmgScale: (t) => ch.dmgScale(t) * L.dmg, spawnRate: (t) => ch.spawnRate(t) * L.spawn,
+    roster: ch.roster.map(([at, kind, w]) => [at, kind, sigKinds.includes(kind) ? w * L.sig : w]),
+    events,
+    ...(ch.roots ? { roots: { ...ch.roots, every: ch.roots.every / Math.sqrt(L.sig) } } : {}),
     reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
       firstStardust: n === STAGES.base ? r.firstStardust : STAGES.deepFirstStardust },
   };
