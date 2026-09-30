@@ -366,7 +366,10 @@ export const ENEMIES = {
   splitter: { name: '裂囊',   r: 15, hp: 34,  speed: 48,  dmg: 8,  xp: 3, oil: 2, ai: 'chase', split: { kind: 'mite', n: 3 } },
   // 第二章：霧沼
   leech:    { name: '沼蛭',   r: 12, hp: 26,  speed: 55,  dmg: 9,  xp: 2, oil: 2, ai: 'lunge', lungeSpeed: 360, windup: 0.6, lungeT: 0.35, lungeCd: 2.6, range: 150 },
-  bloater:  { name: '脹孢囊', r: 16, hp: 45,  speed: 85,  dmg: 6,  xp: 3, oil: 2, ai: 'bomber', fuse: 1.0, blastR: 72, blastDmg: 22, blastHurtsEnemies: 60 },
+  // farGuard（M8 第五輪）：被遠處（> dist）打到時外殼硬化（受傷 ×dmgTaken）並衝過來（速度 ×rush、t 秒）。
+  // 理由：職業制之後燈銃手在遠處就把脹孢囊打掉，霧沼的招牌對它形同不存在（引爆只剩基準的 2～12%）；加強怪、不削弱玩家，近身職業幾乎碰不到這條規則
+  // 只算「被射中」（範圍攻擊、場、灼燒不算）；距離掃過 170／220／260：170、220 時燈術師（雷蕊跳得遠）霧沼 30 局少贏 6 局，260 時 20 對 22（雜訊內），燈銃手每關仍 ≥ 基準 24%
+  bloater:  { name: '脹孢囊', r: 16, hp: 45,  speed: 85,  dmg: 6,  xp: 3, oil: 2, ai: 'bomber', fuse: 1.0, blastR: 72, blastDmg: 22, blastHurtsEnemies: 60, farGuard: { dist: 260, dmgTaken: 0.35, rush: 2.4, t: 1.5 } },
   // 第三章：晶窟
   turret:   { name: '晶刺',   r: 14, hp: 60,  speed: 0,   dmg: 8,  xp: 4, oil: 3, ai: 'turret', fireCd: 2.8, shotDmg: 8, mass: 99 },
   blinker:  { name: '閃晶蛾', r: 10, hp: 16,  speed: 80,  dmg: 7,  xp: 2, oil: 2, ai: 'blink', blinkCd: 3.6, blinkWarn: 0.8 },

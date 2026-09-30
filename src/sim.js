@@ -396,6 +396,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (e.hp <= 0) return;
     const aff = e.affix && ELITE_AFFIXES[e.affix];
     let crit = false;
+    const fg = ENEMIES[e.kind].farGuard; // 遠處打來：外殼硬化＋衝過來（脹孢囊）
+    // 只有「被射中」才算（投射物、光束、狙擊）；範圍攻擊、場、灼燒不算——落星砸到遠處的怪不是在遠處瞄準它（燈術師量過會被這條規則誤傷）
+    if (fg && !AREA.has(dmgSrc) && dmgSrc !== 'burn' && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 > fg.dist * fg.dist) { amount *= fg.dmgTaken; if (!(e.rushT > 0)) count('farGuards'); e.rushT = fg.t; }
     if (forceCrit) { amount *= forceCrit; crit = true; }
     else if (TR.crit && rand() < TR.crit) { amount *= TR.critMul; crit = true; } // 燈銃手：天生暴擊
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
@@ -860,7 +863,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const t = ENEMIES[e.kind];
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    const spd = t.speed * (isBoss(e.kind) ? 1 : s.chapter.speedMul ?? 1) * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1);
+    const spd = t.speed * (isBoss(e.kind) ? 1 : s.chapter.speedMul ?? 1) * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1) * (e.rushT > 0 ? t.farGuard.rush : 1);
     let vx = ux, vy = uy;
     e.cdT -= dt; e.modeT -= dt;
     switch (t.ai) {
@@ -1132,7 +1135,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
       if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
-      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt;
+      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt; if (e.rushT > 0) e.rushT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
         e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;

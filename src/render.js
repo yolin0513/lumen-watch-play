@@ -399,6 +399,7 @@ export function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (e.rushT > 0) { g.strokeStyle = 'rgba(255,190,120,0.9)'; g.lineWidth = 2.5; g.beginPath(); g.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); g.stroke(); } // 脹孢囊被遠處射中：外殼硬化、衝過來
       if (e.stunT > 0) { g.strokeStyle = 'rgba(255,235,150,0.85)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(e.x, e.y - e.r - 6, e.r * 0.8, 3, 0, 0, Math.PI * 2); g.stroke(); } // 震心：頭上一圈暈眩
       if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.flash > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.8; g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
