@@ -1,6 +1,6 @@
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
 import { VW, terrainIn, ventState } from './sim.js';
-import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1 } from './content.js';
+import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1, BONDS } from './content.js';
 import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } from './art.js';
 import { chestGuides, GUIDE } from './guide.js';
 
@@ -118,6 +118,7 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'snipe': fx.snipes.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, r: e.r, evo: e.evo, life: 0.25 }); burst(e.tx, e.ty, e.evo ? 8 : 5, e.evo ? G.evo : G.lanceG, 160, 0.3, 9); break;
         case 'vortexBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'void' }); burst(e.x, e.y, e.evo ? 18 : 12, e.evo ? G.evo : G.void, 220, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
         case 'ashBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 14, G.ember, 200, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
+        case 'bondBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 12, G.ember, 200, 0.4, 11); break;
         case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
@@ -603,6 +604,7 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const wp of p.weapons) { drawSlot(g, makeIcon(wp.id, WEAPONS[wp.id].color, 36), x, y, S, wp.evo ? '★' : wp.lv); x += S + 3; }
     x += 4;
     for (const [id, lv] of Object.entries(p.passives)) { drawSlot(g, makeIcon(id, PASSIVES[id].color, 36), x, y, S, lv); x += S + 3; }
+    if (s.bonds?.length) { g.textAlign = 'left'; g.font = '700 11px system-ui'; g.fillStyle = '#ffd98a'; shadowText(g, '♦ ' + s.bonds.map((b) => BONDS[b].name).join('・'), 8, y + S + 14); } // 成立的羈絆
 
     // 頭上血條
     const px = w / 2, py = h / 2 - 32;

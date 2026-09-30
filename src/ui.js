@@ -57,7 +57,7 @@ export function createUI(actions) {
     return `<button class="card${ready ? ' reso-ready' : ''}" ${i === undefined ? '' : `data-act="choose" data-i="${i}"`}${r ? ` data-reso-partners="${r.partners.join(',')}" data-reso-held="${r.held.join(',')}"${r.ready ? ` data-reso-ready="${r.ready.join(',')}" data-reso-done="${r.done.join(',')}"` : ''}` : ''} style="--c:${o.color}">
       <img src="${iconUrl(o.icon, o.color)}" alt="">
       <div><div><span class="t">${esc(o.name)}</span><span class="l">${esc(o.label)}</span>${ready ? '<span class="rb">可共鳴</span>' : ''}</div>
-      <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}</div></button>`;
+      <div class="d">${esc(o.desc)}</div>${o.hint ? `<div class="h">${esc(o.hint)}</div>` : ''}${o.bondHint ? `<div class="h bond">${esc(o.bondHint)}</div>` : ''}</div></button>`;
   }
   function buildHtml(p) {
     const w = p.weapons.map((x) => `<span><img src="${iconUrl(x.id, WEAPONS[x.id].color)}" alt="">${esc(x.evo ? RESONANCES[x.id].name : WEAPONS[x.id].name)}<br>${x.evo ? '★共鳴' : 'Lv ' + x.lv}</span>`);

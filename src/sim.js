@@ -2,7 +2,7 @@
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS } from './content.js';
 import { aggregate, scaled, reduction, CAPS } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
@@ -74,6 +74,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     },
     enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
     slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
+    bonds: [],             // 目前成立的羈絆（BONDS 的 id；每幀依身上的武器重算）
+    bondsOn: true,         // 量測用：false＝關掉羈絆（tools/combo-report.mjs 做前後對照）
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -90,6 +92,12 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   const aimRange = chapter.fog ?? AIM_RANGE;
   const K = CLASSES[s.cls], TR = K.trait, AREA = new Set(AREA_SRC);
   const has = (id) => (p.passives[id] || 0) > 0;
+  // 羈絆：兩把都在身上才成立（專屬武器算成同類的一般武器）；每幀重算（武器只會在選卡、燈核、測試時變，重算很便宜）
+  const heldKey = (id) => BOND_ALIAS[id] ?? id;
+  function bondsOf(weapons) { const ks = new Set(weapons.map((w) => heldKey(w.id))); return Object.keys(BONDS).filter((b) => BONDS[b].weapons.every((w) => ks.has(w))); }
+  const bond = (id) => s.bonds.includes(id);
+  const BFX = (id) => BONDS[id].fx;
+  const weaponOf = (id) => p.weapons.find((w) => heldKey(w.id) === id);
   const FX = (id) => PASSIVES[id].fx;
 
   // ---------- 成長（局內被動＋局外 meta，一律走 stats.js） ----------
@@ -156,7 +164,18 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
           : `可與 ${ws.map(name).join('、')} 共鳴（${RESO_RULE}）`;
       }
     }
-    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
+    // 羈絆提示：這張武器卡和身上某把武器能組成羈絆（新武器卡才會「完成」；升級卡顯示已成立的）
+    let bondHint = '';
+    if (isW) {
+      const ks = new Set(p.weapons.map((w) => heldKey(w.id))), me = heldKey(o.id);
+      for (const [bid, B] of Object.entries(BONDS)) {
+        if (!B.weapons.includes(me)) continue;
+        const other = B.weapons.find((w) => w !== me);
+        if (ks.has(other)) bondHint = o.kind === 'wnew' ? `♦ 和你的${WEAPONS[other].name}組成羈絆「${B.name}」：${B.desc}` : `♦ 羈絆「${B.name}」已成立`;
+        else if (o.kind === 'wnew') bondHint = `♦ 再拿${WEAPONS[other].name}可組成羈絆「${B.name}」：${B.desc}`;
+      }
+    }
+    return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso, bondHint };
   }
   function rollChoices() {
     // 加權、不放回地抽三張（CHOICE）：身上已有的優先，新武器卡最多 maxNewWeapon 張
@@ -402,6 +421,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (forceCrit) { amount *= forceCrit; crit = true; }
     else if (TR.crit && rand() < TR.crit) { amount *= TR.critMul; crit = true; } // 燈銃手：天生暴擊
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
+    if (e.markT > 0 && bond('mark')) amount *= BFX('mark').mul; // 標定：被標記的怪受到的所有傷害加重
     if (e.shockT > 0 && dmgSrc !== 'chain') { amount *= FX('conduct').mul; e.shockT = 0; count('conducted'); } // 導電：被雷打過的怪，下一次受傷加重
     const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
@@ -442,15 +462,17 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const base = Math.atan2(target.y - p.y, target.x - p.x);
     for (let i = 0; i < st.shots; i++) {
       const a = base + (i - (st.shots - 1) / 2) * 0.14;
-      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: w.id === 'bolt' && !!w.evo, evo: !!w.evo, src: w.id, burn: st.burn, burnT: st.burnT });
+      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 1.1, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: st.shard || 0, big: w.id === 'bolt' && !!w.evo, evo: !!w.evo, src: w.id, burn: st.burn, burnT: st.burnT, ...(bond('crossfire') ? { edge: true, bounce: BFX('crossfire').bounces } : {}) }); // 交錯火網
     }
   }
   function orbitWeapon(w, st, dt) {
+    if (w.bellT > 0) w.bellT -= dt;
     w.ang += st.spin * dt;
     w.orbs = [];
     for (let i = 0; i < st.count; i++) {
       const a = w.ang + (i / st.count) * TAU;
-      const ox = p.x + Math.cos(a) * st.radius, oy = p.y + Math.sin(a) * st.radius;
+      const rad = st.radius * (w.bellT > 0 ? BFX('bellring').mul : 1); // 鐘環：燈鐘敲響後光球向外擴張
+      const ox = p.x + Math.cos(a) * rad, oy = p.y + Math.sin(a) * rad;
       w.orbs.push({ x: ox, y: oy, a });
       if (has('ward')) for (const b of s.ebullets) if (b.life > 0 && (b.x - ox) ** 2 + (b.y - oy) ** 2 < (st.size + FX('ward').pad + b.r) ** 2) { b.life = 0; count('blocked'); } // 護身環：擋子彈
       near(ox, oy, (e) => {
@@ -469,18 +491,20 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   }
   function auraWeapon(w, st, dt) {
     w.cd -= dt;
-    w.radius = st.radius;
+    const onTrail = bond('warmpath') && s.patches.some((q) => q.src === 'trail' && (q.x - p.x) ** 2 + (q.y - p.y) ** 2 < q.r * q.r); // 暖徑
+    const R = st.radius * (onTrail ? BFX('warmpath').mul : 1);
+    w.radius = R;
     if (w.cd > 0) return;
     w.cd = st.tick * p.cdMul;
     let n = 0;
     near(p.x, p.y, (e) => {
-      if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < (st.radius + e.r) ** 2) {
+      if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < (R + e.r) ** 2) {
         damage(e, st.dmg); n++;
         if (st.slow) { e.slowT = 0.6; e.slow = st.slow; }
       }
-    }, Math.ceil(st.radius / CELL) + 1);
+    }, Math.ceil(R / CELL) + 1);
     if (n && has('ember')) { const f = FX('ember'), h = Math.min(f.cap, n * f.per); p.hp = Math.min(p.maxHp, p.hp + h); count('auraHeal', h); } // 暖芯：燒到越多回越多
-    s.events.push({ type: 'aura', x: p.x, y: p.y, r: st.radius, evo: !!w.evo });
+    s.events.push({ type: 'aura', x: p.x, y: p.y, r: R, evo: !!w.evo, warm: onTrail });
   }
   function chainWeapon(w, st, dt) {
     w.cd -= dt;
@@ -496,7 +520,13 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       const pts = [[p.x, p.y]];
       for (let j = 0; j <= st.jumps && cur; j++) {
         hit.add(cur); pts.push([cur.x, cur.y]);
+        const burning = cur.burnT > 0;
         damage(cur, st.dmg);
+        if (burning && bond('thunderfire')) { // 雷火：電弧打中燃燒中的怪，引爆一圈火焰
+          const f = BFX('thunderfire'), cx = cur.x, cy = cur.y; dmgSrc = 'thunderfire';
+          near(cx, cy, (o) => { if (o !== cur && o.hp > 0 && (o.x - cx) ** 2 + (o.y - cy) ** 2 < (f.r + o.r) ** 2) damage(o, st.dmg * f.dmgK, 0, 0); }, Math.ceil(f.r / CELL) + 1);
+          dmgSrc = w.id; s.events.push({ type: 'bondBurst', x: cx, y: cy, r: f.r, bond: 'thunderfire' });
+        }
         if (has('conduct')) cur.shockT = FX('conduct').keep; // 導電：記下「被電過」
         cur = nearest(cur.x, cur.y, st.range, hit);
       }
@@ -532,6 +562,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     scored.sort((a, b) => b.n - a.n);
     // guard（星隕杖，M8 第五輪）：第一顆星落在 guard 距離內最近的怪身上（護身），其餘照舊落在最密集處
     const guard = st.guard ? nearest(p.x, p.y, st.guard) : null;
+    const wells = bond('starwell') ? s.vortices.filter((v) => v.fly <= 0) : []; // 隕井：每口張開的光井額外引來一顆落星（不搶原本的落星）
+    wells.forEach((v, i) => s.strikes.push({ x: v.x, y: v.y, r: st.radius, t: st.delay + i * 0.08, delay: st.delay, dmg: st.dmg * BFX('starwell').mul, src: w.id, evo: !!w.evo, well: true }));
     for (let i = 0; i < st.count; i++) {
       const t = i === 0 && guard ? guard : scored[(guard ? i - 1 : i) % scored.length].e, j = i >= scored.length + (guard ? 1 : 0) ? 30 : 0;
       s.strikes.push({ x: t.x + (rand() - 0.5) * j, y: t.y + (rand() - 0.5) * j, r: st.radius, t: st.delay + i * 0.08, delay: st.delay, dmg: st.dmg, src: w.id, evo: !!w.evo });
@@ -589,7 +621,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   // 燈籠雷：定時在腳下放一顆（最多 max 顆），佈好（arm）後有敵人踩進 trigger 範圍就爆
   function minesWeapon(w, st, dt) {
     w.cd -= dt;
-    const mine = s.mines.filter((m) => m.src === w);
+    const mine = s.mines.filter((m) => m.src === w && !m.bonus);
     if (w.cd <= 0 && mine.length < st.max) { w.cd = st.cd * p.cdMul; s.mines.push({ x: p.x, y: p.y, arm: st.arm, trigger: st.trigger, r: st.radius, dmg: st.dmg, src: w, evo: !!w.evo }); }
   }
   function updateMines(dt) {
@@ -612,7 +644,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   function lanceWeapon(w, st, dt) {
     w.cd -= dt;
     if (w.cd > 0) return;
-    const target = nearest(p.x, p.y, aimRange);
+    // 標定：優先轉向瞄準距離內最近的「被標記」的怪
+    let marked = null; if (bond('mark')) { let bd = aimRange * aimRange; for (const e of s.enemies) if (e.hp > 0 && e.markT > 0) { const d2 = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d2 < bd) { bd = d2; marked = e; } } }
+    const target = marked ?? nearest(p.x, p.y, aimRange);
     if (!target) return;
     w.cd = st.cd * p.cdMul;
     const base = Math.atan2(target.y - p.y, target.x - p.x);
@@ -641,11 +675,15 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       if (!isBoss(e.kind)) { const k = st.push / e.mass; e.x += dx / d * k; e.y += dy / d * k; if (has('stun')) { e.stunT = FX('stun').t; count('stunned'); } } // 震心
     }, Math.ceil(st.radius / CELL) + 1);
     s.events.push({ type: 'pulse', x: p.x, y: p.y, r: st.radius, evo: !!w.evo });
+    const ow = bond('bellring') && weaponOf('orbit'); if (ow) ow.bellT = BFX('bellring').t; // 鐘環
   }
   // 燈塔哨：在腳下立一座小燈塔（最多 max 座、存在 life 秒），自己朝射程內最近的怪射擊——邊跑邊留下火力點
   function sentryWeapon(w, st, dt) {
     w.cd -= dt;
-    if (w.cd <= 0 && s.sentries.filter((q) => q.src === w).length < st.max) { w.cd = st.cd * p.cdMul; s.sentries.push({ x: p.x, y: p.y, life: st.life, fire: 0.2, src: w }); }
+    if (w.cd <= 0 && s.sentries.filter((q) => q.src === w).length < st.max) {
+      w.cd = st.cd * p.cdMul; s.sentries.push({ x: p.x, y: p.y, life: st.life, fire: 0.2, src: w });
+      const ww = bond('patrol') && weaponOf('wisps'); if (ww) ww.wisps.push({ x: p.x, y: p.y, cd: 0, target: null, ang: rand() * TAU, temp: st.life, patrol: true }); // 巡哨
+    }
   }
   function updateSentries(dt) {
     for (const q of s.sentries) {
@@ -672,6 +710,12 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       const a = base + (i - (st.count - 1) / 2) * 0.5;
       s.slashes.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 0, st, hit: new Set(), src: w.id, evo: !!w.evo });
     }
+  }
+  // 迴斬：朝最近的怪揮一道劍氣（用身上裂光斬目前的數值，一道）
+  function returnSlash(sw) {
+    const t = nearest(p.x, p.y, aimRange); if (!t) return;
+    const a = Math.atan2(t.y - p.y, t.x - p.x);
+    s.slashes.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 0, st: weaponStats(sw), hit: new Set(), src: sw.id, evo: !!sw.evo, bonus: true });
   }
   const slashHalf = (q) => q.st.w0 + (q.st.w1 - q.st.w0) * Math.min(1, q.d / q.st.range);
   function updateSlashes(dt) {
@@ -746,6 +790,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (let i = 0; i < st.walls; i++) {
       const a = base + (i / st.walls) * TAU;
       s.walls.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 12, st, hit: new Set(), src: w.id, evo: !!w.evo });
+      const mw = i === 0 && bond('minewall') && weaponOf('mines'); // 推雷：每推一次（不是每面牆）在正前方放一顆燈籠（不佔燈籠雷自己的上限）
+      if (mw) { const ms = weaponStats(mw), k = BFX('minewall').ahead; s.mines.push({ x: p.x + Math.cos(a) * k, y: p.y + Math.sin(a) * k, arm: ms.arm, trigger: ms.trigger, r: ms.radius, dmg: ms.dmg, src: mw, evo: !!mw.evo, bonus: true }); }
     }
   }
   function updateWalls(dt) {
@@ -786,6 +832,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (let i = 0; i < Math.min(st.shots, far.length); i++) {
       const t = far[i][1], tx = t.x, ty = t.y;
       damage(t, st.dmg, 0, 0);
+      if (bond('mark')) t.markT = BFX('mark').t; // 標定
       near(tx, ty, (e) => { if (e !== t && e.hp > 0 && (e.x - tx) ** 2 + (e.y - ty) ** 2 < (st.splash + e.r) ** 2) damage(e, st.dmg * 0.4, 0, 0); });
       s.events.push({ type: 'snipe', x: p.x, y: p.y, tx, ty, r: st.splash, evo: !!w.evo, crit: !!forceCrit });
     }
@@ -845,7 +892,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (!hit) return;
     if (b.bounce-- <= 0) { b.life = 0; return; }
     b.hit = new Set(); count('ricochetBounces');
-    if (has('prism')) b.dmg *= 1 + FX('prism').perBounce; // 折光稜鏡：每反彈一次更痛
+    if (b.edge) b.life += BFX('crossfire').life; // 交錯火網：反彈後多飛一段
+    if (has('prism') && b.rico) b.dmg *= 1 + FX('prism').perBounce; // 折光稜鏡：每反彈一次更痛
     s.events.push({ type: 'bounce', x: b.x, y: b.y, evo: b.evo });
     for (let i = 0; i < b.split; i++) { const a = Math.atan2(b.vy, b.vx) + (i % 2 ? -0.6 : 0.6); s.bullets.push({ x: b.x, y: b.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, life: 0.5, dmg: b.dmg * 0.5, pierce: 1, hit: new Set(), shard: 0, src: 'shard' }); }
   }
@@ -1080,6 +1128,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   function update(dt, move) {
     if (s.phase !== 'play') return;
     s.t += dt;
+    s.bonds = s.bondsOn ? bondsOf(p.weapons) : [];
     const ch = s.chapter;
 
     // 玩家
@@ -1150,7 +1199,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (const w of p.weapons) { dmgSrc = w.id; WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt); }
     dmgSrc = null; updateStrikes(dt); updateMines(dt); updateSentries(dt);
     updateSlashes(dt); updateVortices(dt); updateWalls(dt); updatePatches(dt); dmgSrc = null;
-    for (const e of s.enemies) { if (e.shockT > 0) e.shockT -= dt; if (e.lensT > 0) e.lensT -= dt; }
+    for (const e of s.enemies) { if (e.shockT > 0) e.shockT -= dt; if (e.lensT > 0) e.lensT -= dt; if (e.markT > 0) e.markT -= dt; }
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -1158,11 +1207,12 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         if (b.out) { b.traveled += b.speed * dt; if (b.traveled >= b.range) { b.out = false; b.hit = new Set(); if (has('returner')) { b.ret = true; b.dmg *= FX('returner').dmg; count('returns'); } } }
         else {
           const back = b.ret ? FX('returner').speed : 1.1; // 迴旋：回程更快
-          const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1; b.vx = dx / d * b.speed * back; b.vy = dy / d * b.speed * back; if (d < 16) b.life = 0;
+          const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1; b.vx = dx / d * b.speed * back; b.vy = dy / d * b.speed * back;
+          if (d < 16) { b.life = 0; const sw = bond('returnslash') && weaponOf('slash'); if (sw && !(sw.returnT > s.t)) { sw.returnT = s.t + BFX('returnslash').cd; returnSlash(sw); } } // 迴斬（每 cd 秒最多一道）
         }
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-      if (b.rico) bounceOffScreen(b);
+      if (b.rico || b.edge) bounceOffScreen(b);
       if (b.life <= 0) continue;
       if (!b.boom && pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {

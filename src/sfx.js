@@ -35,7 +35,7 @@ export const HIT_FAMILY = {
   boomerang: 'slash', twinblade: 'slash', slash: 'slash', wall: 'slash', collide: 'slash',
   bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot', ricochet: 'shot',
   chain: 'zap',
-  flame: 'fire', burn: 'fire', trail: 'fire', ashwalk: 'fire',
+  flame: 'fire', burn: 'fire', trail: 'fire', ashwalk: 'fire', thunderfire: 'fire',
   orbit: 'soft', aura: 'soft', wisps: 'soft', vortex: 'soft', crush: 'soft',
   mortar: 'thump', starfall: 'thump', mines: 'thump', pulse: 'thump', stardust: 'thump',
   lance: 'beam', sniper: 'beam',
@@ -43,7 +43,7 @@ export const HIT_FAMILY = {
 export const hitSound = (src) => `hit_${HIT_FAMILY[src] ?? 'shot'}`;
 // 其他遊戲事件 → 聲音。沒列的事件不發聲
 export const EVENT_SOUND = {
-  kill: 'kill', gem: 'gem', blast: 'blast', mineBoom: 'blast', strike: 'blast', pulse: 'blast', ashBurst: 'blast', hurt: 'hurt',
+  kill: 'kill', gem: 'gem', blast: 'blast', mineBoom: 'blast', strike: 'blast', pulse: 'blast', ashBurst: 'blast', bondBurst: 'blast', hurt: 'hurt',
   level: 'level', chest: 'chest', evo: 'evo', bossdown: 'bossdown', revive: 'evo', heal: 'heal',
 };
 // 同一幀／冷卻中累積的次數 → 音量倍率：1 下＝1，之後慢慢變大，最多 MAX_BOOST 倍

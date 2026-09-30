@@ -298,6 +298,22 @@ export const CLASSES = {
     start: 'boomerang', exclusive: ['twinblade'], trait: { nearR: 90, nearKnock: 2, contact: 0.75, heavyMul: 2 } },
 };
 export const DEFAULT_CLASS = 'gunner';
+// ---- 羈絆（M8 第五輪第二批）：同時持有兩把特定武器時觸發的效果，和增幅一樣要「改變打法」（規則寫在 sim.js，行為探針在 tools/bond-form.mjs）。
+// 每個職業三組、剛好把 6 把武器分成三對：選 4 把時至少完成一組、最多兩組——帶哪 4 把（完成哪幾組）就是決定。
+// 專屬武器算成它同類的一般武器（燼羽弓＝螢火連弩、星隕杖＝落星、曦光雙刃＝迴光刃）。
+// 每個職業 6 選 4 只有 15 種組合（三職業 45 種），bond-form 全部窮舉：每條羈絆只在兩把都在時生效，其餘組合是對照組。
+export const BONDS = {
+  crossfire:  { cls: 'gunner', weapons: ['bolt', 'ricochet'],   name: '交錯火網', desc: '光矢碰到畫面邊緣會反彈（最多兩次），每次反彈多飛 0.6 秒、能再打中同一隻', fx: { bounces: 2, life: 0.6 } },
+  mark:       { cls: 'gunner', weapons: ['sniper', 'lance'],    name: '標定',     desc: '遠星銃打中的怪被標記 3 秒：受到的所有傷害 +30%，聚光槍也會優先轉向它', fx: { t: 3, mul: 1.3 } },
+  patrol:     { cls: 'gunner', weapons: ['sentry', 'wisps'],    name: '巡哨',     desc: '每立起一座燈塔，就多放出一隻螢蜂守著它（燈塔熄滅就消失）', fx: {} },
+  starwell:   { cls: 'mage',   weapons: ['mortar', 'vortex'],   name: '隕井',     desc: '每口張開的光井會額外引來一顆落星砸在中心（傷害 +30%）', fx: { mul: 1.3 } }, // 第一版是「把原本的落星改砸光井」：燈術師的落星不再打最密的怪，level-report 霧沼 fresh 從 6/6 掉到 2/6——羈絆不可以讓人變弱，改成額外加一顆
+  thunderfire:{ cls: 'mage',   weapons: ['chain', 'flame'],     name: '雷火',     desc: '電弧打中燃燒中的怪時，引爆一圈火焰', fx: { r: 55, dmgK: 0.6 } },
+  warmpath:   { cls: 'mage',   weapons: ['aura', 'trail'],      name: '暖徑',     desc: '站在自己的燼痕上時，燈暈範圍擴大 40%', fx: { mul: 1.4 } },
+  returnslash:{ cls: 'blade',  weapons: ['boomerang', 'slash'], name: '迴斬',     desc: '迴光刃回到手上時，朝最近的怪揮出一道劍氣（每 0.9 秒最多一道）', fx: { cd: 0.9 } },
+  bellring:   { cls: 'blade',  weapons: ['orbit', 'pulse'],     name: '鐘環',     desc: '燈鐘敲響時，環燈的光球向外擴張到 2.2 倍半徑（1.5 秒）', fx: { mul: 2.2, t: 1.5 } },
+  minewall:   { cls: 'blade',  weapons: ['wall', 'mines'],      name: '推雷',     desc: '每推出一次光牆，就在正前方放下一顆燈籠', fx: { ahead: 70 } },
+};
+export const BOND_ALIAS = { emberbow: 'bolt', starfall: 'mortar', twinblade: 'boomerang' }; // 專屬武器在羈絆裡算成哪一把
 // 燈術師天生灼燒認得的「範圍攻擊」（傷害來源）
 export const AREA_SRC = ['mortar', 'starfall', 'aura', 'flame', 'vortex', 'trail', 'stardust', 'ashwalk', 'crush'];
 export const classOf = (weaponId) => Object.keys(CLASSES).find((c) => CLASSES[c].weapons.includes(weaponId) || CLASSES[c].exclusive.includes(weaponId)) ?? null;
