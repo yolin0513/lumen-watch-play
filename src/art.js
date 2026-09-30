@@ -283,6 +283,31 @@ export function makeIcon(id, color, size = 64) {
       P([[16, -16], [6, -13], [13, -6]]); g.fill();
       g.fillStyle = '#fff3c0'; for (const k of [0, 6]) { P([[-15 + k, 15 - k], [-19 + k, 7 - k], [-11 + k, 11 - k]]); g.fill(); }
       break;
+    case 'slash': // 新月形的劍氣
+      g.beginPath(); g.moveTo(-6, -17); g.quadraticCurveTo(18, 0, -6, 17); g.quadraticCurveTo(6, 0, -6, -17); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-6, -17); g.quadraticCurveTo(18, 0, -6, 17); g.stroke();
+      break;
+    case 'vortex': // 漩渦：深色的洞＋三道旋臂
+      g.lineWidth = 3; for (let i = 0; i < 3; i++) { const a = i * 2.094; g.beginPath(); g.arc(0, 0, 14, a, a + 1.6); g.stroke(); g.beginPath(); g.arc(0, 0, 8, a + 1, a + 2.4); g.stroke(); }
+      g.fillStyle = '#1a0a2e'; g.beginPath(); g.arc(0, 0, 5, 0, 7); g.fill();
+      break;
+    case 'wall': // 一面光牆＋往前的箭頭
+      g.fillRect(-4, -16, 6, 32);
+      g.lineWidth = 2.5; for (const y of [-8, 8]) { P([[6, y], [15, y]]); g.stroke(); P([[12, y - 3], [16, y], [12, y + 3]]); g.stroke(); }
+      break;
+    case 'sniper': // 準星
+      g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 11, 0, 7); g.stroke();
+      for (const [a, b] of [[[0, -17], [0, -6]], [[0, 6], [0, 17]], [[-17, 0], [-6, 0]], [[6, 0], [17, 0]]]) { P([a, b]); g.stroke(); }
+      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, 2.5, 0, 7); g.fill();
+      break;
+    case 'trail': // 一串由小到大的火痕
+      for (const [x, y, r] of [[-12, 10, 3.5], [-4, 3, 5], [7, -5, 7]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      g.fillStyle = '#fff3c0'; g.beginPath(); g.arc(7, -5, 3, 0, 7); g.fill();
+      break;
+    case 'ricochet': // 折線彈道＋菱形光片
+      g.lineWidth = 2.5; P([[-16, 12], [-4, -12], [8, 8], [15, -4]]); g.stroke();
+      g.fillStyle = '#ffffff'; P([[15, -9], [19, -4], [15, 1], [11, -4]]); g.closePath(); g.fill();
+      break;
     case 'heal':
       g.fillRect(-4, -18, 8, 8);
       g.beginPath(); g.moveTo(-5, -10); g.lineTo(5, -10); g.lineTo(14, 8); g.quadraticCurveTo(14, 16, 6, 16); g.lineTo(-6, 16); g.quadraticCurveTo(-14, 16, -14, 8); g.closePath(); g.fill();

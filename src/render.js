@@ -45,11 +45,11 @@ export function createRenderer(chapter = CHAPTER1) {
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
     frost: glow('rgba(170,230,255,1)', 16), lava: glow('rgba(255,140,50,1)', 48),
-    evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16),
+    evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16), rico: glow('rgba(150,255,235,1)', 12), void: glow('rgba(180,140,255,1)', 16),
     shade: glow('rgba(5,4,13,0.55)', 28), blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
-  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
+  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], snipes: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
   const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
   // 發光預算（M8）：加亮疊加（'lighter'）的裝飾光——共鳴金光、粒子、光屑的光暈——同一幀畫得越多，就一起按比例調淡，
   // 讓「疊在一起的總亮度」有上限；數量在預算內時（一般場面）完全不變。
@@ -115,6 +115,9 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18, evo: e.evo }); break;
         case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3, color: e.evo ? 'sun' : undefined }); break;
         case 'lance': fx.lances.push({ x: e.x, y: e.y, ang: e.ang, len: e.len, w: e.w, evo: e.evo, life: 0.22 }); break;
+        case 'snipe': fx.snipes.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, r: e.r, evo: e.evo, life: 0.25 }); burst(e.tx, e.ty, e.evo ? 8 : 5, e.evo ? G.evo : G.lanceG, 160, 0.3, 9); break;
+        case 'vortexBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'void' }); burst(e.x, e.y, e.evo ? 18 : 12, e.evo ? G.evo : G.void, 220, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
+        case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
@@ -139,8 +142,8 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const q of fx.texts) { q.y -= 30 * dt; q.life -= dt; }
     fx.texts = fx.texts.filter((q) => q.life > 0);
     if (fx.texts.length > 80) fx.texts.splice(0, fx.texts.length - 80);
-    for (const list of [fx.arcs, fx.rings, fx.banners, fx.lances]) for (const q of list) q.life -= dt;
-    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0); fx.lances = fx.lances.filter((q) => q.life > 0);
+    for (const list of [fx.arcs, fx.rings, fx.banners, fx.lances, fx.snipes]) for (const q of list) q.life -= dt;
+    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0); fx.lances = fx.lances.filter((q) => q.life > 0); fx.snipes = fx.snipes.filter((q) => q.life > 0);
   }
 
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
@@ -323,6 +326,25 @@ export function createRenderer(chapter = CHAPTER1) {
       g.fillStyle = evo ? '#8a6a2a' : '#2a5a3a'; g.beginPath(); g.moveTo(q.x - 6, q.y + 6); g.lineTo(q.x - 3, q.y - 10); g.lineTo(q.x + 3, q.y - 10); g.lineTo(q.x + 6, q.y + 6); g.closePath(); g.fill();
       g.fillStyle = evo ? '#fff0b0' : '#d8ffe0'; g.fillRect(q.x - 3.5, q.y - 15, 7, 5);
     }
+    // M8 第四輪：地上的燼痕（暗紅底＋閃爍的火點）與蝕光井（深色的洞＋旋轉的光弧）。
+    // 大面積一律用一般疊加（不加亮）：大片加亮會讓整個畫面發白、蓋掉角色（glow-check 量的就是這件事）
+    for (const q of s.patches) {
+      if (!onScreen(q.x, q.y, q.r)) continue;
+      const k = Math.min(1, q.life / 0.6, (q.max - q.life) / 0.15 + 0.3);
+      g.fillStyle = q.evo ? `rgba(150,60,20,${0.4 * k})` : `rgba(110,35,15,${0.38 * k})`; g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = q.evo ? `rgba(255,200,110,${0.7 * k})` : `rgba(255,120,50,${0.6 * k})`;
+      for (let i = 0; i < 3; i++) { const a = q.x * 0.7 + i * 2.1 + T * 3, rr = q.r * (0.3 + 0.2 * i); g.fillRect(q.x + Math.cos(a) * rr - 1.5, q.y + Math.sin(a) * rr - 1.5, 3, 3); }
+    }
+    for (const v of s.vortices) {
+      if (!onScreen(v.x, v.y, v.st.r)) continue;
+      if (v.fly > 0) { g.fillStyle = v.evo ? '#ffe6a0' : '#d8c0ff'; g.beginPath(); g.arc(v.x, v.y, 5, 0, Math.PI * 2); g.fill(); continue; }
+      const R = v.st.r * Math.min(1, v.t / 0.2 + 0.2), spin = T * (v.evo ? 7 : 5);
+      const hole = g.createRadialGradient(v.x, v.y, 2, v.x, v.y, R);
+      hole.addColorStop(0, 'rgba(8,2,20,0.85)'); hole.addColorStop(0.55, v.evo ? 'rgba(70,40,20,0.45)' : 'rgba(50,20,90,0.45)'); hole.addColorStop(1, 'rgba(40,10,70,0)');
+      g.fillStyle = hole; g.beginPath(); g.arc(v.x, v.y, R, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = v.evo ? 'rgba(255,215,130,0.8)' : 'rgba(190,150,255,0.75)'; g.lineWidth = 2;
+      for (let i = 0; i < 3; i++) { const a = spin + i * 2.094, rr = R * (0.45 + 0.18 * i); g.beginPath(); g.arc(v.x, v.y, rr, a, a + 1.4); g.stroke(); }
+    }
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -403,6 +425,13 @@ export function createRenderer(chapter = CHAPTER1) {
       }
       if (b.sentry) { g.drawImage(b.evo ? G.evo : G.sentry, b.x - 10, b.y - 10, 20, 20); g.strokeStyle = b.evo ? 'rgba(255,240,190,0.95)' : 'rgba(200,255,210,0.95)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02); g.stroke(); continue; }
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
+      if (b.rico) { // 折光彈：菱形光片＋長拖尾（反彈時的折線看得出來）
+        g.drawImage(G.rico, b.x - 12, b.y - 12, 24, 24);
+        g.strokeStyle = b.evo ? 'rgba(255,240,190,0.85)' : 'rgba(170,255,240,0.8)'; g.lineWidth = 2; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.06, b.y - b.vy * 0.06); g.stroke();
+        g.save(); g.translate(b.x, b.y); g.rotate(Math.atan2(b.vy, b.vx)); g.fillStyle = b.evo ? '#fff6d0' : '#e0fff8';
+        g.beginPath(); g.moveTo(6, 0); g.lineTo(0, 3.5); g.lineTo(-6, 0); g.lineTo(0, -3.5); g.closePath(); g.fill(); g.restore();
+        continue;
+      }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
       if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
       g.strokeStyle = b.big ? 'rgba(255,250,220,0.95)' : 'rgba(255,240,200,0.9)'; g.lineWidth = 3 * k;
@@ -436,6 +465,32 @@ export function createRenderer(chapter = CHAPTER1) {
       g.fillStyle = l.evo ? 'rgba(255,250,220,0.95)' : 'rgba(225,245,255,0.95)'; g.fillRect(0, -l.w * 0.22, l.len, l.w * 0.44);
       g.restore();
     }
+    g.globalAlpha = 1;
+    // M8 第四輪：劍氣（往前凸的新月光弧，越飛越寬）、光牆（一道厚光帶）、遠星的彈道（細線＋落點圈）——一般疊加，不加亮
+    g.globalCompositeOperation = 'source-over';
+    for (const q of s.slashes) {
+      const half = q.st.w0 + (q.st.w1 - q.st.w0) * Math.min(1, q.d / q.st.range), cx = q.x0 + q.dx * q.d, cy = q.y0 + q.dy * q.d, fade = Math.min(1, q.d / 70, (q.st.range - q.d) / 60); // 從玩家身上長出來：剛出手時淡，不在角色周圍堆一片亮光（glow-check）
+      g.save(); g.translate(cx, cy); g.rotate(Math.atan2(q.dy, q.dx)); g.globalAlpha = fade;
+      g.fillStyle = q.evo ? 'rgba(255,215,130,0.5)' : 'rgba(150,225,255,0.45)';
+      g.beginPath(); g.moveTo(-6, -half); g.quadraticCurveTo(16, 0, -6, half); g.quadraticCurveTo(4, 0, -6, -half); g.fill();
+      g.strokeStyle = q.evo ? 'rgba(255,250,220,0.95)' : 'rgba(235,250,255,0.95)'; g.lineWidth = q.evo ? 3.5 : 2.5;
+      g.beginPath(); g.moveTo(-6, -half); g.quadraticCurveTo(16, 0, -6, half); g.stroke();
+      g.restore();
+    }
+    for (const q of s.walls) {
+      const cx = q.x0 + q.dx * q.d, cy = q.y0 + q.dy * q.d, L = q.st.len, fade = Math.min(1, q.d / 70, (q.st.range - q.d) / 50);
+      g.save(); g.translate(cx, cy); g.rotate(Math.atan2(q.dy, q.dx)); g.globalAlpha = fade;
+      g.fillStyle = q.evo ? 'rgba(255,210,120,0.35)' : 'rgba(255,230,170,0.3)'; g.fillRect(-14, -L, 14, L * 2);
+      g.fillStyle = q.evo ? 'rgba(255,245,200,0.95)' : 'rgba(255,245,215,0.9)'; g.fillRect(-2, -L, 4, L * 2);
+      g.restore();
+    }
+    for (const l of fx.snipes) {
+      g.globalAlpha = l.life / 0.25;
+      g.strokeStyle = l.evo ? 'rgba(255,230,150,0.9)' : 'rgba(170,195,255,0.9)'; g.lineWidth = l.evo ? 2.5 : 1.5;
+      g.beginPath(); g.moveTo(l.x, l.y); g.lineTo(l.tx, l.ty); g.stroke();
+      g.lineWidth = 2.5; g.beginPath(); g.arc(l.tx, l.ty, l.r * (1.2 - l.life / 0.25 * 0.5), 0, Math.PI * 2); g.stroke();
+    }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'lighter';
     for (const a of fx.arcs) {
       g.globalAlpha = a.life / 0.18;
       for (const [lw, col] of a.evo ? [[8, 'rgba(255,210,120,0.5)'], [3, 'rgba(255,250,225,1)']] : [[5, 'rgba(160,120,255,0.5)'], [2, 'rgba(235,225,255,1)']]) {
@@ -458,7 +513,7 @@ export function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }

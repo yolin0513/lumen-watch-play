@@ -2,7 +2,7 @@
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE } from './content.js';
 import { aggregate, scaled, reduction, CAPS } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
@@ -66,6 +66,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       vx: 0, vy: 0, onIce: false, slowT: 0, slowK: 0, // 冰面慣性、霜冰減速
     },
     enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
+    slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -147,9 +148,20 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
   }
   function rollChoices() {
-    const pool = options();
+    // 加權、不放回地抽三張（CHOICE）：身上已有的優先，新武器卡最多 maxNewWeapon 張
+    const pool = options(), weight = (o) => (o.kind === 'wup' || o.kind === 'pup' ? CHOICE.held : CHOICE.fresh);
     const picked = [];
-    while (picked.length < 3 && pool.length) picked.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+    let newW = 0;
+    while (picked.length < 3) {
+      const cand = newW >= CHOICE.maxNewWeapon ? pool.filter((o) => o.kind !== 'wnew') : pool;
+      if (!cand.length) break;
+      let total = 0; for (const o of cand) total += weight(o);
+      let x = rand() * total, pickI = cand.length - 1;
+      for (let i = 0; i < cand.length; i++) { x -= weight(cand[i]); if (x < 0) { pickI = i; break; } }
+      const o = cand[pickI];
+      pool.splice(pool.indexOf(o), 1); picked.push(o);
+      if (o.kind === 'wnew') newW++;
+    }
     if (picked.length < 3) picked.push({ kind: 'heal', id: 'heal', from: 0 });
     return picked.map(describe);
   }
@@ -605,7 +617,166 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     }
     s.sentries = s.sentries.filter((q) => q.life > 0 && p.weapons.includes(q.src));
   }
-  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon, lance: lanceWeapon, pulse: pulseWeapon, sentry: sentryWeapon };
+  // ---- M8 第四輪新武器（每一把的「形態」由 tools/weapon-form.mjs 實際模擬驗證） ----
+  // 裂光斬：劍氣從玩家往目標方向飛，是一段「垂直於前進方向」的光弧，半寬從 w0 隨飛行距離線性變到 w1；每道劍氣對每隻怪只斬一次
+  function slashWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.count; i++) {
+      const a = base + (i - (st.count - 1) / 2) * 0.5;
+      s.slashes.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 0, st, hit: new Set(), src: w.id, evo: !!w.evo });
+    }
+  }
+  const slashHalf = (q) => q.st.w0 + (q.st.w1 - q.st.w0) * Math.min(1, q.d / q.st.range);
+  function updateSlashes(dt) {
+    for (const q of s.slashes) {
+      const prev = q.d; q.d += q.st.speed * dt;
+      const half = slashHalf(q);
+      dmgSrc = q.src;
+      for (const e of s.enemies) { // 掃過的帶狀區域：前進方向上介於上一幀與這一幀之間（含怪的半徑），側向在半寬之內
+        if (e.hp <= 0 || q.hit.has(e)) continue;
+        const rx = e.x - q.x0, ry = e.y - q.y0, along = rx * q.dx + ry * q.dy;
+        if (along < prev - e.r - 6 || along > q.d + e.r + 6 || Math.abs(rx * q.dy - ry * q.dx) > half + e.r) continue;
+        q.hit.add(e); damage(e, q.st.dmg, q.dx, q.dy);
+      }
+    }
+    s.slashes = s.slashes.filter((q) => q.d < q.st.range);
+  }
+  // 蝕光井：丟到最近的敵人所在處（飛行 0.25 秒），張開 dur 秒：範圍內的怪（守衛除外）每秒往中心移動 pull／質量、每 tick 受傷；結束時炸開
+  function vortexWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const used = new Set([target]);
+    for (let i = 0; i < st.count; i++) {
+      const t = i === 0 ? target : nearest(target.x, target.y, 400, used) ?? target;
+      used.add(t);
+      s.vortices.push({ x: p.x, y: p.y, tx: t.x, ty: t.y, fly: 0.25, t: 0, tick: 0, st, src: w.id, evo: !!w.evo });
+    }
+  }
+  function updateVortices(dt) {
+    for (const v of s.vortices) {
+      if (v.fly > 0) { const k = Math.min(1, dt / v.fly); v.x += (v.tx - v.x) * k; v.y += (v.ty - v.y) * k; v.fly -= dt; continue; }
+      const st = v.st, R = st.r;
+      v.t += dt; v.tick -= dt;
+      const hurt = v.tick <= 0; if (hurt) v.tick = st.tick;
+      dmgSrc = v.src;
+      near(v.x, v.y, (e) => {
+        if (e.hp <= 0) return;
+        const dx = v.x - e.x, dy = v.y - e.y, d = Math.hypot(dx, dy);
+        if (d > R + e.r) return;
+        if (!isBoss(e.kind) && d > 4) { const m = Math.min(d - 2, st.pull / e.mass * dt); e.x += dx / d * m; e.y += dy / d * m; }
+        if (hurt) damage(e, st.dmg, 0, 0);
+      }, Math.ceil(R / CELL) + 1);
+      if (v.t >= st.dur) {
+        near(v.x, v.y, (e) => { if (e.hp > 0 && (e.x - v.x) ** 2 + (e.y - v.y) ** 2 < (R + e.r) ** 2) damage(e, st.burst, 0, 0); }, Math.ceil(R / CELL) + 1);
+        s.events.push({ type: 'vortexBurst', x: v.x, y: v.y, r: R, evo: v.evo });
+        v.done = true;
+      }
+    }
+    s.vortices = s.vortices.filter((v) => !v.done);
+  }
+  // 推光壁：一面垂直於前進方向、半長 len 的光牆，從玩家往目標推 range 遠；牆前緣碰到的怪受傷一次，之後（守衛除外）被牆帶著走
+  function wallWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.walls; i++) {
+      const a = base + (i / st.walls) * TAU;
+      s.walls.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 12, st, hit: new Set(), src: w.id, evo: !!w.evo });
+    }
+  }
+  function updateWalls(dt) {
+    for (const q of s.walls) {
+      q.d += q.st.speed * dt;
+      dmgSrc = q.src;
+      for (const e of s.enemies) {
+        if (e.hp <= 0) continue;
+        const rx = e.x - q.x0, ry = e.y - q.y0, along = rx * q.dx + ry * q.dy;
+        if (along < q.d - 40 || along > q.d + e.r + 6 || Math.abs(rx * q.dy - ry * q.dx) > q.st.len + e.r) continue;
+        if (!q.hit.has(e)) { q.hit.add(e); damage(e, q.st.dmg, 0, 0); }
+        if (e.hp > 0 && !isBoss(e.kind)) { const k = q.d + e.r + 6 - along; e.x += q.dx * k; e.y += q.dy * k; } // 貼著牆前緣
+      }
+    }
+    s.walls = s.walls.filter((q) => q.d < q.st.range);
+  }
+  // 遠星銃：瞄準射程內「最遠」的 shots 隻（瞬間命中），落點 splash 範圍內的怪也受傷
+  function sniperWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const R = Math.min(st.range, aimRange), R2 = R * R, far = [];
+    for (const e of s.enemies) {
+      if (e.hp <= 0) continue;
+      const d2 = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      if (d2 > R2) continue;
+      far.push([d2, e]);
+    }
+    if (!far.length) return;
+    w.cd = st.cd * p.cdMul;
+    far.sort((a, b) => b[0] - a[0]);
+    for (let i = 0; i < Math.min(st.shots, far.length); i++) {
+      const t = far[i][1], tx = t.x, ty = t.y;
+      damage(t, st.dmg, 0, 0);
+      near(tx, ty, (e) => { if (e !== t && e.hp > 0 && (e.x - tx) ** 2 + (e.y - ty) ** 2 < (st.splash + e.r) ** 2) damage(e, st.dmg * 0.4, 0, 0); });
+      s.events.push({ type: 'snipe', x: p.x, y: p.y, tx, ty, r: st.splash, evo: !!w.evo });
+    }
+  }
+  // 燼痕：玩家每走 step 距離，在腳下留一塊燼痕（存在 life 秒）；每 tick 燒到範圍內的怪。站著不動不會多留
+  function trailWeapon(w, st, dt) {
+    if (w.lastX === undefined || (p.x - w.lastX) ** 2 + (p.y - w.lastY) ** 2 >= st.step * st.step) {
+      w.lastX = p.x; w.lastY = p.y;
+      s.patches.push({ x: p.x, y: p.y, r: st.r, life: st.life, max: st.life, tick: 0, st, src: w.id, evo: !!w.evo });
+    }
+  }
+  function updatePatches(dt) {
+    for (const q of s.patches) {
+      q.life -= dt; q.tick -= dt;
+      if (q.tick > 0) continue;
+      q.tick = q.st.tick;
+      dmgSrc = q.src;
+      near(q.x, q.y, (e) => {
+        if (e.hp <= 0 || (e.x - q.x) ** 2 + (e.y - q.y) ** 2 > (q.r + e.r) ** 2) return;
+        damage(e, q.st.dmg, 0, 0);
+        if (q.st.slow) { e.slowT = 0.6; e.slow = q.st.slow; }
+      }, Math.ceil(q.r / CELL) + 1);
+    }
+    s.patches = s.patches.filter((q) => q.life > 0);
+  }
+  // 折光彈：一般子彈，但碰到「畫面」邊緣（以玩家為中心的 VW × vh）會反彈 bounces 次；反彈後可以再打到同一隻
+  function ricochetWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.shots; i++) {
+      const a = base + (i - (st.shots - 1) / 2) * 0.3;
+      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 5, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: 0, bounce: st.bounces, split: st.split || 0, rico: true, src: w.id, evo: !!w.evo });
+    }
+  }
+  function bounceOffScreen(b) {
+    const hx = VW / 2 - 4, hy = s.vh / 2 - 4, rx = b.x - p.x, ry = b.y - p.y;
+    let hit = false;
+    if ((rx > hx && b.vx > 0) || (rx < -hx && b.vx < 0)) { b.vx = -b.vx; hit = true; }
+    if ((ry > hy && b.vy > 0) || (ry < -hy && b.vy < 0)) { b.vy = -b.vy; hit = true; }
+    if (!hit) return;
+    if (b.bounce-- <= 0) { b.life = 0; return; }
+    b.hit = new Set(); count('ricochetBounces');
+    s.events.push({ type: 'bounce', x: b.x, y: b.y, evo: b.evo });
+    for (let i = 0; i < b.split; i++) { const a = Math.atan2(b.vy, b.vx) + (i % 2 ? -0.6 : 0.6); s.bullets.push({ x: b.x, y: b.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, life: 0.5, dmg: b.dmg * 0.5, pierce: 1, hit: new Set(), shard: 0, src: 'shard' }); }
+  }
+  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon, lance: lanceWeapon, pulse: pulseWeapon, sentry: sentryWeapon,
+    slash: slashWeapon, vortex: vortexWeapon, wall: wallWeapon, sniper: sniperWeapon, trail: trailWeapon, ricochet: ricochetWeapon };
 
   // ---------- 敵人行為 ----------
   function shoot(e, ux, uy, speed, dmg, r, spread = [0], extra = null) {
@@ -899,6 +1070,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     // 武器
     for (const w of p.weapons) { dmgSrc = w.id; WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt); }
     dmgSrc = null; updateStrikes(dt); updateMines(dt); updateSentries(dt);
+    updateSlashes(dt); updateVortices(dt); updateWalls(dt); updatePatches(dt); dmgSrc = null;
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -907,6 +1079,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
         else { const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1; b.vx = dx / d * b.speed * 1.1; b.vy = dy / d * b.speed * 1.1; if (d < 16) b.life = 0; }
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      if (b.rico) bounceOffScreen(b);
       if (b.life <= 0) continue;
       if (!b.boom && pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {
@@ -1049,5 +1222,5 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
   const w0 = addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
   if (startBonus?.lv > 1) w0.lv = Math.min(MAX_LV, startBonus.lv);
   if (startBonus?.passive && PASSIVES[startBonus.passive]) { p.passives[startBonus.passive] = 1; recalc(); p.hp = p.maxHp; }
-  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
+  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe, rollChoices };
 }

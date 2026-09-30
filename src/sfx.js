@@ -32,13 +32,13 @@ export const SFX = {
 };
 // 武器（與其他傷害來源）→ 命中音色。每一把武器都要有（meta-test 的母體檢查：WEAPONS 全部都在這張表裡，含對照組）
 export const HIT_FAMILY = {
-  boomerang: 'slash', twinblade: 'slash',
-  bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot',
+  boomerang: 'slash', twinblade: 'slash', slash: 'slash', wall: 'slash',
+  bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot', ricochet: 'shot',
   chain: 'zap',
-  flame: 'fire', burn: 'fire',
-  orbit: 'soft', aura: 'soft', wisps: 'soft',
+  flame: 'fire', burn: 'fire', trail: 'fire',
+  orbit: 'soft', aura: 'soft', wisps: 'soft', vortex: 'soft',
   mortar: 'thump', starfall: 'thump', mines: 'thump', pulse: 'thump',
-  lance: 'beam',
+  lance: 'beam', sniper: 'beam',
 };
 export const hitSound = (src) => `hit_${HIT_FAMILY[src] ?? 'shot'}`;
 // 其他遊戲事件 → 聲音。沒列的事件不發聲

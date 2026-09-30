@@ -524,6 +524,75 @@ const WEAPONS = {
       { dmg: 13, cd: 3.0, max: 3, life: 11, fireCd: 0.42, range: 280, shots: 2 },
     ],
   },
+  // ---- M8 第四輪新武器：每一把的「形態」（從哪裡出手、打到的形狀、怎麼動、瞄誰、對怪做什麼）都和既有的不同，
+  //      tools/weapon-form.mjs 用實際模擬逐項驗證（不是看形容詞）。 ----
+  slash: { // 劍氣：一道橫向的光弧往前飛，越飛越寬——打「一片往外擴的帶狀」，不是一條線、也不是一個點
+    name: '裂光斬', color: '#c9f6ff', kind: 'slash',
+    desc: ['朝最近的敵人揮出劍氣，往前飛並越飛越寬，沿路的怪都會被斬中', '一次揮出兩道', '傷害 +40%', '揮得更快、劍氣更寬', '一次揮出三道、傷害 +15%'],
+    // M8 第四輪：第一版傷害 24／34／40，單武器測試在均勻抽的對照組是中位數 1.59 倍（加權後的正式設定被 600 分的滿分蓋住、看不出來），調低約 17%
+    lv: [
+      { dmg: 20, cd: 1.3,  count: 1, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 20, cd: 1.3,  count: 2, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 28, cd: 1.3,  count: 2, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 28, cd: 1.1,  count: 2, speed: 340, range: 270, w0: 16, w1: 58 },
+      { dmg: 32, cd: 1.1,  count: 3, speed: 340, range: 270, w0: 16, w1: 58 },
+    ],
+  },
+  vortex: { // 黑洞：丟到怪群裡張開，把周圍的怪往中心吸、持續傷害，最後炸開——唯一會把怪「拉近」的武器
+    name: '蝕光井', color: '#b48cff', kind: 'vortex',
+    desc: ['朝敵人丟出一口光井，把周圍的怪吸往中心並持續傷害，最後炸開', '吸力與範圍變大', '傷害 +50%', '一次丟兩口', '持續更久、炸開傷害大增'],
+    lv: [
+      { dmg: 5, tick: 0.3, cd: 4.2, r: 70, pull: 70,  dur: 1.8, burst: 26, count: 1 },
+      { dmg: 5, tick: 0.3, cd: 4.2, r: 84, pull: 90,  dur: 1.8, burst: 26, count: 1 },
+      { dmg: 8, tick: 0.3, cd: 4.2, r: 84, pull: 90,  dur: 1.8, burst: 38, count: 1 },
+      { dmg: 8, tick: 0.3, cd: 4.0, r: 84, pull: 90,  dur: 1.8, burst: 38, count: 2 },
+      { dmg: 9, tick: 0.3, cd: 4.0, r: 88, pull: 100, dur: 2.3, burst: 60, count: 2 },
+    ],
+  },
+  wall: { // 推進光牆：一面光牆從身邊往前推，把碰到的怪一路推著走——不是往外震開（燈鐘），是整排「帶著走」
+    name: '推光壁', color: '#ffe6b0', kind: 'wall',
+    desc: ['朝敵人推出一面光牆，碰到的怪會被一路推著走', '傷害 +40%', '光牆更寬', '推得更快、前後各推一面', '推得更遠、傷害 +30%'],
+    lv: [
+      { dmg: 20, cd: 2.4, len: 44, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.4, len: 44, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.4, len: 60, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.0, len: 60, speed: 240, range: 230, walls: 2 },
+      { dmg: 36, cd: 2.0, len: 64, speed: 240, range: 290, walls: 2 },
+    ],
+  },
+  sniper: { // 遠星：專挑射程內「最遠」的怪——其他武器都先打近的，這把先清遠處的射手與精英
+    name: '遠星銃', color: '#9fb8ff', kind: 'sniper',
+    desc: ['瞄準射程內最遠的敵人，一槍命中並在落點小範圍炸開', '傷害 +35%', '一次打兩個目標', '射得更快', '一次打三個目標、傷害 +30%'],
+    lv: [
+      { dmg: 52, cd: 1.4, range: 420, shots: 1, splash: 26 },
+      { dmg: 70, cd: 1.4, range: 420, shots: 1, splash: 26 },
+      { dmg: 70, cd: 1.4, range: 420, shots: 2, splash: 26 },
+      { dmg: 70, cd: 1.1, range: 420, shots: 2, splash: 30 },
+      { dmg: 92, cd: 1.1, range: 420, shots: 3, splash: 32 },
+    ],
+  },
+  trail: { // 燼痕：走過的地方留下燃燒的痕跡，一段時間內持續燒——出手的位置是「你剛走過的路」，不是你現在站的地方
+    name: '燼痕', color: '#ff7a3c', kind: 'trail',
+    desc: ['走過的地方留下燃燒的燼痕，踩進去的怪持續受傷', '燼痕留得更久', '傷害 +50%', '燼痕更寬', '留得更久、傷害 +30%'],
+    lv: [
+      { dmg: 7,  tick: 0.4, r: 22, life: 2.0, step: 26 },
+      { dmg: 7,  tick: 0.4, r: 22, life: 2.6, step: 26 },
+      { dmg: 11, tick: 0.4, r: 22, life: 2.6, step: 26 },
+      { dmg: 11, tick: 0.4, r: 28, life: 2.6, step: 28 },
+      { dmg: 14, tick: 0.4, r: 28, life: 3.2, step: 28 },
+    ],
+  },
+  ricochet: { // 折光彈：碰到畫面邊緣會反彈——子彈在畫面裡來回穿梭，打的是「整個畫面」
+    name: '折光彈', color: '#9ffff0', kind: 'ricochet',
+    desc: ['射出光彈，碰到畫面邊緣會反彈，在畫面裡來回穿梭', '一次射兩發', '傷害 +40%、多反彈一次', '射得更快、多穿透一隻', '一次射三發、傷害 +20%'],
+    lv: [
+      { dmg: 15, cd: 1.3, shots: 1, speed: 360, bounces: 3, pierce: 2 },
+      { dmg: 15, cd: 1.3, shots: 2, speed: 360, bounces: 3, pierce: 2 },
+      { dmg: 21, cd: 1.3, shots: 2, speed: 360, bounces: 4, pierce: 2 },
+      { dmg: 21, cd: 1.0, shots: 2, speed: 380, bounces: 4, pierce: 3 },
+      { dmg: 25, cd: 1.0, shots: 3, speed: 380, bounces: 4, pierce: 3 },
+    ],
+  },
   // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
   starfall: {
     name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
@@ -538,13 +607,15 @@ const WEAPONS = {
   },
   twinblade: {
     name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
-    desc: ['一開始就同時擲出兩把大光刃', '傷害 +30%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
+    // M8 第四輪：升級選項加權（CHOICE）讓每把武器都更快升滿，其他武器單武器分數平均 +54%，雙刃只 +22%——它一開局就強、每升一級卻加得少。
+    // 所以調的是「升級的成長」（第 2～5 級與共鳴），不是第 1 級。
+    desc: ['一開始就同時擲出兩把大光刃', '傷害 +40%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +20%'],
     lv: [
-      { dmg: 18, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
-      { dmg: 23, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
-      { dmg: 23, cd: 1.0, count: 3, range: 240, speed: 420, size: 17 },
-      { dmg: 23, cd: 0.9, count: 3, range: 240, speed: 430, size: 17 },
-      { dmg: 26, cd: 0.9, count: 4, range: 250, speed: 450, size: 19 },
+      { dmg: 18, cd: 1.0,  count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 25, cd: 1.0,  count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 25, cd: 1.0,  count: 3, range: 245, speed: 420, size: 17 },
+      { dmg: 27, cd: 0.85, count: 3, range: 245, speed: 440, size: 18 },
+      { dmg: 32, cd: 0.85, count: 4, range: 255, speed: 460, size: 19 },
     ],
   },
   emberbow: {
@@ -581,6 +652,19 @@ const RESONANCES = {
                stats: { dmg: 42, cd: 1.3, radius: 150, push: 140 } },
   sentry:    { needs: 'wick',  name: '燈塔群',   desc: '可同時立起五座燈塔，每座三連發、射得更快更遠',
                stats: { dmg: 16, cd: 2.4, max: 5, life: 12, fireCd: 0.34, range: 320, shots: 3, pierce: 2 } },
+  // M8 第四輪新武器：沿用既有的四種增幅（四種增幅剛好填滿四個被動欄，配對永遠不會卡在「抽不到那個被動」）
+  slash:     { needs: 'lens',  name: '天裂',     desc: '一次揮出三道巨大的劍氣，飛得更遠、寬到橫掃半個畫面',
+               stats: { dmg: 58, cd: 0.8, count: 3, speed: 380, range: 340, w0: 20, w1: 84 } },
+  vortex:    { needs: 'stone', name: '蝕星',     desc: '三口巨大的光井同時張開，吸力極強，炸開時傷害驚人',
+               stats: { dmg: 12, tick: 0.25, cd: 3.4, r: 110, pull: 150, dur: 2.4, burst: 90, count: 3 } },
+  wall:      { needs: 'ember', name: '晨壁',     desc: '四面光牆同時往四方推出，又寬又遠',
+               stats: { dmg: 48, cd: 1.7, len: 80, speed: 260, range: 320, walls: 4 } },
+  sniper:    { needs: 'wick',  name: '天狼',     desc: '一次狙擊四個最遠的目標，落點大爆炸',
+               stats: { dmg: 140, cd: 0.8, range: 460, shots: 4, splash: 48 } },
+  trail:     { needs: 'ember', name: '燎原',     desc: '燼痕又寬又久，踩進去的怪大幅減速',
+               stats: { dmg: 22, tick: 0.35, r: 36, life: 3.6, step: 32, slow: 0.45 } },
+  ricochet:  { needs: 'stone', name: '萬華鏡',   desc: '四發光彈在畫面裡反彈六次，每次反彈都分出一道碎光',
+               stats: { dmg: 30, cd: 0.8, shots: 4, speed: 420, bounces: 6, pierce: 4, split: 1 } },
   // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
   // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
   // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
@@ -603,7 +687,7 @@ const RESONANCES = {
   starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
                stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35 } },
   twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
-               stats: { dmg: 28, cd: 0.8, count: 4, range: 270, speed: 480, size: 20 } },
+               stats: { dmg: 34, cd: 0.75, count: 4, range: 275, speed: 490, size: 21 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 14, burnT: 3.5 } }, // M8：燃燒 16 → 14（脹孢囊變快變多後，它的燃燒特別剋脹孢囊，單武器測試 1.50 倍碰到專屬上限）
 };
@@ -933,6 +1017,9 @@ const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速', magn
 
 const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 const SLOTS = { weapon: 4, passive: 4 };
+// 升級選項的抽法（M8 第四輪：武器從 12 把變 18 把，均勻抽的話「新武器卡」會擠掉身上東西的升級，組建更難完成）：
+// 身上已有的（武器升級、被動升級）權重 held，新的（新武器、新被動）權重 fresh；一次三張裡新武器卡最多 maxNewWeapon 張。
+const CHOICE = { held: 2, fresh: 1, maxNewWeapon: 1 };
 const MAX_LV = 5;
 
 // ---- 商城（不接任何付款；所有價格都是遊戲內貨幣） ----
@@ -977,7 +1064,7 @@ const WEAPON_GACHA = {
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
+return { WEAPONS, START_WEAPON, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, CHOICE, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -1018,7 +1105,7 @@ const __m_sim_js = (() => {
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE } = __m_content_js;
 const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -1081,6 +1168,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       vx: 0, vy: 0, onIce: false, slowT: 0, slowK: 0, // 冰面慣性、霜冰減速
     },
     enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
+    slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -1162,9 +1250,20 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     return { ...o, name: def.name, color: def.color, icon: o.id, label: o.from === 0 ? '新！' : `Lv ${o.from} → ${o.from + 1}`, desc, hint, reso };
   }
   function rollChoices() {
-    const pool = options();
+    // 加權、不放回地抽三張（CHOICE）：身上已有的優先，新武器卡最多 maxNewWeapon 張
+    const pool = options(), weight = (o) => (o.kind === 'wup' || o.kind === 'pup' ? CHOICE.held : CHOICE.fresh);
     const picked = [];
-    while (picked.length < 3 && pool.length) picked.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+    let newW = 0;
+    while (picked.length < 3) {
+      const cand = newW >= CHOICE.maxNewWeapon ? pool.filter((o) => o.kind !== 'wnew') : pool;
+      if (!cand.length) break;
+      let total = 0; for (const o of cand) total += weight(o);
+      let x = rand() * total, pickI = cand.length - 1;
+      for (let i = 0; i < cand.length; i++) { x -= weight(cand[i]); if (x < 0) { pickI = i; break; } }
+      const o = cand[pickI];
+      pool.splice(pool.indexOf(o), 1); picked.push(o);
+      if (o.kind === 'wnew') newW++;
+    }
     if (picked.length < 3) picked.push({ kind: 'heal', id: 'heal', from: 0 });
     return picked.map(describe);
   }
@@ -1620,7 +1719,166 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     }
     s.sentries = s.sentries.filter((q) => q.life > 0 && p.weapons.includes(q.src));
   }
-  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon, lance: lanceWeapon, pulse: pulseWeapon, sentry: sentryWeapon };
+  // ---- M8 第四輪新武器（每一把的「形態」由 tools/weapon-form.mjs 實際模擬驗證） ----
+  // 裂光斬：劍氣從玩家往目標方向飛，是一段「垂直於前進方向」的光弧，半寬從 w0 隨飛行距離線性變到 w1；每道劍氣對每隻怪只斬一次
+  function slashWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.count; i++) {
+      const a = base + (i - (st.count - 1) / 2) * 0.5;
+      s.slashes.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 0, st, hit: new Set(), src: w.id, evo: !!w.evo });
+    }
+  }
+  const slashHalf = (q) => q.st.w0 + (q.st.w1 - q.st.w0) * Math.min(1, q.d / q.st.range);
+  function updateSlashes(dt) {
+    for (const q of s.slashes) {
+      const prev = q.d; q.d += q.st.speed * dt;
+      const half = slashHalf(q);
+      dmgSrc = q.src;
+      for (const e of s.enemies) { // 掃過的帶狀區域：前進方向上介於上一幀與這一幀之間（含怪的半徑），側向在半寬之內
+        if (e.hp <= 0 || q.hit.has(e)) continue;
+        const rx = e.x - q.x0, ry = e.y - q.y0, along = rx * q.dx + ry * q.dy;
+        if (along < prev - e.r - 6 || along > q.d + e.r + 6 || Math.abs(rx * q.dy - ry * q.dx) > half + e.r) continue;
+        q.hit.add(e); damage(e, q.st.dmg, q.dx, q.dy);
+      }
+    }
+    s.slashes = s.slashes.filter((q) => q.d < q.st.range);
+  }
+  // 蝕光井：丟到最近的敵人所在處（飛行 0.25 秒），張開 dur 秒：範圍內的怪（守衛除外）每秒往中心移動 pull／質量、每 tick 受傷；結束時炸開
+  function vortexWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const used = new Set([target]);
+    for (let i = 0; i < st.count; i++) {
+      const t = i === 0 ? target : nearest(target.x, target.y, 400, used) ?? target;
+      used.add(t);
+      s.vortices.push({ x: p.x, y: p.y, tx: t.x, ty: t.y, fly: 0.25, t: 0, tick: 0, st, src: w.id, evo: !!w.evo });
+    }
+  }
+  function updateVortices(dt) {
+    for (const v of s.vortices) {
+      if (v.fly > 0) { const k = Math.min(1, dt / v.fly); v.x += (v.tx - v.x) * k; v.y += (v.ty - v.y) * k; v.fly -= dt; continue; }
+      const st = v.st, R = st.r;
+      v.t += dt; v.tick -= dt;
+      const hurt = v.tick <= 0; if (hurt) v.tick = st.tick;
+      dmgSrc = v.src;
+      near(v.x, v.y, (e) => {
+        if (e.hp <= 0) return;
+        const dx = v.x - e.x, dy = v.y - e.y, d = Math.hypot(dx, dy);
+        if (d > R + e.r) return;
+        if (!isBoss(e.kind) && d > 4) { const m = Math.min(d - 2, st.pull / e.mass * dt); e.x += dx / d * m; e.y += dy / d * m; }
+        if (hurt) damage(e, st.dmg, 0, 0);
+      }, Math.ceil(R / CELL) + 1);
+      if (v.t >= st.dur) {
+        near(v.x, v.y, (e) => { if (e.hp > 0 && (e.x - v.x) ** 2 + (e.y - v.y) ** 2 < (R + e.r) ** 2) damage(e, st.burst, 0, 0); }, Math.ceil(R / CELL) + 1);
+        s.events.push({ type: 'vortexBurst', x: v.x, y: v.y, r: R, evo: v.evo });
+        v.done = true;
+      }
+    }
+    s.vortices = s.vortices.filter((v) => !v.done);
+  }
+  // 推光壁：一面垂直於前進方向、半長 len 的光牆，從玩家往目標推 range 遠；牆前緣碰到的怪受傷一次，之後（守衛除外）被牆帶著走
+  function wallWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.walls; i++) {
+      const a = base + (i / st.walls) * TAU;
+      s.walls.push({ x0: p.x, y0: p.y, dx: Math.cos(a), dy: Math.sin(a), d: 12, st, hit: new Set(), src: w.id, evo: !!w.evo });
+    }
+  }
+  function updateWalls(dt) {
+    for (const q of s.walls) {
+      q.d += q.st.speed * dt;
+      dmgSrc = q.src;
+      for (const e of s.enemies) {
+        if (e.hp <= 0) continue;
+        const rx = e.x - q.x0, ry = e.y - q.y0, along = rx * q.dx + ry * q.dy;
+        if (along < q.d - 40 || along > q.d + e.r + 6 || Math.abs(rx * q.dy - ry * q.dx) > q.st.len + e.r) continue;
+        if (!q.hit.has(e)) { q.hit.add(e); damage(e, q.st.dmg, 0, 0); }
+        if (e.hp > 0 && !isBoss(e.kind)) { const k = q.d + e.r + 6 - along; e.x += q.dx * k; e.y += q.dy * k; } // 貼著牆前緣
+      }
+    }
+    s.walls = s.walls.filter((q) => q.d < q.st.range);
+  }
+  // 遠星銃：瞄準射程內「最遠」的 shots 隻（瞬間命中），落點 splash 範圍內的怪也受傷
+  function sniperWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const R = Math.min(st.range, aimRange), R2 = R * R, far = [];
+    for (const e of s.enemies) {
+      if (e.hp <= 0) continue;
+      const d2 = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      if (d2 > R2) continue;
+      far.push([d2, e]);
+    }
+    if (!far.length) return;
+    w.cd = st.cd * p.cdMul;
+    far.sort((a, b) => b[0] - a[0]);
+    for (let i = 0; i < Math.min(st.shots, far.length); i++) {
+      const t = far[i][1], tx = t.x, ty = t.y;
+      damage(t, st.dmg, 0, 0);
+      near(tx, ty, (e) => { if (e !== t && e.hp > 0 && (e.x - tx) ** 2 + (e.y - ty) ** 2 < (st.splash + e.r) ** 2) damage(e, st.dmg * 0.4, 0, 0); });
+      s.events.push({ type: 'snipe', x: p.x, y: p.y, tx, ty, r: st.splash, evo: !!w.evo });
+    }
+  }
+  // 燼痕：玩家每走 step 距離，在腳下留一塊燼痕（存在 life 秒）；每 tick 燒到範圍內的怪。站著不動不會多留
+  function trailWeapon(w, st, dt) {
+    if (w.lastX === undefined || (p.x - w.lastX) ** 2 + (p.y - w.lastY) ** 2 >= st.step * st.step) {
+      w.lastX = p.x; w.lastY = p.y;
+      s.patches.push({ x: p.x, y: p.y, r: st.r, life: st.life, max: st.life, tick: 0, st, src: w.id, evo: !!w.evo });
+    }
+  }
+  function updatePatches(dt) {
+    for (const q of s.patches) {
+      q.life -= dt; q.tick -= dt;
+      if (q.tick > 0) continue;
+      q.tick = q.st.tick;
+      dmgSrc = q.src;
+      near(q.x, q.y, (e) => {
+        if (e.hp <= 0 || (e.x - q.x) ** 2 + (e.y - q.y) ** 2 > (q.r + e.r) ** 2) return;
+        damage(e, q.st.dmg, 0, 0);
+        if (q.st.slow) { e.slowT = 0.6; e.slow = q.st.slow; }
+      }, Math.ceil(q.r / CELL) + 1);
+    }
+    s.patches = s.patches.filter((q) => q.life > 0);
+  }
+  // 折光彈：一般子彈，但碰到「畫面」邊緣（以玩家為中心的 VW × vh）會反彈 bounces 次；反彈後可以再打到同一隻
+  function ricochetWeapon(w, st, dt) {
+    w.cd -= dt;
+    if (w.cd > 0) return;
+    const target = nearest(p.x, p.y, aimRange);
+    if (!target) return;
+    w.cd = st.cd * p.cdMul;
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    for (let i = 0; i < st.shots; i++) {
+      const a = base + (i - (st.shots - 1) / 2) * 0.3;
+      s.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: 5, dmg: st.dmg, pierce: st.pierce, hit: new Set(), shard: 0, bounce: st.bounces, split: st.split || 0, rico: true, src: w.id, evo: !!w.evo });
+    }
+  }
+  function bounceOffScreen(b) {
+    const hx = VW / 2 - 4, hy = s.vh / 2 - 4, rx = b.x - p.x, ry = b.y - p.y;
+    let hit = false;
+    if ((rx > hx && b.vx > 0) || (rx < -hx && b.vx < 0)) { b.vx = -b.vx; hit = true; }
+    if ((ry > hy && b.vy > 0) || (ry < -hy && b.vy < 0)) { b.vy = -b.vy; hit = true; }
+    if (!hit) return;
+    if (b.bounce-- <= 0) { b.life = 0; return; }
+    b.hit = new Set(); count('ricochetBounces');
+    s.events.push({ type: 'bounce', x: b.x, y: b.y, evo: b.evo });
+    for (let i = 0; i < b.split; i++) { const a = Math.atan2(b.vy, b.vx) + (i % 2 ? -0.6 : 0.6); s.bullets.push({ x: b.x, y: b.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, life: 0.5, dmg: b.dmg * 0.5, pierce: 1, hit: new Set(), shard: 0, src: 'shard' }); }
+  }
+  const WEAPON_FN = { bolt: fireBolt, orbit: orbitWeapon, aura: auraWeapon, chain: chainWeapon, boomerang: boomerangWeapon, mortar: mortarWeapon, flame: flameWeapon, wisps: wispsWeapon, mines: minesWeapon, lance: lanceWeapon, pulse: pulseWeapon, sentry: sentryWeapon,
+    slash: slashWeapon, vortex: vortexWeapon, wall: wallWeapon, sniper: sniperWeapon, trail: trailWeapon, ricochet: ricochetWeapon };
 
   // ---------- 敵人行為 ----------
   function shoot(e, ux, uy, speed, dmg, r, spread = [0], extra = null) {
@@ -1914,6 +2172,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     // 武器
     for (const w of p.weapons) { dmgSrc = w.id; WEAPON_FN[WEAPONS[w.id].kind ?? w.id](w, weaponStats(w), dt); }
     dmgSrc = null; updateStrikes(dt); updateMines(dt); updateSentries(dt);
+    updateSlashes(dt); updateVortices(dt); updateWalls(dt); updatePatches(dt); dmgSrc = null;
 
     // 玩家子彈
     for (const b of s.bullets) {
@@ -1922,6 +2181,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
         else { const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1; b.vx = dx / d * b.speed * 1.1; b.vy = dy / d * b.speed * 1.1; if (d < 16) b.life = 0; }
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      if (b.rico) bounceOffScreen(b);
       if (b.life <= 0) continue;
       if (!b.boom && pillarAt(b.x, b.y)) { b.life = 0; s.events.push({ type: 'spark', x: b.x, y: b.y }); continue; }
       near(b.x, b.y, (e) => {
@@ -2064,7 +2324,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   const w0 = addWeapon(WEAPONS[startWeapon] ? startWeapon : START_WEAPON);
   if (startBonus?.lv > 1) w0.lv = Math.min(MAX_LV, startBonus.lv);
   if (startBonus?.passive && PASSIVES[startBonus.passive]) { p.passives[startBonus.passive] = 1; recalc(); p.hp = p.maxHp; }
-  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe };
+  return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe, rollChoices };
 }
 
 return { VW, makeRng, TERRAIN, ventState, terrainCell, terrainIn, createSim };
@@ -2357,6 +2617,31 @@ function makeIcon(id, color, size = 64) {
       P([[16, -16], [6, -13], [13, -6]]); g.fill();
       g.fillStyle = '#fff3c0'; for (const k of [0, 6]) { P([[-15 + k, 15 - k], [-19 + k, 7 - k], [-11 + k, 11 - k]]); g.fill(); }
       break;
+    case 'slash': // 新月形的劍氣
+      g.beginPath(); g.moveTo(-6, -17); g.quadraticCurveTo(18, 0, -6, 17); g.quadraticCurveTo(6, 0, -6, -17); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-6, -17); g.quadraticCurveTo(18, 0, -6, 17); g.stroke();
+      break;
+    case 'vortex': // 漩渦：深色的洞＋三道旋臂
+      g.lineWidth = 3; for (let i = 0; i < 3; i++) { const a = i * 2.094; g.beginPath(); g.arc(0, 0, 14, a, a + 1.6); g.stroke(); g.beginPath(); g.arc(0, 0, 8, a + 1, a + 2.4); g.stroke(); }
+      g.fillStyle = '#1a0a2e'; g.beginPath(); g.arc(0, 0, 5, 0, 7); g.fill();
+      break;
+    case 'wall': // 一面光牆＋往前的箭頭
+      g.fillRect(-4, -16, 6, 32);
+      g.lineWidth = 2.5; for (const y of [-8, 8]) { P([[6, y], [15, y]]); g.stroke(); P([[12, y - 3], [16, y], [12, y + 3]]); g.stroke(); }
+      break;
+    case 'sniper': // 準星
+      g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 11, 0, 7); g.stroke();
+      for (const [a, b] of [[[0, -17], [0, -6]], [[0, 6], [0, 17]], [[-17, 0], [-6, 0]], [[6, 0], [17, 0]]]) { P([a, b]); g.stroke(); }
+      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, 2.5, 0, 7); g.fill();
+      break;
+    case 'trail': // 一串由小到大的火痕
+      for (const [x, y, r] of [[-12, 10, 3.5], [-4, 3, 5], [7, -5, 7]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      g.fillStyle = '#fff3c0'; g.beginPath(); g.arc(7, -5, 3, 0, 7); g.fill();
+      break;
+    case 'ricochet': // 折線彈道＋菱形光片
+      g.lineWidth = 2.5; P([[-16, 12], [-4, -12], [8, 8], [15, -4]]); g.stroke();
+      g.fillStyle = '#ffffff'; P([[15, -9], [19, -4], [15, 1], [11, -4]]); g.closePath(); g.fill();
+      break;
     case 'heal':
       g.fillRect(-4, -18, 8, 8);
       g.beginPath(); g.moveTo(-5, -10); g.lineTo(5, -10); g.lineTo(14, 8); g.quadraticCurveTo(14, 16, 6, 16); g.lineTo(-6, 16); g.quadraticCurveTo(-14, 16, -14, 8); g.closePath(); g.fill();
@@ -2463,11 +2748,11 @@ function createRenderer(chapter = CHAPTER1) {
     aura: glow('rgba(255,170,80,0.5)', 64), boss: glow('rgba(255,80,190,0.8)', 90),
     crystal: glow('rgba(200,150,255,0.7)', 40), blast: glow('rgba(255,180,90,1)', 20), poison: glow('rgba(140,255,120,0.9)', 16),
     frost: glow('rgba(170,230,255,1)', 16), lava: glow('rgba(255,140,50,1)', 48),
-    evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16),
+    evo: glow('rgba(255,225,130,1)', 22), sentry: glow('rgba(150,255,180,1)', 22), lanceG: glow('rgba(150,210,255,1)', 16), rico: glow('rgba(150,255,235,1)', 12), void: glow('rgba(180,140,255,1)', 16),
     shade: glow('rgba(5,4,13,0.55)', 28), blade: glow('rgba(150,255,220,1)', 18), star2: glow('rgba(255,150,240,1)', 24), wisp: glow('rgba(230,255,120,1)', 12), lantern: glow('rgba(255,210,90,1)', 14), ember: glow('rgba(255,120,50,1)', 14),
   };
   for (const k of Object.keys(AFFIX_COLOR)) G['elite_' + k] = glow(AFFIX_COLOR[k], 48);
-  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
+  const fx = { parts: [], texts: [], arcs: [], rings: [], banners: [], lances: [], snipes: [], shake: 0, levelFlash: 0, hurtFlash: 0, whiteFlash: 0 };
   const MAX_PARTS = 350; // 粒子上限：量測顯示重場面的尖峰幀主要來自大量加亮粒子
   // 發光預算（M8）：加亮疊加（'lighter'）的裝飾光——共鳴金光、粒子、光屑的光暈——同一幀畫得越多，就一起按比例調淡，
   // 讓「疊在一起的總亮度」有上限；數量在預算內時（一般場面）完全不變。
@@ -2533,6 +2818,9 @@ function createRenderer(chapter = CHAPTER1) {
         case 'arc': fx.arcs.push({ pts: e.pts, life: 0.18, evo: e.evo }); break;
         case 'aura': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.3, color: e.evo ? 'sun' : undefined }); break;
         case 'lance': fx.lances.push({ x: e.x, y: e.y, ang: e.ang, len: e.len, w: e.w, evo: e.evo, life: 0.22 }); break;
+        case 'snipe': fx.snipes.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, r: e.r, evo: e.evo, life: 0.25 }); burst(e.tx, e.ty, e.evo ? 8 : 5, e.evo ? G.evo : G.lanceG, 160, 0.3, 9); break;
+        case 'vortexBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'void' }); burst(e.x, e.y, e.evo ? 18 : 12, e.evo ? G.evo : G.void, 220, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
+        case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
@@ -2557,8 +2845,8 @@ function createRenderer(chapter = CHAPTER1) {
     for (const q of fx.texts) { q.y -= 30 * dt; q.life -= dt; }
     fx.texts = fx.texts.filter((q) => q.life > 0);
     if (fx.texts.length > 80) fx.texts.splice(0, fx.texts.length - 80);
-    for (const list of [fx.arcs, fx.rings, fx.banners, fx.lances]) for (const q of list) q.life -= dt;
-    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0); fx.lances = fx.lances.filter((q) => q.life > 0);
+    for (const list of [fx.arcs, fx.rings, fx.banners, fx.lances, fx.snipes]) for (const q of list) q.life -= dt;
+    fx.arcs = fx.arcs.filter((q) => q.life > 0); fx.rings = fx.rings.filter((q) => q.life > 0); fx.banners = fx.banners.filter((q) => q.life > 0); fx.lances = fx.lances.filter((q) => q.life > 0); fx.snipes = fx.snipes.filter((q) => q.life > 0);
   }
 
   // prof：效能量測模式（src/perf.js）才會傳入，每畫完一段呼叫 lap 記錄耗時；平常是 null，不花成本
@@ -2741,6 +3029,25 @@ function createRenderer(chapter = CHAPTER1) {
       g.fillStyle = evo ? '#8a6a2a' : '#2a5a3a'; g.beginPath(); g.moveTo(q.x - 6, q.y + 6); g.lineTo(q.x - 3, q.y - 10); g.lineTo(q.x + 3, q.y - 10); g.lineTo(q.x + 6, q.y + 6); g.closePath(); g.fill();
       g.fillStyle = evo ? '#fff0b0' : '#d8ffe0'; g.fillRect(q.x - 3.5, q.y - 15, 7, 5);
     }
+    // M8 第四輪：地上的燼痕（暗紅底＋閃爍的火點）與蝕光井（深色的洞＋旋轉的光弧）。
+    // 大面積一律用一般疊加（不加亮）：大片加亮會讓整個畫面發白、蓋掉角色（glow-check 量的就是這件事）
+    for (const q of s.patches) {
+      if (!onScreen(q.x, q.y, q.r)) continue;
+      const k = Math.min(1, q.life / 0.6, (q.max - q.life) / 0.15 + 0.3);
+      g.fillStyle = q.evo ? `rgba(150,60,20,${0.4 * k})` : `rgba(110,35,15,${0.38 * k})`; g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = q.evo ? `rgba(255,200,110,${0.7 * k})` : `rgba(255,120,50,${0.6 * k})`;
+      for (let i = 0; i < 3; i++) { const a = q.x * 0.7 + i * 2.1 + T * 3, rr = q.r * (0.3 + 0.2 * i); g.fillRect(q.x + Math.cos(a) * rr - 1.5, q.y + Math.sin(a) * rr - 1.5, 3, 3); }
+    }
+    for (const v of s.vortices) {
+      if (!onScreen(v.x, v.y, v.st.r)) continue;
+      if (v.fly > 0) { g.fillStyle = v.evo ? '#ffe6a0' : '#d8c0ff'; g.beginPath(); g.arc(v.x, v.y, 5, 0, Math.PI * 2); g.fill(); continue; }
+      const R = v.st.r * Math.min(1, v.t / 0.2 + 0.2), spin = T * (v.evo ? 7 : 5);
+      const hole = g.createRadialGradient(v.x, v.y, 2, v.x, v.y, R);
+      hole.addColorStop(0, 'rgba(8,2,20,0.85)'); hole.addColorStop(0.55, v.evo ? 'rgba(70,40,20,0.45)' : 'rgba(50,20,90,0.45)'); hole.addColorStop(1, 'rgba(40,10,70,0)');
+      g.fillStyle = hole; g.beginPath(); g.arc(v.x, v.y, R, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = v.evo ? 'rgba(255,215,130,0.8)' : 'rgba(190,150,255,0.75)'; g.lineWidth = 2;
+      for (let i = 0; i < 3; i++) { const a = spin + i * 2.094, rr = R * (0.45 + 0.18 * i); g.beginPath(); g.arc(v.x, v.y, rr, a, a + 1.4); g.stroke(); }
+    }
     // 預警：衝刺／撲擊的路線、自爆範圍、瞬移落點
     for (const e of s.enemies) {
       if (e.tele) {
@@ -2821,6 +3128,13 @@ function createRenderer(chapter = CHAPTER1) {
       }
       if (b.sentry) { g.drawImage(b.evo ? G.evo : G.sentry, b.x - 10, b.y - 10, 20, 20); g.strokeStyle = b.evo ? 'rgba(255,240,190,0.95)' : 'rgba(200,255,210,0.95)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02); g.stroke(); continue; }
       if (b.star) { g.drawImage(G.star, b.x - 14, b.y - 14); g.fillStyle = '#eaffff'; g.beginPath(); g.arc(b.x, b.y, 3, 0, 7); g.fill(); continue; }
+      if (b.rico) { // 折光彈：菱形光片＋長拖尾（反彈時的折線看得出來）
+        g.drawImage(G.rico, b.x - 12, b.y - 12, 24, 24);
+        g.strokeStyle = b.evo ? 'rgba(255,240,190,0.85)' : 'rgba(170,255,240,0.8)'; g.lineWidth = 2; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.06, b.y - b.vy * 0.06); g.stroke();
+        g.save(); g.translate(b.x, b.y); g.rotate(Math.atan2(b.vy, b.vx)); g.fillStyle = b.evo ? '#fff6d0' : '#e0fff8';
+        g.beginPath(); g.moveTo(6, 0); g.lineTo(0, 3.5); g.lineTo(-6, 0); g.lineTo(0, -3.5); g.closePath(); g.fill(); g.restore();
+        continue;
+      }
       const k = b.big ? 1.8 : b.src === 'shard' ? 0.6 : 1;
       if (!OFF.has('glow')) g.drawImage(G.bolt, b.x - 14 * k, b.y - 14 * k, 28 * k, 28 * k);
       g.strokeStyle = b.big ? 'rgba(255,250,220,0.95)' : 'rgba(255,240,200,0.9)'; g.lineWidth = 3 * k;
@@ -2854,6 +3168,32 @@ function createRenderer(chapter = CHAPTER1) {
       g.fillStyle = l.evo ? 'rgba(255,250,220,0.95)' : 'rgba(225,245,255,0.95)'; g.fillRect(0, -l.w * 0.22, l.len, l.w * 0.44);
       g.restore();
     }
+    g.globalAlpha = 1;
+    // M8 第四輪：劍氣（往前凸的新月光弧，越飛越寬）、光牆（一道厚光帶）、遠星的彈道（細線＋落點圈）——一般疊加，不加亮
+    g.globalCompositeOperation = 'source-over';
+    for (const q of s.slashes) {
+      const half = q.st.w0 + (q.st.w1 - q.st.w0) * Math.min(1, q.d / q.st.range), cx = q.x0 + q.dx * q.d, cy = q.y0 + q.dy * q.d, fade = Math.min(1, q.d / 70, (q.st.range - q.d) / 60); // 從玩家身上長出來：剛出手時淡，不在角色周圍堆一片亮光（glow-check）
+      g.save(); g.translate(cx, cy); g.rotate(Math.atan2(q.dy, q.dx)); g.globalAlpha = fade;
+      g.fillStyle = q.evo ? 'rgba(255,215,130,0.5)' : 'rgba(150,225,255,0.45)';
+      g.beginPath(); g.moveTo(-6, -half); g.quadraticCurveTo(16, 0, -6, half); g.quadraticCurveTo(4, 0, -6, -half); g.fill();
+      g.strokeStyle = q.evo ? 'rgba(255,250,220,0.95)' : 'rgba(235,250,255,0.95)'; g.lineWidth = q.evo ? 3.5 : 2.5;
+      g.beginPath(); g.moveTo(-6, -half); g.quadraticCurveTo(16, 0, -6, half); g.stroke();
+      g.restore();
+    }
+    for (const q of s.walls) {
+      const cx = q.x0 + q.dx * q.d, cy = q.y0 + q.dy * q.d, L = q.st.len, fade = Math.min(1, q.d / 70, (q.st.range - q.d) / 50);
+      g.save(); g.translate(cx, cy); g.rotate(Math.atan2(q.dy, q.dx)); g.globalAlpha = fade;
+      g.fillStyle = q.evo ? 'rgba(255,210,120,0.35)' : 'rgba(255,230,170,0.3)'; g.fillRect(-14, -L, 14, L * 2);
+      g.fillStyle = q.evo ? 'rgba(255,245,200,0.95)' : 'rgba(255,245,215,0.9)'; g.fillRect(-2, -L, 4, L * 2);
+      g.restore();
+    }
+    for (const l of fx.snipes) {
+      g.globalAlpha = l.life / 0.25;
+      g.strokeStyle = l.evo ? 'rgba(255,230,150,0.9)' : 'rgba(170,195,255,0.9)'; g.lineWidth = l.evo ? 2.5 : 1.5;
+      g.beginPath(); g.moveTo(l.x, l.y); g.lineTo(l.tx, l.ty); g.stroke();
+      g.lineWidth = 2.5; g.beginPath(); g.arc(l.tx, l.ty, l.r * (1.2 - l.life / 0.25 * 0.5), 0, Math.PI * 2); g.stroke();
+    }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'lighter';
     for (const a of fx.arcs) {
       g.globalAlpha = a.life / 0.18;
       for (const [lw, col] of a.evo ? [[8, 'rgba(255,210,120,0.5)'], [3, 'rgba(255,250,225,1)']] : [[5, 'rgba(160,120,255,0.5)'], [2, 'rgba(235,225,255,1)']]) {
@@ -2876,7 +3216,7 @@ function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
@@ -4311,13 +4651,13 @@ const SFX = {
 };
 // 武器（與其他傷害來源）→ 命中音色。每一把武器都要有（meta-test 的母體檢查：WEAPONS 全部都在這張表裡，含對照組）
 const HIT_FAMILY = {
-  boomerang: 'slash', twinblade: 'slash',
-  bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot',
+  boomerang: 'slash', twinblade: 'slash', slash: 'slash', wall: 'slash',
+  bolt: 'shot', emberbow: 'shot', sentry: 'shot', shard: 'shot', ricochet: 'shot',
   chain: 'zap',
-  flame: 'fire', burn: 'fire',
-  orbit: 'soft', aura: 'soft', wisps: 'soft',
+  flame: 'fire', burn: 'fire', trail: 'fire',
+  orbit: 'soft', aura: 'soft', wisps: 'soft', vortex: 'soft',
   mortar: 'thump', starfall: 'thump', mines: 'thump', pulse: 'thump',
-  lance: 'beam',
+  lance: 'beam', sniper: 'beam',
 };
 const hitSound = (src) => `hit_${HIT_FAMILY[src] ?? 'shot'}`;
 // 其他遊戲事件 → 聲音。沒列的事件不發聲

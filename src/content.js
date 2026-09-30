@@ -137,6 +137,75 @@ export const WEAPONS = {
       { dmg: 13, cd: 3.0, max: 3, life: 11, fireCd: 0.42, range: 280, shots: 2 },
     ],
   },
+  // ---- M8 第四輪新武器：每一把的「形態」（從哪裡出手、打到的形狀、怎麼動、瞄誰、對怪做什麼）都和既有的不同，
+  //      tools/weapon-form.mjs 用實際模擬逐項驗證（不是看形容詞）。 ----
+  slash: { // 劍氣：一道橫向的光弧往前飛，越飛越寬——打「一片往外擴的帶狀」，不是一條線、也不是一個點
+    name: '裂光斬', color: '#c9f6ff', kind: 'slash',
+    desc: ['朝最近的敵人揮出劍氣，往前飛並越飛越寬，沿路的怪都會被斬中', '一次揮出兩道', '傷害 +40%', '揮得更快、劍氣更寬', '一次揮出三道、傷害 +15%'],
+    // M8 第四輪：第一版傷害 24／34／40，單武器測試在均勻抽的對照組是中位數 1.59 倍（加權後的正式設定被 600 分的滿分蓋住、看不出來），調低約 17%
+    lv: [
+      { dmg: 20, cd: 1.3,  count: 1, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 20, cd: 1.3,  count: 2, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 28, cd: 1.3,  count: 2, speed: 330, range: 260, w0: 14, w1: 46 },
+      { dmg: 28, cd: 1.1,  count: 2, speed: 340, range: 270, w0: 16, w1: 58 },
+      { dmg: 32, cd: 1.1,  count: 3, speed: 340, range: 270, w0: 16, w1: 58 },
+    ],
+  },
+  vortex: { // 黑洞：丟到怪群裡張開，把周圍的怪往中心吸、持續傷害，最後炸開——唯一會把怪「拉近」的武器
+    name: '蝕光井', color: '#b48cff', kind: 'vortex',
+    desc: ['朝敵人丟出一口光井，把周圍的怪吸往中心並持續傷害，最後炸開', '吸力與範圍變大', '傷害 +50%', '一次丟兩口', '持續更久、炸開傷害大增'],
+    lv: [
+      { dmg: 5, tick: 0.3, cd: 4.2, r: 70, pull: 70,  dur: 1.8, burst: 26, count: 1 },
+      { dmg: 5, tick: 0.3, cd: 4.2, r: 84, pull: 90,  dur: 1.8, burst: 26, count: 1 },
+      { dmg: 8, tick: 0.3, cd: 4.2, r: 84, pull: 90,  dur: 1.8, burst: 38, count: 1 },
+      { dmg: 8, tick: 0.3, cd: 4.0, r: 84, pull: 90,  dur: 1.8, burst: 38, count: 2 },
+      { dmg: 9, tick: 0.3, cd: 4.0, r: 88, pull: 100, dur: 2.3, burst: 60, count: 2 },
+    ],
+  },
+  wall: { // 推進光牆：一面光牆從身邊往前推，把碰到的怪一路推著走——不是往外震開（燈鐘），是整排「帶著走」
+    name: '推光壁', color: '#ffe6b0', kind: 'wall',
+    desc: ['朝敵人推出一面光牆，碰到的怪會被一路推著走', '傷害 +40%', '光牆更寬', '推得更快、前後各推一面', '推得更遠、傷害 +30%'],
+    lv: [
+      { dmg: 20, cd: 2.4, len: 44, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.4, len: 44, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.4, len: 60, speed: 210, range: 230, walls: 1 },
+      { dmg: 28, cd: 2.0, len: 60, speed: 240, range: 230, walls: 2 },
+      { dmg: 36, cd: 2.0, len: 64, speed: 240, range: 290, walls: 2 },
+    ],
+  },
+  sniper: { // 遠星：專挑射程內「最遠」的怪——其他武器都先打近的，這把先清遠處的射手與精英
+    name: '遠星銃', color: '#9fb8ff', kind: 'sniper',
+    desc: ['瞄準射程內最遠的敵人，一槍命中並在落點小範圍炸開', '傷害 +35%', '一次打兩個目標', '射得更快', '一次打三個目標、傷害 +30%'],
+    lv: [
+      { dmg: 52, cd: 1.4, range: 420, shots: 1, splash: 26 },
+      { dmg: 70, cd: 1.4, range: 420, shots: 1, splash: 26 },
+      { dmg: 70, cd: 1.4, range: 420, shots: 2, splash: 26 },
+      { dmg: 70, cd: 1.1, range: 420, shots: 2, splash: 30 },
+      { dmg: 92, cd: 1.1, range: 420, shots: 3, splash: 32 },
+    ],
+  },
+  trail: { // 燼痕：走過的地方留下燃燒的痕跡，一段時間內持續燒——出手的位置是「你剛走過的路」，不是你現在站的地方
+    name: '燼痕', color: '#ff7a3c', kind: 'trail',
+    desc: ['走過的地方留下燃燒的燼痕，踩進去的怪持續受傷', '燼痕留得更久', '傷害 +50%', '燼痕更寬', '留得更久、傷害 +30%'],
+    lv: [
+      { dmg: 7,  tick: 0.4, r: 22, life: 2.0, step: 26 },
+      { dmg: 7,  tick: 0.4, r: 22, life: 2.6, step: 26 },
+      { dmg: 11, tick: 0.4, r: 22, life: 2.6, step: 26 },
+      { dmg: 11, tick: 0.4, r: 28, life: 2.6, step: 28 },
+      { dmg: 14, tick: 0.4, r: 28, life: 3.2, step: 28 },
+    ],
+  },
+  ricochet: { // 折光彈：碰到畫面邊緣會反彈——子彈在畫面裡來回穿梭，打的是「整個畫面」
+    name: '折光彈', color: '#9ffff0', kind: 'ricochet',
+    desc: ['射出光彈，碰到畫面邊緣會反彈，在畫面裡來回穿梭', '一次射兩發', '傷害 +40%、多反彈一次', '射得更快、多穿透一隻', '一次射三發、傷害 +20%'],
+    lv: [
+      { dmg: 15, cd: 1.3, shots: 1, speed: 360, bounces: 3, pierce: 2 },
+      { dmg: 15, cd: 1.3, shots: 2, speed: 360, bounces: 3, pierce: 2 },
+      { dmg: 21, cd: 1.3, shots: 2, speed: 360, bounces: 4, pierce: 2 },
+      { dmg: 21, cd: 1.0, shots: 2, speed: 380, bounces: 4, pierce: 3 },
+      { dmg: 25, cd: 1.0, shots: 3, speed: 380, bounces: 4, pierce: 3 },
+    ],
+  },
   // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
   starfall: {
     name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
@@ -151,13 +220,15 @@ export const WEAPONS = {
   },
   twinblade: {
     name: '曦光雙刃', color: '#7affe0', kind: 'boomerang', exclusive: true,
-    desc: ['一開始就同時擲出兩把大光刃', '傷害 +30%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +30%'],
+    // M8 第四輪：升級選項加權（CHOICE）讓每把武器都更快升滿，其他武器單武器分數平均 +54%，雙刃只 +22%——它一開局就強、每升一級卻加得少。
+    // 所以調的是「升級的成長」（第 2～5 級與共鳴），不是第 1 級。
+    desc: ['一開始就同時擲出兩把大光刃', '傷害 +40%', '光刃 +1、飛得更遠', '擲得更快', '光刃 +1、傷害 +20%'],
     lv: [
-      { dmg: 18, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
-      { dmg: 23, cd: 1.0, count: 2, range: 210, speed: 400, size: 16 },
-      { dmg: 23, cd: 1.0, count: 3, range: 240, speed: 420, size: 17 },
-      { dmg: 23, cd: 0.9, count: 3, range: 240, speed: 430, size: 17 },
-      { dmg: 26, cd: 0.9, count: 4, range: 250, speed: 450, size: 19 },
+      { dmg: 18, cd: 1.0,  count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 25, cd: 1.0,  count: 2, range: 210, speed: 400, size: 16 },
+      { dmg: 25, cd: 1.0,  count: 3, range: 245, speed: 420, size: 17 },
+      { dmg: 27, cd: 0.85, count: 3, range: 245, speed: 440, size: 18 },
+      { dmg: 32, cd: 0.85, count: 4, range: 255, speed: 460, size: 19 },
     ],
   },
   emberbow: {
@@ -194,6 +265,19 @@ export const RESONANCES = {
                stats: { dmg: 42, cd: 1.3, radius: 150, push: 140 } },
   sentry:    { needs: 'wick',  name: '燈塔群',   desc: '可同時立起五座燈塔，每座三連發、射得更快更遠',
                stats: { dmg: 16, cd: 2.4, max: 5, life: 12, fireCd: 0.34, range: 320, shots: 3, pierce: 2 } },
+  // M8 第四輪新武器：沿用既有的四種增幅（四種增幅剛好填滿四個被動欄，配對永遠不會卡在「抽不到那個被動」）
+  slash:     { needs: 'lens',  name: '天裂',     desc: '一次揮出三道巨大的劍氣，飛得更遠、寬到橫掃半個畫面',
+               stats: { dmg: 58, cd: 0.8, count: 3, speed: 380, range: 340, w0: 20, w1: 84 } },
+  vortex:    { needs: 'stone', name: '蝕星',     desc: '三口巨大的光井同時張開，吸力極強，炸開時傷害驚人',
+               stats: { dmg: 12, tick: 0.25, cd: 3.4, r: 110, pull: 150, dur: 2.4, burst: 90, count: 3 } },
+  wall:      { needs: 'ember', name: '晨壁',     desc: '四面光牆同時往四方推出，又寬又遠',
+               stats: { dmg: 48, cd: 1.7, len: 80, speed: 260, range: 320, walls: 4 } },
+  sniper:    { needs: 'wick',  name: '天狼',     desc: '一次狙擊四個最遠的目標，落點大爆炸',
+               stats: { dmg: 140, cd: 0.8, range: 460, shots: 4, splash: 48 } },
+  trail:     { needs: 'ember', name: '燎原',     desc: '燼痕又寬又久，踩進去的怪大幅減速',
+               stats: { dmg: 22, tick: 0.35, r: 36, life: 3.6, step: 32, slow: 0.45 } },
+  ricochet:  { needs: 'stone', name: '萬華鏡',   desc: '四發光彈在畫面裡反彈六次，每次反彈都分出一道碎光',
+               stats: { dmg: 30, cd: 0.8, shots: 4, speed: 420, bounces: 6, pierce: 4, split: 1 } },
   // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
   // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
   // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
@@ -216,7 +300,7 @@ export const RESONANCES = {
   starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
                stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35 } },
   twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
-               stats: { dmg: 28, cd: 0.8, count: 4, range: 270, speed: 480, size: 20 } },
+               stats: { dmg: 34, cd: 0.75, count: 4, range: 275, speed: 490, size: 21 } },
   emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 14, burnT: 3.5 } }, // M8：燃燒 16 → 14（脹孢囊變快變多後，它的燃燒特別剋脹孢囊，單武器測試 1.50 倍碰到專屬上限）
 };
@@ -546,6 +630,9 @@ export const STAT_NAMES = { dmg: '傷害', maxHp: '最大生命', speed: '移速
 
 export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 export const SLOTS = { weapon: 4, passive: 4 };
+// 升級選項的抽法（M8 第四輪：武器從 12 把變 18 把，均勻抽的話「新武器卡」會擠掉身上東西的升級，組建更難完成）：
+// 身上已有的（武器升級、被動升級）權重 held，新的（新武器、新被動）權重 fresh；一次三張裡新武器卡最多 maxNewWeapon 張。
+export const CHOICE = { held: 2, fresh: 1, maxNewWeapon: 1 };
 export const MAX_LV = 5;
 
 // ---- 商城（不接任何付款；所有價格都是遊戲內貨幣） ----
