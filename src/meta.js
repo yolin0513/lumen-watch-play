@@ -1,6 +1,6 @@
 // 局外養成：天賦、裝備、燈油結算。純邏輯，存檔物件（profile）由呼叫端傳入並就地修改。
 // 數值全部在 content.js；疊加規則全部在 stats.js。
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, STAGES, stageChapter, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CHAPTERS, STAGES, stageChapter, ENEMIES, OIL, WEAPONS, START_WEAPON, AUTO_SALVAGE_MAX, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, RESONANCES, CLASSES, DEFAULT_CLASS, classOf } from './content.js';
 import { aggregate } from './stats.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
 
@@ -30,7 +30,7 @@ export function equippedItems(profile) {
 // 專屬武器的進階加成：只有「已裝備而且確實擁有」的那把生效（擁有≠生效，和 startWeaponOf 同一條規則）
 export function weaponStarMods(profile) {
   const id = startWeaponOf(profile);
-  if (id === START_WEAPON) return [];
+  if (!WEAPONS[id]?.exclusive) return [];
   const star = profile.weapons.stars?.[id] || 0;
   return WEAPON_ASCEND.perks.slice(0, star).filter((pk) => pk.mod).map((pk) => pk.mod);
 }
@@ -38,7 +38,7 @@ export function profileMods(profile) { return [...talentMods(profile), ...equipp
 // 開局加成（交給 createSim）：開局武器等級、開局帶的共鳴增幅
 export function startBonusOf(profile) {
   const id = startWeaponOf(profile), out = { lv: 1, passive: null };
-  if (id === START_WEAPON) return out;
+  if (!WEAPONS[id]?.exclusive) return out;
   for (const pk of WEAPON_ASCEND.perks.slice(0, profile.weapons.stars?.[id] || 0)) {
     if (pk.startLv) out.lv = Math.max(out.lv, pk.startLv);
     if (pk.startPassive) out.passive = RESONANCES[id]?.needs ?? null;
@@ -216,16 +216,25 @@ export function settleRun(profile, { ledger, chapterId, stage = STAGES.base, won
   return { oil, stardust, drops, autoSalvage, firstClear, won };
 }
 
-// ---- 專屬武器：擁有 ≠ 生效。只有「已裝備、而且確實擁有」的專屬武器會成為開局武器，其餘一律用預設起始武器 ----
-export function startWeaponOf(profile) {
-  const eq = profile.weapons?.equipped;
-  return eq && profile.weapons.owned.includes(eq) && WEAPONS[eq]?.exclusive ? eq : START_WEAPON;
+// ---- 職業（M8 第五輪）：目前的職業；看不懂就用預設 ----
+export function classOfProfile(profile) { return CLASSES[profile?.cls] ? profile.cls : DEFAULT_CLASS; }
+export function setClass(profile, cls) { if (!CLASSES[cls]) return { ok: false, reason: 'unknown' }; profile.cls = cls; return { ok: true }; }
+// ---- 專屬武器：擁有 ≠ 生效。每個職業各有一個起始武器欄；只有「裝在這個職業、屬於這個職業、而且確實擁有」的專屬武器會成為開局武器，
+//      其餘一律用那個職業的預設起始武器 ----
+export function startWeaponOf(profile, cls = classOfProfile(profile)) {
+  const eq = profile.weapons?.equipped?.[cls];
+  return eq && profile.weapons.owned.includes(eq) && WEAPONS[eq]?.exclusive && CLASSES[cls].exclusive.includes(eq) ? eq : CLASSES[cls].start;
 }
+// 裝備：裝進「那把武器所屬職業」的欄位（不會自動切換職業）
 export function equipWeapon(profile, id) {
   if (!profile.weapons.owned.includes(id)) return { ok: false, reason: 'not-owned' };
-  profile.weapons.equipped = id; return { ok: true };
+  const cls = classOf(id);
+  if (!cls || !WEAPONS[id]?.exclusive) return { ok: false, reason: 'no-class' };
+  profile.weapons.equipped[cls] = id; return { ok: true, cls };
 }
-export function unequipWeapon(profile) { profile.weapons.equipped = null; return { ok: true }; }
+export function unequipWeapon(profile, cls = classOfProfile(profile)) { if (CLASSES[cls]) profile.weapons.equipped[cls] = null; return { ok: true }; }
+// 擁有、但沒裝在自己職業欄位上的專屬武器（畫面提示「你還有 N 把可以裝在其他職業」用）
+export function idleExclusives(profile) { return profile.weapons.owned.filter((id) => WEAPONS[id]?.exclusive && profile.weapons.equipped?.[classOf(id)] !== id); }
 // ---- 專屬武器進階：星核 → ★+1（只有擁有的才能進階；生效與否看有沒有裝備）----
 export function weaponAscendCost(profile, id) {
   const s = (profile.weapons.stars?.[id] || 0) + 1;

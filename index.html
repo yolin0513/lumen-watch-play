@@ -61,6 +61,16 @@
   .btn.ghost { background: rgba(20, 16, 44, 0.8); color: var(--ink); border-color: rgba(160, 170, 255, 0.3); box-shadow: none; }
   .btn.small { display: inline-block; width: auto; padding: 10px 14px; margin: 4px; font-size: 14px; }
   .row2 { display: flex; gap: 8px; width: min(280px, 100%); }
+  .classes { width: min(300px, 100%); margin: 0 0 12px; }
+  .classes .row { display: flex; gap: 6px; }
+  .classes .cls { flex: 1; padding: 8px 4px; border-radius: 12px; border: 1px solid rgba(160, 170, 255, 0.25); background: var(--panel); color: var(--ink); font-size: 14px; line-height: 1.3; transition: transform 0.1s; }
+  .classes .cls:active { transform: scale(0.96); }
+  .classes .cls small { display: block; font-size: 11px; color: var(--dim); }
+  .classes .cls.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+  .classes .cls.on b { color: var(--c); }
+  .classes .trait { font-size: 12px; color: var(--dim); margin-top: 6px; text-align: center; }
+  .idle-excl { font-size: 12px; color: #ffe27a; margin-top: 4px; text-align: center; }
+  .wgroup { font-size: 13px; color: var(--dim); margin: 8px 0 4px; }
   .row2 .btn { flex: 1; margin: 4px 0; }
   .oil { font-size: 14px; color: var(--dim); } .oil b { color: var(--gold); font-size: 18px; margin-left: 4px; }
   /* 子頁面頂列：黏在畫面上方；上緣自己吃掉瀏海／動態島的高度，左右避開橫放時的圓角與鏡頭 */
@@ -241,6 +251,7 @@
     <div class="sub">菌潮入夜。提起你的燈，<br>把熄滅的燈塔一座座點回來。</div>
     <div class="oil-slot"></div>
     <div class="progress"></div>
+    <div class="classes"></div>
     <button class="btn" data-act="openChapters">點燈出發</button>
     <div class="sound"></div>
     <div class="row2"><button class="btn ghost" data-act="openTalents">天賦</button><button class="btn ghost" data-act="openGear">裝備<span class="shop-dot gear-dot"></span></button><button class="btn ghost" data-act="openShop">商城<span class="shop-dot"></span></button></div>

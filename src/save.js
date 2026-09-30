@@ -7,14 +7,15 @@
 //    升級過程出錯也保留原檔不動。玩家的進度不能在一次改版中無聲消失。
 // 4. 欄位缺了、型別不對、數值越界：逐欄修復成合法值並記下 notes，不因為一個欄位壞掉就整份丟掉。
 import { SPEEDS } from './clock.js';
-import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND } from './content.js';
+import { TALENTS, GEAR_SLOTS, RARITIES, GEAR_AFFIXES, GEAR_MAX_LV, CHAPTERS, STAGES, SHOP, GACHA, WEAPONS, WEAPON_GACHA, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, CLASSES, DEFAULT_CLASS, classOf } from './content.js';
 
 export const SAVE_KEY = 'lumen.save';
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 export const MAX_HISTORY = 50;
 export const MAX_ITEMS = 60;
 export const PENDING_MAX = 60; // 暫存區：背包滿時新裝備先放這裡，等玩家自己決定留或分解
 
+const emptySlots = () => Object.fromEntries(Object.keys(CLASSES).map((c) => [c, null]));
 export function defaultProfile() {
   return {
     v: SAVE_VERSION, oil: 0, talents: {}, nextUid: 1,
@@ -28,7 +29,9 @@ export function defaultProfile() {
     shop: { bought: {}, history: [] },     // bought：各商品已買次數（限購用）；history：模擬交易紀錄
     daily: { last: null },                 // 上次領每日補給的本地日期 YYYY-MM-DD
     // v3（專屬武器）：「抽到」與「裝備」分開存——只有 equipped 會成為開局武器，owned 只是收藏
-    weapons: { owned: [], equipped: null, shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
+    // v10（職業制）：equipped 改成「每個職業一個起始武器欄」；cls＝目前的職業（主選單記住上次選的）
+    weapons: { owned: [], equipped: emptySlots(), shards: {}, stars: {} }, // v6：shards＝各專屬武器的星核、stars＝進階星數
+    cls: DEFAULT_CLASS,
     crystals: 0, // v6：燈芯結晶（進階材料，分解裝備取得）
     // v4：autoSalvage＝自動分解門檻（-1 關閉＝預設；0..AUTO_SALVAGE_MAX＝該稀有度以下自動分解）；skipAnim＝略過抽獎動畫
     settings: { autoSalvage: -1, skipAnim: false, speed: 1, musicVol: 0.5, sfxVol: 0.8, muted: false }, // v5：speed＝局內倍速（檔位見 clock.js 的 SPEEDS）；v9：音樂／音效音量（0～1，每格 0.1）、全部靜音
@@ -94,6 +97,15 @@ export const MIGRATIONS = {
   },
   // v8 → v9：加入聲音設定（音樂 0.5、音效 0.8、沒有靜音），原有設定原樣保留
   8: (d) => ({ ...d, settings: { ...(isObj(d.settings) ? d.settings : {}), musicVol: 0.5, sfxVol: 0.8, muted: false }, v: 9 }),
+  // v9 → v10：職業制。目前裝著的專屬武器決定職業（寫死 v10 當時的對照表，不讀目前的 CLASSES），而且那把裝在它的職業欄位上；
+  // 其他擁有的專屬武器只擁有、不裝（擁有≠生效）。沒裝專屬武器＝燈銃手（預設武器螢火連弩所屬的職業）。進度、天賦、裝備、星數原樣保留。
+  9: (d) => {
+    const V10_CLASS_OF = { emberbow: 'gunner', starfall: 'mage', twinblade: 'blade' }, w = isObj(d.weapons) ? d.weapons : {};
+    const eq = typeof w.equipped === 'string' ? w.equipped : null, cls = V10_CLASS_OF[eq] ?? 'gunner';
+    const equipped = { gunner: null, mage: null, blade: null };
+    if (V10_CLASS_OF[eq]) equipped[cls] = eq;
+    return { ...d, cls, weapons: { ...w, equipped }, v: 10 };
+  },
 };
 
 // 讀檔。回傳 { profile, status, notes, writable }
@@ -258,9 +270,18 @@ export function sanitize(d) {
       if (v > cap) fix(`武器星數 ${id} 超過上限，改為 ${cap}`);
       if (v > 0) out.weapons[k][id] = Math.min(v, cap);
     } else if (d.weapons[k] !== undefined) fix(`weapons.${k} 型別不對，重設`);
-    const eq = d.weapons.equipped;
-    if (eq != null) { if (out.weapons.owned.includes(eq)) out.weapons.equipped = eq; else fix(`已裝備的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`); }
+    // v10：每個職業一個欄位；裝的必須是擁有的、而且屬於那個職業的專屬武器
+    const eqs = d.weapons.equipped;
+    if (isObj(eqs)) for (const [c, eq] of Object.entries(eqs)) {
+      if (!CLASSES[c]) { fix(`起始武器欄的職業 ${JSON.stringify(c)} 不存在，移除`); continue; }
+      if (eq == null) continue;
+      if (!out.weapons.owned.includes(eq)) fix(`${CLASSES[c].name}裝的武器 ${JSON.stringify(eq)} 不在擁有清單裡，卸下`);
+      else if (classOf(eq) !== c) fix(`${CLASSES[c].name}裝的武器 ${eq} 不屬於這個職業，卸下`);
+      else out.weapons.equipped[c] = eq;
+    } else if (eqs != null) fix('起始武器欄型別不對，重設');
   } else if (d.weapons !== undefined) fix('weapons 型別不對，重設');
+  // ---- v10 職業 ----
+  if (CLASSES[d.cls]) out.cls = d.cls; else if (d.cls !== undefined) fix(`職業 ${JSON.stringify(d.cls)} 不存在，改為${CLASSES[DEFAULT_CLASS].name}`);
   // ---- v6 進階材料 ----
   { const n = nonNegInt(d.crystals); if (n === null) { if (d.crystals !== undefined) fix(`結晶數量不合法（${JSON.stringify(d.crystals)}），歸零`); } else out.crystals = n; }
   // ---- v4 設定 ----

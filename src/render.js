@@ -117,6 +117,7 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'lance': fx.lances.push({ x: e.x, y: e.y, ang: e.ang, len: e.len, w: e.w, evo: e.evo, life: 0.22 }); break;
         case 'snipe': fx.snipes.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, r: e.r, evo: e.evo, life: 0.25 }); burst(e.tx, e.ty, e.evo ? 8 : 5, e.evo ? G.evo : G.lanceG, 160, 0.3, 9); break;
         case 'vortexBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'gold' : 'void' }); burst(e.x, e.y, e.evo ? 18 : 12, e.evo ? G.evo : G.void, 220, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
+        case 'ashBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 14, G.ember, 200, 0.45, 11); fx.shake = Math.max(fx.shake, 3); break;
         case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
@@ -331,6 +332,11 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const q of s.patches) {
       if (!onScreen(q.x, q.y, q.r)) continue;
       const k = Math.min(1, q.life / 0.6, (q.max - q.life) / 0.15 + 0.3);
+      if (q.dust) { // 星塵（增幅）：淡粉紅的星點區，和燼痕的暗紅分得開
+        g.fillStyle = `rgba(120,50,110,${0.3 * k})`; g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.fill();
+        g.fillStyle = `rgba(255,190,245,${0.8 * k})`; for (let i = 0; i < 5; i++) { const a = q.x * 0.3 + i * 1.26 + T * 1.5, rr = q.r * (0.25 + 0.14 * i); g.fillRect(q.x + Math.cos(a) * rr - 1.5, q.y + Math.sin(a) * rr - 1.5, 3, 3); }
+        continue;
+      }
       g.fillStyle = q.evo ? `rgba(150,60,20,${0.4 * k})` : `rgba(110,35,15,${0.38 * k})`; g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.fill();
       g.fillStyle = q.evo ? `rgba(255,200,110,${0.7 * k})` : `rgba(255,120,50,${0.6 * k})`;
       for (let i = 0; i < 3; i++) { const a = q.x * 0.7 + i * 2.1 + T * 3, rr = q.r * (0.3 + 0.2 * i); g.fillRect(q.x + Math.cos(a) * rr - 1.5, q.y + Math.sin(a) * rr - 1.5, 3, 3); }
@@ -393,6 +399,7 @@ export function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (e.stunT > 0) { g.strokeStyle = 'rgba(255,235,150,0.85)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(e.x, e.y - e.r - 6, e.r * 0.8, 3, 0, 0, Math.PI * 2); g.stroke(); } // 震心：頭上一圈暈眩
       if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.flash > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.8; g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       if (e.elite) { // 精英血條

@@ -6,7 +6,7 @@ import { createRenderer } from './render.js';
 import { createUI, gearName, autoSalvageText } from './ui.js';
 import { CHAPTERS, CHAPTER1, WEAPON_GACHA, stageChapter } from './content.js';
 import { createStore, loadProfile, saveProfile, defaultProfile, SAVE_KEY } from './save.js';
-import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon } from './meta.js';
+import { profileMods, startBonusOf, ascendGear, ascendWeapon, settleRun, buyTalent, equip, unequip, upgradeGear, salvage, salvageMany, claimPending, gearSpace, setAutoSalvage, autoSalvageLevel, stageUnlocked, startWeaponOf, equipWeapon, unequipWeapon, classOfProfile, setClass } from './meta.js';
 import { createPerf } from './perf.js';
 import { createClock, SPEEDS } from './clock.js';
 import { createAudio } from './audio.js';
@@ -120,7 +120,8 @@ const ui = createUI({
   toggleSkipAnim: () => { profile.settings.skipAnim = !profile.settings.skipAnim; persist(); refreshShop(); },
   gotoGear: () => { ui.shopModal(null); gearView = { open: null, sel: null, sheet: null, fx: null }; ui.gear(profile, gearView); },
   weaponEquip: (d) => { const ok = equipWeapon(profile, d.id).ok; if (ok) persist(); refreshGear({ open: null, fx: ok ? { kind: 'weapon' } : null }); },
-  weaponUnequip: () => { unequipWeapon(profile); persist(); refreshGear({ open: null, fx: { kind: 'weapon' } }); },
+  weaponUnequip: (d) => { unequipWeapon(profile, d.cls); persist(); refreshGear({ open: null, fx: { kind: 'weapon' } }); },
+  setClass: (d) => { if (setClass(profile, d.id).ok) persist(); ui.menu(profile, canClaimDaily(profile, Date.now())); },
   buyAsk: (d) => {
     const it = shopItem(d.id), chk = canBuy(profile, d.id);
     if (!it || it.free || !chk.ok) return;
@@ -243,7 +244,7 @@ function newRun(id, n) {
   const chapter = stageChapter(CHAPTERS.find((c) => c.id === id), n);
   mode = 'run'; paused = false; settled = null;
   runSeed = (Math.random() * 2 ** 31) | 0;
-  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
+  sim = createSim({ seed: runSeed, vh: H / scale, chapter, meta: profileMods(profile), startWeapon: startWeaponOf(profile), startBonus: startBonusOf(profile), cls: classOfProfile(profile) }); // 只有「已裝備」的專屬武器（和它的進階）會生效
   renderer = createRenderer(chapter);
   input.reset(); shown = null; sync();
 }

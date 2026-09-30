@@ -209,13 +209,14 @@ export const WEAPONS = {
   // ---- 專屬起始武器：只能從「武器祈燈」抽到，裝備在起始武器欄才生效；不會出現在局內升級的「新武器」選項 ----
   starfall: {
     name: '星隕杖', color: '#ff7ad8', kind: 'mortar', exclusive: true,
-    desc: ['一開始就一次落三顆星的強化落星', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
+    // guard（M8 第五輪）：燈術師改用燈暈起始後，星隕杖（落星類）在前期一樣擋不住身邊的小怪（晶窟 fresh 1/12 對燈暈 7/12），所以第一顆星會先砸身邊最近的怪
+    desc: ['一開始就一次落三顆星的強化落星，第一顆會先砸身邊最近的怪', '傷害 +35%', '範圍變大、間隔縮短', '一次落四顆', '一次落五顆、傷害 +30%'],
     lv: [
-      { dmg: 37, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 49, cd: 1.6, count: 3, radius: 58, delay: 0.5 },
-      { dmg: 49, cd: 1.4, count: 3, radius: 66, delay: 0.45 },
-      { dmg: 49, cd: 1.4, count: 4, radius: 66, delay: 0.45 },
-      { dmg: 62, cd: 1.3, count: 5, radius: 72, delay: 0.4 },
+      { dmg: 37, cd: 1.4, count: 3, radius: 58, delay: 0.35, guard: 130 },
+      { dmg: 49, cd: 1.4, count: 3, radius: 58, delay: 0.35, guard: 130 },
+      { dmg: 49, cd: 1.3, count: 3, radius: 66, delay: 0.35, guard: 130 },
+      { dmg: 49, cd: 1.3, count: 4, radius: 66, delay: 0.35, guard: 130 },
+      { dmg: 62, cd: 1.3, count: 5, radius: 72, delay: 0.4, guard: 130 },
     ],
   },
   twinblade: {
@@ -246,62 +247,110 @@ export const WEAPONS = {
 export const START_WEAPON = 'bolt'; // 沒有裝備專屬武器時的起始武器
 
 // ---- 被動（每項 5 級；mods 是「每一級」給的加成，疊加規則見 stats.js） ----
-export const PASSIVES = {
-  lens:  { name: '聚光鏡', color: '#fff0a0', desc: '所有傷害 +10%',          mods: [{ stat: 'dmg', pct: 0.10 }] },
-  wick:  { name: '快燃芯', color: '#ff8a5c', desc: '攻擊冷卻 -8%',            mods: [{ stat: 'cdr', pct: 0.08 }] },
-  stone: { name: '引光石', color: '#7fd6ff', desc: '拾取範圍 +30%、移速 +4%', mods: [{ stat: 'magnet', pct: 0.30 }, { stat: 'speed', pct: 0.04 }] },
-  ember: { name: '暖芯',   color: '#ff9fb4', desc: '最大生命 +20、每秒回復 +0.4', mods: [{ stat: 'maxHp', flat: 20 }, { stat: 'regen', flat: 0.4 }] },
+// M8 第五輪：職業制。每個職業 6 把武器、6 個增幅，職業內「一把武器對一個增幅」（專屬武器共用同類武器的那一個）。
+// 每個增幅＝一點基礎數值（和 M8 以前的 4 個增幅同一個量級：傷害 10%／冷卻 8%／拾取＋移速／生命＋回復）＋ 一個改變打法的效果（fx，規則寫在 sim.js）。
+// 效果來自這個類型共通的機制（分裂、彈射、暴擊、持續傷害、擴散、吸引、擊退、暈眩、延長存在、停止或移動時累積），名稱全部自己取。
+// 每個效果都有行為探針（tools/passive-form.mjs）：只有拿了它才陽性，其他增幅全部是對照組。
+const ST = {
+  dmg: [{ stat: 'dmg', pct: 0.10 }], cdr: [{ stat: 'cdr', pct: 0.08 }],
+  move: [{ stat: 'magnet', pct: 0.30 }, { stat: 'speed', pct: 0.04 }], life: [{ stat: 'maxHp', flat: 20 }, { stat: 'regen', flat: 0.4 }],
 };
+const STXT = { dmg: '每級傷害 +10%', cdr: '每級冷卻 -8%', move: '每級拾取 +30%、移速 +4%', life: '每級生命 +20、回復 +0.4/秒' };
+const pv = (name, color, st, effect, fx) => ({ name, color, desc: `${effect}（${STXT[st]}）`, effect, mods: ST[st], fx });
+export const PASSIVES = {
+  // ---- 燈銃手 ----
+  shardtip: pv('裂光彈頭', '#ffe08a', 'cdr', '光矢命中時分裂出兩道碎光', { n: 2, dmgK: 0.4, speed: 300, life: 0.35 }),
+  prism:    pv('折光稜鏡', '#9ffff0', 'cdr', '折光彈每反彈一次，傷害 +20%', { perBounce: 0.2 }),
+  steady:   pv('靜息準星', '#9fb8ff', 'dmg', '站定 0.5 秒後，遠星銃下一槍必定暴擊（2.5 倍）', { still: 0.5, mul: 2.5 }),
+  lens:     pv('聚光鏡',   '#fff0a0', 'dmg', '聚光槍連續打中同一隻，每次傷害 +25%（最多 +100%）', { per: 0.25, max: 4, keep: 1.6 }),
+  beacon:   pv('哨站燈油', '#9fffb8', 'life', '站在燈塔 100px 內時，燈塔射速 +70%', { r: 100, rate: 1.7 }),
+  hive:     pv('蜂巢',     '#e6ff7a', 'move', '擊倒怪物時多放出一隻暫時的螢蜂（最多 4 隻、存在 4 秒）', { max: 4, life: 4 }),
+  // ---- 燈術師 ----
+  stardust: pv('星塵',     '#ffb0f0', 'dmg', '落星爆炸處留下 2 秒的星塵區，持續傷害', { life: 2, rK: 0.7, dmgK: 0.12, tick: 0.3 }),
+  stone:    pv('引光石',   '#b48cff', 'move', '被光井吸在一起的怪互相碰撞會受傷', { r: 26, dmgK: 1.2 }),
+  conduct:  pv('導電',     '#c8b8ff', 'dmg', '被雷蕊打中的怪，下一次受到其他傷害 +60%', { mul: 1.6, keep: 2.5 }),
+  wick:     pv('快燃芯',   '#ff8a5c', 'cdr', '燃燒中的怪死掉時，火會傳給 70px 內的怪', { r: 70, t: 2 }),
+  ember:    pv('暖芯',     '#ff9fb4', 'life', '燈暈每燒到一隻怪回復 0.3 生命（每次最多 3）', { per: 0.3, cap: 3 }),
+  ashwalk:  pv('焦土步',   '#ff7a3c', 'cdr', '移動時累積熱量，停下 0.3 秒時一圈爆開（走越久越痛）', { perPx: 0.05, max: 60, r: 95, stop: 0.3, minHeat: 8 }),
+  // ---- 刃舞者 ----
+  gale:     pv('刃風',     '#c9f6ff', 'move', '裂光斬在身邊 110px 內斬中怪時，1 秒內移速 +30%', { r: 110, t: 1, mul: 1.3 }),
+  returner: pv('迴旋',     '#9ff0d0', 'dmg', '光刃回程更快、回程傷害 +50%', { speed: 1.35, dmg: 1.5 }),
+  ward:     pv('護身環',   '#8fe8ff', 'life', '環燈的光球會擋下敵人的子彈', { pad: 6 }),
+  bulwark:  pv('堅壁',     '#ffe6b0', 'cdr', '被光牆推著走的怪撞到其他怪時，兩隻都受傷', { dmgK: 0.6 }),
+  stun:     pv('震心',     '#ffe08a', 'dmg', '被燈鐘震到的怪暈眩 0.7 秒（守衛除外）', { t: 0.7 }),
+  chainfuse:pv('連環引信', '#ffd84a', 'cdr', '燈籠爆炸會引爆 130px 內的其他燈籠', { r: 130 }),
+};
+
+// ---- 職業：開局前選（主選單記住上次的）；局內「新武器／新增幅」只會出現自己職業池裡的 ----
+// trait：天生能力（不用選）。規則寫在 sim.js；三個職業玩起來憑什麼不同，由 tools/class-form.mjs 實際量（命中距離、持續傷害比例、擊退位移）。
+export const CLASSES = {
+  gunner: { name: '燈銃手', color: '#ffd27a', desc: '遠距、點與直線、精準', traitDesc: '天生：12% 機率暴擊（2 倍傷害）',
+    weapons: ['bolt', 'lance', 'sniper', 'ricochet', 'sentry', 'wisps'], passives: ['shardtip', 'lens', 'steady', 'prism', 'beacon', 'hive'],
+    start: 'bolt', exclusive: ['emberbow'], trait: { crit: 0.12, critMul: 2 } },
+  mage:   { name: '燈術師', color: '#c8a0ff', desc: '範圍、場、持續傷害', traitDesc: '天生：範圍攻擊命中時附帶 1.2 秒灼燒',
+    weapons: ['mortar', 'vortex', 'chain', 'flame', 'aura', 'trail'], passives: ['stardust', 'stone', 'conduct', 'wick', 'ember', 'ashwalk'],
+    // 預設起始武器原本是落星：延遲落下、冷卻長，早期擋不住一般小怪（第一章 fresh 12 局只過 2 局，改燈暈起始是 12/12；tools/class-gap.mjs）
+    start: 'aura', exclusive: ['starfall'], trait: { areaBurn: 0.3, burnT: 1.2 } },
+  blade:  { name: '刃舞者', color: '#9ff0d0', desc: '推擠、擊退、把怪趕走', traitDesc: '天生：身邊 90px 內的命中擊退加倍，受到碰撞傷害 -25%，對推不動的守衛與精英傷害加倍',
+    weapons: ['slash', 'boomerang', 'orbit', 'wall', 'pulse', 'mines'], passives: ['gale', 'returner', 'ward', 'bulwark', 'stun', 'chainfuse'],
+    // heavyMul（M8 第五輪）：推擠與擊退對守衛無效，刃舞者在守衛戰裡明顯吃虧（tools/class-gap.mjs：六個生態系有四個晚一個養成階段）。
+    // 24 局掃描（晶窟 early／凍星原 mid／深根城 late）：×1 守衛戰輸 10／14／7 局，×1.3 輸 6／6／8，×2 輸 1／4／1，×2.5 輸 2／4／2——×2 之後持平，取 2
+    start: 'boomerang', exclusive: ['twinblade'], trait: { nearR: 90, nearKnock: 2, contact: 0.75, heavyMul: 2 } },
+};
+export const DEFAULT_CLASS = 'gunner';
+// 燈術師天生灼燒認得的「範圍攻擊」（傷害來源）
+export const AREA_SRC = ['mortar', 'starfall', 'aura', 'flame', 'vortex', 'trail', 'stardust', 'ashwalk', 'crush'];
+export const classOf = (weaponId) => Object.keys(CLASSES).find((c) => CLASSES[c].weapons.includes(weaponId) || CLASSES[c].exclusive.includes(weaponId)) ?? null;
 
 // ---- 共鳴：武器滿級＋持有指定被動，開燈核時進化 ----
 export const RESONANCES = {
-  bolt:  { needs: 'wick', name: '流星弩', desc: '巨大的流星光矢貫穿一切，擊殺時迸出碎光',
+  bolt:  { needs: 'shardtip', name: '流星弩', desc: '巨大的流星光矢貫穿一切，擊殺時迸出碎光',
            stats: { dmg: 24, cd: 0.32, shots: 5, pierce: 99, speed: 520, shard: 3 } },
-  orbit: { needs: 'lens', name: '星環',   desc: '光環擴張，並不斷向外拋射星光',
+  orbit: { needs: 'ward', name: '星環',   desc: '光環擴張，並不斷向外拋射星光',
            stats: { dmg: 32, count: 6, radius: 68, spin: 4.4, size: 12, flingCd: 0.6 } },
-  lance:     { needs: 'stone', name: '天光槍',   desc: '四道光束同時射向四方，又長又寬、傷害大增',
+  lance:     { needs: 'lens', name: '天光槍',   desc: '四道光束同時射向四方，又長又寬、傷害大增',
                stats: { dmg: 52, cd: 1.0, len: 440, w: 30, beams: 4 } },
-  pulse:     { needs: 'ember', name: '晨鐘',     desc: '震波範圍大增、敲得更快，推開整片菌群',
+  pulse:     { needs: 'stun', name: '晨鐘',     desc: '震波範圍大增、敲得更快，推開整片菌群',
                stats: { dmg: 42, cd: 1.3, radius: 150, push: 140 } },
-  sentry:    { needs: 'wick',  name: '燈塔群',   desc: '可同時立起五座燈塔，每座三連發、射得更快更遠',
+  sentry:    { needs: 'beacon',  name: '燈塔群',   desc: '可同時立起五座燈塔，每座三連發、射得更快更遠',
                stats: { dmg: 16, cd: 2.4, max: 5, life: 12, fireCd: 0.34, range: 320, shots: 3, pierce: 2 } },
-  // M8 第四輪新武器：沿用既有的四種增幅（四種增幅剛好填滿四個被動欄，配對永遠不會卡在「抽不到那個被動」）
-  slash:     { needs: 'lens',  name: '天裂',     desc: '一次揮出三道巨大的劍氣，飛得更遠、寬到橫掃半個畫面',
+  // M8 第四輪新武器（當時沿用 4 個增幅；M8 第五輪職業制改成職業內一對一，配對見 CLASSES 與每一行的 needs）
+  slash:     { needs: 'gale',  name: '天裂',     desc: '一次揮出三道巨大的劍氣，飛得更遠、寬到橫掃半個畫面',
                stats: { dmg: 58, cd: 0.8, count: 3, speed: 380, range: 340, w0: 20, w1: 84 } },
   vortex:    { needs: 'stone', name: '蝕星',     desc: '三口巨大的光井同時張開，吸力極強，炸開時傷害驚人',
                stats: { dmg: 12, tick: 0.25, cd: 3.4, r: 110, pull: 150, dur: 2.4, burst: 90, count: 3 } },
-  wall:      { needs: 'ember', name: '晨壁',     desc: '四面光牆同時往四方推出，又寬又遠',
+  wall:      { needs: 'bulwark', name: '晨壁',     desc: '四面光牆同時往四方推出，又寬又遠',
                stats: { dmg: 48, cd: 1.7, len: 80, speed: 260, range: 320, walls: 4 } },
-  sniper:    { needs: 'wick',  name: '天狼',     desc: '一次狙擊四個最遠的目標，落點大爆炸',
+  sniper:    { needs: 'steady',  name: '天狼',     desc: '一次狙擊四個最遠的目標，落點大爆炸',
                stats: { dmg: 140, cd: 0.8, range: 460, shots: 4, splash: 48 } },
-  trail:     { needs: 'ember', name: '燎原',     desc: '燼痕又寬又久，踩進去的怪大幅減速',
+  trail:     { needs: 'ashwalk', name: '燎原',     desc: '燼痕又寬又久，踩進去的怪大幅減速',
                stats: { dmg: 22, tick: 0.35, r: 36, life: 3.6, step: 32, slow: 0.45 } },
-  ricochet:  { needs: 'stone', name: '萬華鏡',   desc: '四發光彈在畫面裡反彈六次，每次反彈都分出一道碎光',
+  ricochet:  { needs: 'prism', name: '萬華鏡',   desc: '四發光彈在畫面裡反彈六次，每次反彈都分出一道碎光',
                stats: { dmg: 30, cd: 0.8, shots: 4, speed: 420, bounces: 6, pierce: 4, split: 1 } },
   // M6：每一把武器（含專屬起始武器）都要有對應的增幅（被動）可以共鳴。
   // 曦光雙刃原本配引光石，但引光石（拾取／移速）不加戰力，照共鳴提示先升它反而變弱（第三章 0/6），改配聚光鏡。
   // tools/resonance-check.mjs 檢查「武器總數 ＝ 有共鳴的武器數」、需要的被動存在、共鳴數值涵蓋那把武器用到的每個欄位（部署門檻）。
   aura:      { needs: 'ember', name: '暖陽',     desc: '燈暈擴大成一輪暖陽，灼燒更快、敵人大幅減速',
                stats: { dmg: 26, radius: 104, tick: 0.35, slow: 0.45 } },
-  chain:     { needs: 'stone', name: '雷網',     desc: '三道電弧同時竄出，在怪群之間跳得更遠更多次',
+  chain:     { needs: 'conduct', name: '雷網',     desc: '三道電弧同時竄出，在怪群之間跳得更遠更多次',
                stats: { dmg: 44, cd: 0.9, jumps: 9, range: 150, arcs: 3 } },
-  boomerang: { needs: 'stone', name: '月輪',     desc: '五把大光刃同時擲出，飛得更遠更快',
+  boomerang: { needs: 'returner', name: '月輪',     desc: '五把大光刃同時擲出，飛得更遠更快',
                stats: { dmg: 38, cd: 1.0, count: 5, range: 250, speed: 440, size: 16 } },
-  mortar:    { needs: 'lens',  name: '流星雨',   desc: '一次落下六顆星，間隔更短、範圍更大',
+  mortar:    { needs: 'stardust',  name: '流星雨',   desc: '一次落下六顆星，間隔更短、範圍更大',
                stats: { dmg: 84, cd: 1.2, count: 6, radius: 76, delay: 0.45 } },
   flame:     { needs: 'wick',  name: '龍焰',     desc: '火舌變長變寬，轉向極快，幾乎沒有死角',
                stats: { dmg: 20, tick: 0.1, range: 160, half: 0.9, turn: 8 } },
-  wisps:     { needs: 'ember', name: '螢群',     desc: '七隻螢蜂成群追擊，飛得更快、咬得更頻繁',
+  wisps:     { needs: 'hive', name: '螢群',     desc: '七隻螢蜂成群追擊，飛得更快、咬得更頻繁',
                stats: { dmg: 32, count: 7, speed: 360, hitCd: 0.2, seek: 360 } },
-  mines:     { needs: 'ember', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
+  mines:     { needs: 'chainfuse', name: '燈籠陣',   desc: '燈籠放得更快、數量更多，爆炸範圍大幅擴張',
                stats: { dmg: 100, cd: 0.7, max: 10, trigger: 30, radius: 100, arm: 0.3 } },
   // M8：共鳴燈核讓共鳴幾乎每局拿得到之後，兩把專屬武器在單武器測試超過專屬上限（1.51、1.57 倍）。
   // 先試傷害 −4～5%：分數完全沒動（通關記滿分，第三章的陣亡點不變），所以改成每次少一顆星／一把刃。
-  starfall:  { needs: 'lens',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
-               stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35 } },
-  twinblade: { needs: 'lens',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
+  starfall:  { needs: 'stardust',  name: '星墜',     desc: '一次落下六顆星，幾乎不停歇',
+               stats: { dmg: 78, cd: 1.15, count: 6, radius: 80, delay: 0.35, guard: 150 } },
+  twinblade: { needs: 'returner',  name: '曦日雙輪', desc: '四把巨大光刃高速來回，範圍與速度都再提升',
                stats: { dmg: 34, cd: 0.75, count: 4, range: 275, speed: 490, size: 21 } },
-  emberbow:  { needs: 'wick',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
+  emberbow:  { needs: 'shardtip',  name: '焚天羽',   desc: '六支火箭貫穿怪群，燃燒大幅增強',
                stats: { dmg: 22, cd: 0.4, shots: 6, pierce: 5, speed: 560, burn: 14, burnT: 3.5 } }, // M8：燃燒 16 → 14（脹孢囊變快變多後，它的燃燒特別剋脹孢囊，單武器測試 1.50 倍碰到專屬上限）
 };
 
@@ -632,7 +681,8 @@ export const XP_CURVE = (lv) => Math.round(5 + lv * 4 + lv * lv * 0.3);
 export const SLOTS = { weapon: 4, passive: 4 };
 // 升級選項的抽法（M8 第四輪：武器從 12 把變 18 把，均勻抽的話「新武器卡」會擠掉身上東西的升級，組建更難完成）：
 // 身上已有的（武器升級、被動升級）權重 held，新的（新武器、新被動）權重 fresh；一次三張裡新武器卡最多 maxNewWeapon 張。
-export const CHOICE = { held: 2, fresh: 1, maxNewWeapon: 1 };
+// pairHeld（M8 第五輪）：和身上某把武器配對的新增幅也算 held（一對一之後，共鳴不能只靠運氣抽到）
+export const CHOICE = { held: 2, fresh: 1, maxNewWeapon: 1, pairHeld: true };
 export const MAX_LV = 5;
 
 // ---- 商城（不接任何付款；所有價格都是遊戲內貨幣） ----

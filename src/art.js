@@ -246,6 +246,57 @@ export function makeIcon(id, color, size = 64) {
     case 'ember': // 心形燈芯
       g.beginPath(); g.moveTo(0, 16); g.bezierCurveTo(-22, 0, -12, -20, 0, -8); g.bezierCurveTo(12, -20, 22, 0, 0, 16); g.fill();
       break;
+    // ---- M8 第五輪的增幅圖示 ----
+    case 'shardtip': // 箭頭＋兩道碎光
+      g.lineWidth = 3; P([[-14, 12], [6, -8]]); g.stroke(); P([[10, -12], [0, -10], [8, -2]]); g.fill();
+      g.lineWidth = 2; P([[8, -8], [18, -4]]); g.stroke(); P([[8, -8], [4, -18]]); g.stroke();
+      break;
+    case 'prism': // 三角稜鏡＋折線
+      P([[0, -16], [14, 10], [-14, 10]]); g.closePath(); g.globalAlpha = 0.5; g.fill(); g.globalAlpha = 1; g.lineWidth = 2; g.stroke();
+      g.lineWidth = 2.5; P([[-20, -2], [-4, 0], [18, -12]]); g.stroke();
+      break;
+    case 'steady': // 準星中心一點＋腳印線
+      g.lineWidth = 2; g.beginPath(); g.arc(0, -2, 12, 0, 7); g.stroke();
+      g.beginPath(); g.arc(0, -2, 3.5, 0, 7); g.fill(); g.lineWidth = 3; P([[-12, 18], [12, 18]]); g.stroke();
+      break;
+    case 'beacon': // 燈塔＋一圈範圍
+      P([[-5, 12], [-3, -6], [3, -6], [5, 12]]); g.closePath(); g.fill();
+      g.lineWidth = 1.5; g.setLineDash([3, 3]); g.beginPath(); g.arc(0, 2, 18, 0, 7); g.stroke(); g.setLineDash([]);
+      break;
+    case 'hive': // 六角蜂巢
+      for (const [x, y] of [[-8, -6], [8, -6], [0, 8]]) { g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7); } g.closePath(); g.fill(); }
+      break;
+    case 'stardust': // 散落的星點
+      for (const [x, y, r] of [[-10, 6, 3], [0, -8, 4], [10, 4, 3], [-2, 12, 2], [12, -10, 2]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      break;
+    case 'conduct': // 閃電＋小圈
+      g.lineWidth = 3.5; P([[4, -18], [-6, 0], [4, 0], [-4, 18]]); g.stroke();
+      g.lineWidth = 1.5; g.beginPath(); g.arc(10, 8, 6, 0, 7); g.stroke();
+      break;
+    case 'ashwalk': // 腳印＋爆開的圈
+      g.beginPath(); g.ellipse(-6, 8, 4, 6, 0, 0, 7); g.ellipse(6, -4, 4, 6, 0, 0, 7); g.fill();
+      g.lineWidth = 2; g.beginPath(); g.arc(0, 2, 18, -0.4, 1.2); g.stroke(); g.beginPath(); g.arc(0, 2, 18, 2.3, 3.8); g.stroke();
+      break;
+    case 'gale': // 風線
+      g.lineWidth = 3; for (const y of [-8, 0, 8]) { g.beginPath(); g.moveTo(-16, y); g.quadraticCurveTo(4, y - 6, 16, y); g.stroke(); }
+      break;
+    case 'returner': // 回頭的箭頭
+      g.lineWidth = 3.5; g.beginPath(); g.arc(0, 0, 12, -2.6, 1.6); g.stroke(); P([[-2, 16], [4, 10], [-4, 8]]); g.fill();
+      break;
+    case 'ward': // 盾
+      g.beginPath(); g.moveTo(0, -16); g.lineTo(13, -9); g.quadraticCurveTo(12, 10, 0, 17); g.quadraticCurveTo(-12, 10, -13, -9); g.closePath(); g.fill();
+      break;
+    case 'bulwark': // 兩個方塊互撞
+      g.fillRect(-16, -6, 12, 12); g.fillRect(4, -6, 12, 12); g.lineWidth = 2; P([[0, -12], [0, -16]]); g.stroke(); P([[0, 12], [0, 16]]); g.stroke();
+      break;
+    case 'stun': // 暈眩的星圈
+      g.lineWidth = 1.5; g.beginPath(); g.ellipse(0, 0, 16, 6, 0, 0, 7); g.stroke();
+      for (const a of [0, 2.1, 4.2]) { g.beginPath(); g.arc(Math.cos(a) * 16, Math.sin(a) * 6, 3.5, 0, 7); g.fill(); }
+      break;
+    case 'chainfuse': // 兩顆燈籠＋引信
+      for (const x of [-9, 9]) { g.beginPath(); g.ellipse(x, 4, 7, 9, 0, 0, 7); g.fill(); }
+      g.lineWidth = 2; g.beginPath(); g.moveTo(-9, -5); g.quadraticCurveTo(0, -18, 9, -5); g.stroke();
+      break;
     case 'boomerang': case 'twinblade': // 新月光刃
       for (const k of id === 'twinblade' ? [-5, 5] : [0]) { g.save(); g.translate(k, k * -0.6); g.rotate(-0.6);
         g.beginPath(); g.arc(0, 0, 15, Math.PI * 0.15, Math.PI * 1.15); g.arc(4, -3, 11, Math.PI * 1.15, Math.PI * 0.15, true); g.closePath(); g.fill(); g.restore(); }

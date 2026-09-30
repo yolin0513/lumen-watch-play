@@ -1,9 +1,9 @@
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost, CLASSES, classOf } from './content.js';
 import { makeIcon } from './art.js';
-import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf } from './meta.js';
+import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf, classOfProfile, idleExclusives } from './meta.js';
 import { aggregate } from './stats.js';
 import { gachaOdds, fmtPct, gachaCost, gachaPay, canBuy, canClaimDaily, EXCLUSIVES } from './shop.js';
 import { MAX_ITEMS, PENDING_MAX } from './save.js';
@@ -147,6 +147,11 @@ export function createUI(actions) {
       $('#menu .gear-dot').style.display = profile.gear.pending.length ? 'inline-block' : 'none'; // 暫存區有東西等玩家處理
       const cleared = CHAPTERS.reduce((a, c) => a + ecoProgress(profile, c.id).cleared.length, 0);
       $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length * STAGES.count} 座燈塔` : '尚未點亮任何燈塔';
+      // 職業（M8 第五輪）：記住上次選的，不換就直接「點燈出發」，不多一個畫面
+      const cls = classOfProfile(profile), idle = idleExclusives(profile);
+      $('#menu .classes').innerHTML = `<div class="row">${Object.entries(CLASSES).map(([id, c]) => `<button class="cls${id === cls ? ' on' : ''}" style="--c:${c.color}" data-act="setClass" data-id="${id}"><b>${esc(c.name)}</b><small>${esc(WEAPONS[startWeaponOf(profile, id)].name)}</small></button>`).join('')}</div>
+        <div class="trait">${esc(CLASSES[cls].desc)}・${esc(CLASSES[cls].traitDesc)}</div>
+        ${idle.length ? `<div class="idle-excl">你還有 ${idle.length} 把專屬武器可以裝在其他職業：${idle.map((w) => `${esc(WEAPONS[w].name)}（${esc(CLASSES[classOf(w)].name)}）`).join('、')}——到「裝備」裝上</div>` : ''}`;
       show('menu');
     },
     // 選關（M8 第二輪）：兩層。eco＝null 時列 6 個生態系（進度、最深那關的最快紀錄、解鎖條件）；給了 eco 就列那個生態系的 10 關。
@@ -191,15 +196,16 @@ export function createUI(actions) {
       const { open = null, sel = null, sheet: sheetKind = null, fx = null, wid = null } = v;
       $('#gear .oil-slot').innerHTML = `${oilTag(profile)}<div class="oil">結晶 ${money('crystals', profile.crystals || 0)}</div>`;
       { // 起始武器欄：抽到（擁有）的專屬武器要在這裡裝上才會成為開局武器
-        const eq = profile.weapons.equipped, owned = profile.weapons.owned;
-        // 清單固定是「預設武器 ＋ 全部專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
+        const owned = profile.weapons.owned, curCls = classOfProfile(profile), idle = idleExclusives(profile);
+        // 清單固定是「每個職業：預設武器 ＋ 那個職業的專屬武器」，每把只出現一次、順序不隨裝備改變；「裝備中」只影響那一列的標示與按鈕。
         // M4～M6 的錯誤：第一列畫的是「目前裝備的武器」，裝了專屬武器後它出現兩次、預設武器從清單消失。
-        const cur = startWeaponOf(profile);
-        $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器</div>
-          ${[START_WEAPON, ...EXCLUSIVES].map((id) => { const def = id === START_WEAPON, own = def || owned.includes(id), on = cur === id;
+        // M8 第五輪：三個職業各有一欄，全部列出來——擁有的專屬武器不會因為換了職業就「看不到」。
+        $('#gear .weapon-slot').innerHTML = `<div class="sec-title">起始武器（每個職業一欄）</div>
+          ${idle.length ? `<div class="idle-excl">還沒裝上的專屬武器：${idle.map((w) => `${esc(WEAPONS[w].name)}（${esc(CLASSES[classOf(w)].name)}）`).join('、')}</div>` : ''}
+          ${Object.entries(CLASSES).map(([cls, K]) => `<div class="wgroup" data-cls="${cls}">${esc(K.name)}${cls === curCls ? '（目前的職業）' : ''}</div>` + [K.start, ...K.exclusive].map((id) => { const def = id === K.start, own = def || owned.includes(id), on = startWeaponOf(profile, cls) === id;
             const star = def ? 0 : profile.weapons.stars?.[id] || 0, shards = def ? 0 : profile.weapons.shards?.[id] || 0;
             return `<div class="wslot${own ? '' : ' locked'}${(on && fx?.kind === 'weapon') || (fx?.kind === 'wstar' && fx.id === id) ? ' fx-flash' : ''}" data-wid="${id}"><img src="${iconUrl(id, WEAPONS[id].color)}" alt=""><div><b style="color:${own ? WEAPONS[id].color : 'var(--dim)'}">${esc(WEAPONS[id].name)}</b><span class="lim">${def ? '預設' : '專屬'}</span>${def ? '' : `<span class="stars">${'★'.repeat(star)}${'☆'.repeat(WEAPON_ASCEND.max - star)}</span>`}<div class="d">${own ? esc(WEAPONS[id].desc[0]) : '尚未擁有（從商城的「武器祈燈」取得）'}${!def && (own || shards) ? `<br>星核 ${shards}` : ''}</div></div>
-            <div class="wbtns">${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? '<button class="buy" data-act="weaponUnequip">裝備</button>' : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}${!def && own ? `<button class="buy ghostbuy" data-act="wstarOpen" data-id="${id}">進階</button>` : ''}</div></div>`; }).join('')}`;
+            <div class="wbtns">${on ? '<span class="max">裝備中</span>' : !own ? '' : def ? `<button class="buy" data-act="weaponUnequip" data-cls="${cls}">裝備</button>` : `<button class="buy" data-act="weaponEquip" data-id="${id}">裝備</button>`}${!def && own ? `<button class="buy ghostbuy" data-act="wstarOpen" data-id="${id}">進階</button>` : ''}</div></div>`; }).join('')).join('')}`;
       }
       const eq = profile.gear.equipped, items = profile.gear.items, pending = profile.gear.pending;
       const isEq = (it) => eq[it.slot] === it.uid;
@@ -328,7 +334,7 @@ export function createUI(actions) {
           <table class="odds"><tr><th>獎項</th><th>單抽機率</th><th>含保底綜合機率</th></tr>
           ${WEAPON_GACHA.outcomes.map((o, i) => `<tr data-rarity="${i}"><td${i === w.top ? ' style="color:#ffc85a"' : ''}>${esc(o.name)}</td><td class="odds-base">${fmtPct(w.base[i])}</td><td class="odds-comp">${fmtPct(w.composite[i])}</td></tr>`).join('')}</table>
           <div class="pity">保底：第 <b>${w.pity}</b> 抽必得專屬武器。目前已累積 <b>${profile.gacha.wpity}</b> 抽，再 <b>${left}</b> 抽必得。</div>
-          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就從三把中平均選一把，變成那把的「星核」（專屬武器的進階材料）。抽到後要到「裝備」畫面裝上才會生效。武器祈燈不會給裝備，不佔背包。</div>
+          <div class="d small">抽中「專屬武器」時，從你還沒有的專屬武器中平均選一把（目前擁有 ${owned} / ${EXCLUSIVES.length}）；全部都有了就從三把中平均選一把，變成那把的「星核」（專屬武器的進階材料）。抽到後要到「裝備」畫面裝上才會生效；每把專屬武器屬於一個職業（${Object.values(CLASSES).map((c) => `${esc(WEAPONS[c.exclusive[0]].name)}＝${esc(c.name)}`).join('、')}），裝在那個職業的欄位上。武器祈燈不會給裝備，不佔背包。</div>
           <div class="gacha-btns">${wbtn(1)}${wbtn(10)}</div>`;
       }
       const packRow = (it) => {
