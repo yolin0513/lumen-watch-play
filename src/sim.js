@@ -2,8 +2,8 @@
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS } from './content.js';
-import { aggregate, scaled, reduction, CAPS } from './stats.js';
+import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS, AFFINITY, affinityMatch } from './content.js';
+import { aggregate, scaled, reduction, CAPS, affinityMul } from './stats.js';
 
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
@@ -76,6 +76,8 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
     bonds: [],             // 目前成立的羈絆（BONDS 的 id；每幀依身上的武器重算）
     bondsOn: true,         // 量測用：false＝關掉羈絆（tools/combo-report.mjs 做前後對照）
+    affinity: affinityMatch(clsId, chapter.id), // 屬性對上了嗎（職業×生態系；開局決定、整局不變）
+    affinityOn: true,      // 量測用：false＝當作沒有屬性系統（meta-test 比對「對不上＝沒有」、tools/affinity-report.mjs 做前後對照）
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -423,7 +425,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
     if (e.markT > 0 && bond('mark')) amount *= BFX('mark').mul; // 標定：被標記的怪受到的所有傷害加重
     if (e.shockT > 0 && dmgSrc !== 'chain') { amount *= FX('conduct').mul; e.shockT = 0; count('conducted'); } // 導電：被雷打過的怪，下一次受傷加重
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) {
       const near = TR.nearR && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < TR.nearR * TR.nearR; // 刃舞者：身邊的命中擊退加倍

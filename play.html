@@ -93,6 +93,9 @@
   .sound .vol b { min-width: 16px; color: var(--gold); text-align: center; } .sound .vol button { width: 30px; height: 30px; padding: 0; }
   .sound.off .vol { opacity: 0.45; }
   .stage-note { width: min(340px, 100%); margin: 0 auto 10px; color: var(--dim); font-size: 13px; line-height: 1.5; text-align: left; }
+  .aff { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--a); border: 1px solid var(--a); border-radius: 6px; padding: 0 5px; margin-left: 4px; vertical-align: 2px; opacity: 0.75; }
+  .aff.on { opacity: 1; background: rgba(255, 255, 255, 0.12); background: color-mix(in srgb, var(--a) 22%, transparent); }
+  .aff-line { margin-top: 6px; } .aff-line.on { color: #e9ecff; }
   .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(340px, 100%); margin: 0 auto; }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--edge); color: var(--gold); }
   .stage b { font-size: 20px; } .stage span { font-size: 10px; color: var(--dim); line-height: 1.3; }
@@ -713,6 +716,22 @@ const BONDS = {
   minewall:   { cls: 'blade',  weapons: ['wall', 'mines'],      name: '推雷',     desc: '每推出一次光牆，就在正前方放下一顆燈籠', fx: { ahead: 70 } },
 };
 const BOND_ALIAS = { emberbow: 'bolt', starfall: 'mortar', twinblade: 'boomerang' }; // 專屬武器在羈絆裡算成哪一把
+// ---- 屬性（M8 第五輪第三批）：每個職業一個屬性、每個生態系一個屬性。對上 → 傷害 ×AFFINITY.dmgMul；對不上 → 什麼都沒有（不扣）。
+// 擁有者與監督者一致同意的理由：要舒壓（不用開局前做功課）、不和「每個職業都打得過主線」打架、量測成本不再乘一次（屬性由職業×生態系決定，現有的職業×生態系量測就涵蓋了每種組合）。
+// 分配：每個屬性剛好兩個生態系，而且一前一後（生態系序號相加都是 7：1＋6、2＋5、3＋4）——每個職業都對上 2 個，
+// 也沒有哪個職業只拿到最前面、門檻已經是 fresh 的生態系（加成在那裡幾乎沒用）。
+// 幅度的依據寫在 tools/affinity-report.mjs 開頭；「對不上和沒有屬性一模一樣」由 affinity-report（逐局比對）與 meta-test 證明。
+const AFFINITIES = {
+  glint:  { name: '晶', color: '#9fdcff', desc: '光在晶面與熔岩玻璃上折射' },
+  blaze:  { name: '燼', color: '#ff9a6a', desc: '火在苔與菌根裡延燒' },
+  breeze: { name: '風', color: '#a8f0b8', desc: '風吹散濃霧與霜霧' },
+};
+const AFFINITY = {
+  dmgMul: 1.24, // ≤ 養成階梯單一階最大的傷害增量（fresh→early 實算 ×1.246，取不超過它的整數百分比）：只加傷害、不超過它 → 嚴格小於一整階（判準與對照組在 tools/affinity-report.mjs；擁有者選 A）
+  cls: { gunner: 'glint', mage: 'blaze', blade: 'breeze' },
+  eco: { 1: 'blaze', 2: 'breeze', 3: 'glint', 4: 'glint', 5: 'breeze', 6: 'blaze' },
+};
+const affinityMatch = (cls, ecoId) => !!AFFINITY.cls[cls] && AFFINITY.cls[cls] === AFFINITY.eco[ecoId];
 // 燈術師天生灼燒認得的「範圍攻擊」（傷害來源）
 const AREA_SRC = ['mortar', 'starfall', 'aura', 'flame', 'vortex', 'trail', 'stardust', 'ashwalk', 'crush'];
 const classOf = (weaponId) => Object.keys(CLASSES).find((c) => CLASSES[c].weapons.includes(weaponId) || CLASSES[c].exclusive.includes(weaponId)) ?? null;
@@ -1145,7 +1164,7 @@ const WEAPON_GACHA = {
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, START_WEAPON, PASSIVES, CLASSES, DEFAULT_CLASS, BONDS, BOND_ALIAS, AREA_SRC, classOf, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, CHOICE, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
+return { WEAPONS, START_WEAPON, PASSIVES, CLASSES, DEFAULT_CLASS, BONDS, BOND_ALIAS, AFFINITIES, AFFINITY, affinityMatch, AREA_SRC, classOf, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, CHOICE, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -1176,8 +1195,11 @@ function aggregate(mods) {
 }
 const scaled = (base, a) => (base + a.flat) * (1 + a.pct);
 const reduction = (a, cap) => 1 - Math.min(a.pct, cap);
+// 屬性加成（M8 第五輪第三批）：獨立的傷害乘數，不進 dmg 的 pct 池。
+// 理由：進池的話，同一個 +24% 在 fresh 是 ×1.24、在 asc2（已有 +115%）只剩 ×1.11——「對上了」的感覺會隨養成變淡。對不上＝×1（不扣）。
+const affinityMul = (matched, mul) => (matched ? mul : 1);
 
-return { STATS, CAPS, aggregate, scaled, reduction };
+return { STATS, CAPS, aggregate, scaled, reduction, affinityMul };
 })();
 
 // ---- sim.js
@@ -1186,8 +1208,8 @@ const __m_sim_js = (() => {
 // 畫面層只讀 state，並消化 state.events 產生特效；介面層呼叫 choose()/closeChest()/pause 相關。
 // phase：play 進行中 / choice 升級三選一 / chest 燈核結果 / win / lose（choice、chest、win、lose 時 update 不推進）
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
-const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS } = __m_content_js;
-const { aggregate, scaled, reduction, CAPS } = __m_stats_js;
+const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS, AFFINITY, affinityMatch } = __m_content_js;
+const { aggregate, scaled, reduction, CAPS, affinityMul } = __m_stats_js;
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
 function makeRng(seed = 1) {
@@ -1259,6 +1281,8 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
     bonds: [],             // 目前成立的羈絆（BONDS 的 id；每幀依身上的武器重算）
     bondsOn: true,         // 量測用：false＝關掉羈絆（tools/combo-report.mjs 做前後對照）
+    affinity: affinityMatch(clsId, chapter.id), // 屬性對上了嗎（職業×生態系；開局決定、整局不變）
+    affinityOn: true,      // 量測用：false＝當作沒有屬性系統（meta-test 比對「對不上＝沒有」、tools/affinity-report.mjs 做前後對照）
     events: [],        // 給畫面層的一次性事件
     ledger: { kills: {}, elites: 0, boss: null }, // 燈油結算的來源帳（只由 onKill 寫入）
     pendingLevels: 0, choice: null, chest: null,
@@ -1606,7 +1630,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
     if (e.markT > 0 && bond('mark')) amount *= BFX('mark').mul; // 標定：被標記的怪受到的所有傷害加重
     if (e.shockT > 0 && dmgSrc !== 'chain') { amount *= FX('conduct').mul; e.shockT = 0; count('conducted'); } // 導電：被雷打過的怪，下一次受傷加重
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) {
       const near = TR.nearR && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < TR.nearR * TR.nearR; // 刃舞者：身邊的命中擊退加倍
@@ -2980,7 +3004,7 @@ return { GUIDE, chestGuides };
 const __m_render_js = (() => {
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
 const { VW, terrainIn, ventState } = __m_sim_js;
-const { ENEMIES, WEAPONS, PASSIVES, CHAPTER1, BONDS } = __m_content_js;
+const { ENEMIES, WEAPONS, PASSIVES, CHAPTER1, BONDS, AFFINITY, AFFINITIES } = __m_content_js;
 const { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } = __m_art_js;
 const { chestGuides, GUIDE } = __m_guide_js;
 // shared：各章共用的怪，會依章節 hue 偏移換色，讓同一種怪在不同地區看起來屬於那片土地
@@ -3583,7 +3607,11 @@ function createRenderer(chapter = CHAPTER1) {
     for (const wp of p.weapons) { drawSlot(g, makeIcon(wp.id, WEAPONS[wp.id].color, 36), x, y, S, wp.evo ? '★' : wp.lv); x += S + 3; }
     x += 4;
     for (const [id, lv] of Object.entries(p.passives)) { drawSlot(g, makeIcon(id, PASSIVES[id].color, 36), x, y, S, lv); x += S + 3; }
-    if (s.bonds?.length) { g.textAlign = 'left'; g.font = '700 11px system-ui'; g.fillStyle = '#ffd98a'; shadowText(g, '♦ ' + s.bonds.map((b) => BONDS[b].name).join('・'), 8, y + S + 14); } // 成立的羈絆
+    const ly = y + S + 14 + (s.boss ? 20 : 0); // 守衛血條（top＋58）出現時，羈絆與屬性這一行往下移，不疊在血條上
+    if (s.bonds?.length) { g.textAlign = 'left'; g.font = '700 11px system-ui'; g.fillStyle = '#ffd98a'; shadowText(g, '♦ ' + s.bonds.map((b) => BONDS[b].name).join('・'), 8, ly); } // 成立的羈絆
+    // 屬性（M8 第五輪第三批）：這一關的屬性、目前的職業有沒有對上（右邊，和羈絆同一行；文字從 AFFINITY 算出來）
+    const ea = AFFINITIES[AFFINITY.eco[s.chapter.id]];
+    if (ea) { g.textAlign = 'right'; g.font = '700 11px system-ui'; g.fillStyle = s.affinity ? ea.color : '#9aa3d6'; shadowText(g, s.affinity ? `屬性 ${ea.name} ✓ 傷害 +${Math.round((AFFINITY.dmgMul - 1) * 100)}%` : `屬性 ${ea.name}（沒對上）`, w - 8, ly); }
 
     // 頭上血條
     const px = w / 2, py = h / 2 - 32;
@@ -4415,7 +4443,7 @@ const __m_ui_js = (() => {
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost, CLASSES, classOf } = __m_content_js;
+const { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost, CLASSES, classOf, AFFINITY, AFFINITIES, affinityMatch } = __m_content_js;
 const { makeIcon } = __m_art_js;
 const { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf, classOfProfile, idleExclusives } = __m_meta_js;
 const { aggregate } = __m_stats_js;
@@ -4425,6 +4453,15 @@ const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clock = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+// 屬性（M8 第五輪第三批）：標記與說明一律從 AFFINITY 算出來（不手寫數字；shop-test 拿畫面和 affinityMatch 逐格比對）
+const affPct = () => Math.round((AFFINITY.dmgMul - 1) * 100);
+const affTag = (aid, on = false) => `<i class="aff${on ? ' on' : ''}" style="--a:${AFFINITIES[aid].color}">${esc(AFFINITIES[aid].name)}${on ? ' ✓' : ''}</i>`;
+function affLine(cls, ecoId) {
+  const ea = AFFINITY.eco[ecoId], ca = AFFINITY.cls[cls], K = CLASSES[cls];
+  return affinityMatch(cls, ecoId)
+    ? `<div class="aff-line on">屬性 ${affTag(ea, true)} ${esc(K.name)}對上了：傷害 +${affPct()}%</div>`
+    : `<div class="aff-line">屬性 ${affTag(ea)} ${esc(K.name)}是${esc(AFFINITIES[ca].name)}，沒對上（沒有加成，也不扣）</div>`;
+}
 const num = (n) => Math.floor(n).toLocaleString('zh-Hant');
 
 // 加成顯示：pct → +12%；flat → +10（回復顯示 /秒）
@@ -4562,7 +4599,7 @@ function createUI(actions) {
       $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length * STAGES.count} 座燈塔` : '尚未點亮任何燈塔';
       // 職業（M8 第五輪）：記住上次選的，不換就直接「點燈出發」，不多一個畫面
       const cls = classOfProfile(profile), idle = idleExclusives(profile);
-      $('#menu .classes').innerHTML = `<div class="row">${Object.entries(CLASSES).map(([id, c]) => `<button class="cls${id === cls ? ' on' : ''}" style="--c:${c.color}" data-act="setClass" data-id="${id}"><b>${esc(c.name)}</b><small>${esc(WEAPONS[startWeaponOf(profile, id)].name)}</small></button>`).join('')}</div>
+      $('#menu .classes').innerHTML = `<div class="row">${Object.entries(CLASSES).map(([id, c]) => `<button class="cls${id === cls ? ' on' : ''}" style="--c:${c.color}" data-act="setClass" data-id="${id}"><b>${esc(c.name)}</b>${affTag(AFFINITY.cls[id])}<small>${esc(WEAPONS[startWeaponOf(profile, id)].name)}</small></button>`).join('')}</div>
         <div class="trait">${esc(CLASSES[cls].desc)}・${esc(CLASSES[cls].traitDesc)}</div>
         ${idle.length ? `<div class="idle-excl">你還有 ${idle.length} 把專屬武器可以裝在其他職業：${idle.map((w) => `${esc(WEAPONS[w].name)}（${esc(CLASSES[classOf(w)].name)}）`).join('、')}——到「裝備」裝上</div>` : ''}`;
       show('menu');
@@ -4573,17 +4610,18 @@ function createUI(actions) {
       const back = $('#chapters .back'), title = $('#chapters h2');
       if (eco === null) {
         back.dataset.act = 'menu'; title.textContent = '選擇燈塔';
-        $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
+        const cls = classOfProfile(profile);
+        $('#chapters .list').innerHTML = `<div class="stage-note aff-note">目前的職業：${esc(CLASSES[cls].name)} ${affTag(AFFINITY.cls[cls])}——標 ✓ 的生態系屬性對上，傷害 +${affPct()}%；沒對上的沒有加成，也不扣。</div>` + CHAPTERS.map((c) => {
           const open = ecoUnlocked(profile, c.id), pr = ecoProgress(profile, c.id), deep = pr.cleared.length, best = deep ? pr.best[deep] : null;
           return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="openEco" data-id="${c.id}"` : 'disabled'}>
-            <b>${esc(c.name)}</b><span class="done">${deep} / ${STAGES.count}</span>
+            <b>${esc(c.name)}</b> ${affTag(AFFINITY.eco[c.id], affinityMatch(cls, c.id))}<span class="done">${deep} / ${STAGES.count}</span>
             <div>${open ? esc(c.tagline) : `${esc(unlockText(profile, c.id))}後解鎖`}</div>
             ${best ? `<div class="best">第 ${deep} 關最快 ${clock(best.t)}</div>` : ''}</button>`;
         }).join('');
       } else {
         const c = CHAPTERS.find((x) => x.id === eco), pr = ecoProgress(profile, eco);
         back.dataset.act = 'ecoBack'; title.textContent = c.name;
-        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。</div>
+        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。${affLine(classOfProfile(profile), eco)}</div>
           <div class="stages">${Array.from({ length: STAGES.count }, (_, i) => i + 1).map((n) => {
             const open = stageUnlocked(profile, eco, n), done = stageCleared(profile, eco, n), best = pr.best[n];
             return `<button class="stage${done ? ' done' : ''}" data-stage="${n}" ${open ? `data-act="startChapter" data-id="${eco}" data-stage="${n}"` : 'disabled'}>

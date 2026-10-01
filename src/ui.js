@@ -1,7 +1,7 @@
 // HTML 介面層：主選單、章節、天賦、裝備、商城、升級三選一、燈核、暫停、結算、提示。
 // 只負責顯示，並把點擊轉成 actions[act](dataset)；不直接改遊戲資料。
 // 按鈕回饋只用 transform／opacity 的 CSS 動畫（不觸發重排，不增加遊戲畫布的繪製成本）。
-import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost, CLASSES, classOf } from './content.js';
+import { WEAPONS, PASSIVES, RESONANCES, CHAPTERS, TALENTS, RARITIES, GEAR_SLOTS, GEAR_MAX_LV, STAT_NAMES, SHOP, GACHA, WEAPON_GACHA, DAILY, START_WEAPON, AUTO_SALVAGE_MAX, GEAR_ASCEND, WEAPON_ASCEND, STAGES, gearUpgradeCost, CLASSES, classOf, AFFINITY, AFFINITIES, affinityMatch } from './content.js';
 import { makeIcon } from './art.js';
 import { talentCost, gearMods, baseGearMods, ascendPerks, ascendCost, weaponAscendCost, crystalValue, salvageValue, ecoUnlocked, stageUnlocked, stageCleared, ecoProgress, unlockText, profileMods, gearSpace, autoSalvageLevel, startWeaponOf, classOfProfile, idleExclusives } from './meta.js';
 import { aggregate } from './stats.js';
@@ -12,6 +12,15 @@ const $ = (sel) => document.querySelector(sel);
 const iconUrl = (id, color) => makeIcon(id, color, 104).toDataURL();
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clock = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+// 屬性（M8 第五輪第三批）：標記與說明一律從 AFFINITY 算出來（不手寫數字；shop-test 拿畫面和 affinityMatch 逐格比對）
+const affPct = () => Math.round((AFFINITY.dmgMul - 1) * 100);
+const affTag = (aid, on = false) => `<i class="aff${on ? ' on' : ''}" style="--a:${AFFINITIES[aid].color}">${esc(AFFINITIES[aid].name)}${on ? ' ✓' : ''}</i>`;
+function affLine(cls, ecoId) {
+  const ea = AFFINITY.eco[ecoId], ca = AFFINITY.cls[cls], K = CLASSES[cls];
+  return affinityMatch(cls, ecoId)
+    ? `<div class="aff-line on">屬性 ${affTag(ea, true)} ${esc(K.name)}對上了：傷害 +${affPct()}%</div>`
+    : `<div class="aff-line">屬性 ${affTag(ea)} ${esc(K.name)}是${esc(AFFINITIES[ca].name)}，沒對上（沒有加成，也不扣）</div>`;
+}
 const num = (n) => Math.floor(n).toLocaleString('zh-Hant');
 
 // 加成顯示：pct → +12%；flat → +10（回復顯示 /秒）
@@ -149,7 +158,7 @@ export function createUI(actions) {
       $('#menu .progress').textContent = cleared ? `已點亮 ${cleared} / ${CHAPTERS.length * STAGES.count} 座燈塔` : '尚未點亮任何燈塔';
       // 職業（M8 第五輪）：記住上次選的，不換就直接「點燈出發」，不多一個畫面
       const cls = classOfProfile(profile), idle = idleExclusives(profile);
-      $('#menu .classes').innerHTML = `<div class="row">${Object.entries(CLASSES).map(([id, c]) => `<button class="cls${id === cls ? ' on' : ''}" style="--c:${c.color}" data-act="setClass" data-id="${id}"><b>${esc(c.name)}</b><small>${esc(WEAPONS[startWeaponOf(profile, id)].name)}</small></button>`).join('')}</div>
+      $('#menu .classes').innerHTML = `<div class="row">${Object.entries(CLASSES).map(([id, c]) => `<button class="cls${id === cls ? ' on' : ''}" style="--c:${c.color}" data-act="setClass" data-id="${id}"><b>${esc(c.name)}</b>${affTag(AFFINITY.cls[id])}<small>${esc(WEAPONS[startWeaponOf(profile, id)].name)}</small></button>`).join('')}</div>
         <div class="trait">${esc(CLASSES[cls].desc)}・${esc(CLASSES[cls].traitDesc)}</div>
         ${idle.length ? `<div class="idle-excl">你還有 ${idle.length} 把專屬武器可以裝在其他職業：${idle.map((w) => `${esc(WEAPONS[w].name)}（${esc(CLASSES[classOf(w)].name)}）`).join('、')}——到「裝備」裝上</div>` : ''}`;
       show('menu');
@@ -160,17 +169,18 @@ export function createUI(actions) {
       const back = $('#chapters .back'), title = $('#chapters h2');
       if (eco === null) {
         back.dataset.act = 'menu'; title.textContent = '選擇燈塔';
-        $('#chapters .list').innerHTML = CHAPTERS.map((c) => {
+        const cls = classOfProfile(profile);
+        $('#chapters .list').innerHTML = `<div class="stage-note aff-note">目前的職業：${esc(CLASSES[cls].name)} ${affTag(AFFINITY.cls[cls])}——標 ✓ 的生態系屬性對上，傷害 +${affPct()}%；沒對上的沒有加成，也不扣。</div>` + CHAPTERS.map((c) => {
           const open = ecoUnlocked(profile, c.id), pr = ecoProgress(profile, c.id), deep = pr.cleared.length, best = deep ? pr.best[deep] : null;
           return `<button class="chapter ch${c.id}" data-ch="${c.id}" ${open ? `data-act="openEco" data-id="${c.id}"` : 'disabled'}>
-            <b>${esc(c.name)}</b><span class="done">${deep} / ${STAGES.count}</span>
+            <b>${esc(c.name)}</b> ${affTag(AFFINITY.eco[c.id], affinityMatch(cls, c.id))}<span class="done">${deep} / ${STAGES.count}</span>
             <div>${open ? esc(c.tagline) : `${esc(unlockText(profile, c.id))}後解鎖`}</div>
             ${best ? `<div class="best">第 ${deep} 關最快 ${clock(best.t)}</div>` : ''}</button>`;
         }).join('');
       } else {
         const c = CHAPTERS.find((x) => x.id === eco), pr = ecoProgress(profile, eco);
         back.dataset.act = 'ecoBack'; title.textContent = c.name;
-        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。</div>
+        $('#chapters .list').innerHTML = `<div class="stage-note">${esc(c.tagline)}<br>通關第 ${STAGES.unlockNext} 關會開放下一個生態系；越後面的關卡越難。${affLine(classOfProfile(profile), eco)}</div>
           <div class="stages">${Array.from({ length: STAGES.count }, (_, i) => i + 1).map((n) => {
             const open = stageUnlocked(profile, eco, n), done = stageCleared(profile, eco, n), best = pr.best[n];
             return `<button class="stage${done ? ' done' : ''}" data-stage="${n}" ${open ? `data-act="startChapter" data-id="${eco}" data-stage="${n}"` : 'disabled'}>

@@ -314,6 +314,22 @@ export const BONDS = {
   minewall:   { cls: 'blade',  weapons: ['wall', 'mines'],      name: '推雷',     desc: '每推出一次光牆，就在正前方放下一顆燈籠', fx: { ahead: 70 } },
 };
 export const BOND_ALIAS = { emberbow: 'bolt', starfall: 'mortar', twinblade: 'boomerang' }; // 專屬武器在羈絆裡算成哪一把
+// ---- 屬性（M8 第五輪第三批）：每個職業一個屬性、每個生態系一個屬性。對上 → 傷害 ×AFFINITY.dmgMul；對不上 → 什麼都沒有（不扣）。
+// 擁有者與監督者一致同意的理由：要舒壓（不用開局前做功課）、不和「每個職業都打得過主線」打架、量測成本不再乘一次（屬性由職業×生態系決定，現有的職業×生態系量測就涵蓋了每種組合）。
+// 分配：每個屬性剛好兩個生態系，而且一前一後（生態系序號相加都是 7：1＋6、2＋5、3＋4）——每個職業都對上 2 個，
+// 也沒有哪個職業只拿到最前面、門檻已經是 fresh 的生態系（加成在那裡幾乎沒用）。
+// 幅度的依據寫在 tools/affinity-report.mjs 開頭；「對不上和沒有屬性一模一樣」由 affinity-report（逐局比對）與 meta-test 證明。
+export const AFFINITIES = {
+  glint:  { name: '晶', color: '#9fdcff', desc: '光在晶面與熔岩玻璃上折射' },
+  blaze:  { name: '燼', color: '#ff9a6a', desc: '火在苔與菌根裡延燒' },
+  breeze: { name: '風', color: '#a8f0b8', desc: '風吹散濃霧與霜霧' },
+};
+export const AFFINITY = {
+  dmgMul: 1.24, // ≤ 養成階梯單一階最大的傷害增量（fresh→early 實算 ×1.246，取不超過它的整數百分比）：只加傷害、不超過它 → 嚴格小於一整階（判準與對照組在 tools/affinity-report.mjs；擁有者選 A）
+  cls: { gunner: 'glint', mage: 'blaze', blade: 'breeze' },
+  eco: { 1: 'blaze', 2: 'breeze', 3: 'glint', 4: 'glint', 5: 'breeze', 6: 'blaze' },
+};
+export const affinityMatch = (cls, ecoId) => !!AFFINITY.cls[cls] && AFFINITY.cls[cls] === AFFINITY.eco[ecoId];
 // 燈術師天生灼燒認得的「範圍攻擊」（傷害來源）
 export const AREA_SRC = ['mortar', 'starfall', 'aura', 'flame', 'vortex', 'trail', 'stardust', 'ashwalk', 'crush'];
 export const classOf = (weaponId) => Object.keys(CLASSES).find((c) => CLASSES[c].weapons.includes(weaponId) || CLASSES[c].exclusive.includes(weaponId)) ?? null;

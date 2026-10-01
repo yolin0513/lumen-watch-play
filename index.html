@@ -95,6 +95,9 @@
   .sound .vol b { min-width: 16px; color: var(--gold); text-align: center; } .sound .vol button { width: 30px; height: 30px; padding: 0; }
   .sound.off .vol { opacity: 0.45; }
   .stage-note { width: min(340px, 100%); margin: 0 auto 10px; color: var(--dim); font-size: 13px; line-height: 1.5; text-align: left; }
+  .aff { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--a); border: 1px solid var(--a); border-radius: 6px; padding: 0 5px; margin-left: 4px; vertical-align: 2px; opacity: 0.75; }
+  .aff.on { opacity: 1; background: rgba(255, 255, 255, 0.12); background: color-mix(in srgb, var(--a) 22%, transparent); }
+  .aff-line { margin-top: 6px; } .aff-line.on { color: #e9ecff; }
   .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(340px, 100%); margin: 0 auto; }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--edge); color: var(--gold); }
   .stage b { font-size: 20px; } .stage span { font-size: 10px; color: var(--dim); line-height: 1.3; }

@@ -24,3 +24,6 @@ export function aggregate(mods) {
 }
 export const scaled = (base, a) => (base + a.flat) * (1 + a.pct);
 export const reduction = (a, cap) => 1 - Math.min(a.pct, cap);
+// 屬性加成（M8 第五輪第三批）：獨立的傷害乘數，不進 dmg 的 pct 池。
+// 理由：進池的話，同一個 +24% 在 fresh 是 ×1.24、在 asc2（已有 +115%）只剩 ×1.11——「對上了」的感覺會隨養成變淡。對不上＝×1（不扣）。
+export const affinityMul = (matched, mul) => (matched ? mul : 1);

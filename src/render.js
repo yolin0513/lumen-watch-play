@@ -1,6 +1,6 @@
 // 畫面層：讀 sim.state 畫圖；粒子、飄字、震動、橫幅這些純視覺效果由 state.events 觸發，只存在這裡。
 import { VW, terrainIn, ventState } from './sim.js';
-import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1, BONDS } from './content.js';
+import { ENEMIES, WEAPONS, PASSIVES, CHAPTER1, BONDS, AFFINITY, AFFINITIES } from './content.js';
 import { glow, makeGround, makeCreature, drawPlayer, makeIcon, makeChest, makePillar, PALETTES } from './art.js';
 import { chestGuides, GUIDE } from './guide.js';
 
@@ -604,7 +604,11 @@ export function createRenderer(chapter = CHAPTER1) {
     for (const wp of p.weapons) { drawSlot(g, makeIcon(wp.id, WEAPONS[wp.id].color, 36), x, y, S, wp.evo ? '★' : wp.lv); x += S + 3; }
     x += 4;
     for (const [id, lv] of Object.entries(p.passives)) { drawSlot(g, makeIcon(id, PASSIVES[id].color, 36), x, y, S, lv); x += S + 3; }
-    if (s.bonds?.length) { g.textAlign = 'left'; g.font = '700 11px system-ui'; g.fillStyle = '#ffd98a'; shadowText(g, '♦ ' + s.bonds.map((b) => BONDS[b].name).join('・'), 8, y + S + 14); } // 成立的羈絆
+    const ly = y + S + 14 + (s.boss ? 20 : 0); // 守衛血條（top＋58）出現時，羈絆與屬性這一行往下移，不疊在血條上
+    if (s.bonds?.length) { g.textAlign = 'left'; g.font = '700 11px system-ui'; g.fillStyle = '#ffd98a'; shadowText(g, '♦ ' + s.bonds.map((b) => BONDS[b].name).join('・'), 8, ly); } // 成立的羈絆
+    // 屬性（M8 第五輪第三批）：這一關的屬性、目前的職業有沒有對上（右邊，和羈絆同一行；文字從 AFFINITY 算出來）
+    const ea = AFFINITIES[AFFINITY.eco[s.chapter.id]];
+    if (ea) { g.textAlign = 'right'; g.font = '700 11px system-ui'; g.fillStyle = s.affinity ? ea.color : '#9aa3d6'; shadowText(g, s.affinity ? `屬性 ${ea.name} ✓ 傷害 +${Math.round((AFFINITY.dmgMul - 1) * 100)}%` : `屬性 ${ea.name}（沒對上）`, w - 8, ly); }
 
     // 頭上血條
     const px = w / 2, py = h / 2 - 32;
