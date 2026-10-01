@@ -414,7 +414,24 @@ export const ENEMIES = {
   glider:   { name: '冰滑蟲', r: 12, hp: 30,  speed: 66,  dmg: 10, xp: 3, oil: 2, ai: 'lunge', lungeSpeed: 430, windup: 0.5, lungeT: 0.45, lungeCd: 2.2, range: 200 },
   // 第六章：深根城
   hive:     { name: '菌巢',   r: 24, hp: 240, speed: 0,   dmg: 8,  xp: 10, oil: 6, ai: 'hive', mass: 99, spawnCd: 3.2, spawn: { kind: 'mite', n: 2, max: 8 } },
-  rooter:   { name: '根鬚兵', r: 16, hp: 64,  speed: 44,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', armor: 0.7, mass: 3 },
+  // farBreak（M8 第五輪第四批）：被遠處（> dist）「射中」時外殼裂開 t 秒，期間護甲失效（範圍攻擊、灼燒不算，和脹孢囊同一套判定）。
+  // 理由：職業差距第 7 關燈銃手在深根城晚 2 階——一開場就被根鬚兵磨死（受傷 44～45% 來自根鬚兵），燈術師只死在守衛戰。
+  // 給遠距的打法一個互動方式（破綻），不是降護甲把怪變弱：在 dist 以內打牠照樣有護甲（刃舞者的劍氣、迴光刃從 dist 外射中也算，燈術師的雷蕊也算）。
+  // 掃描（深根城第 7 關、燈銃手、36 局）：沒有破綻 late 15／asc1 19；160px 16／29；200px 12／30；200px＋破綻期間減速一半 18／25——
+  //   asc1 從 53% 到 83%（越過門檻），late 都在 33～50% 的雜訊內；減速沒有更好，不加。12 局的掃描方向不一致（200px＋減速一半的 late 有 1/12 也有 7/12），所以用 36 局判。
+  //   根鬚兵仍佔燈銃手受傷的 35～36%（沒有破綻時 44～48%），沒有變得沒威脅。
+  rooter:   { name: '根鬚兵', r: 16, hp: 64,  speed: 44,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', armor: 0.7, mass: 3, farBreak: { dist: 200, t: 2.5 } },
+  // M8 第五輪第四批：新怪物（只在第 4～10 關出現、六個生態系共用；見 NEW_FOES）。槓桿是「行為」，血量和既有小怪同級（北極星：不要無腦加血量）
+  // 旋孢：在角色周圍 orbitR 繞圈，全場共用一個節拍（period 秒），每拍最後 diveT 秒一起往內收（速度 ×diveMul）
+  circler:  { name: '旋孢',   r: 10, hp: 14,  speed: 95,  dmg: 6,  xp: 2, oil: 1, ai: 'circle', orbitR: 150, period: 4.5, diveT: 0.9, diveMul: 2.6 },
+  // 癒孢：和角色保持距離、靠太近就躲開；每 healCd 秒替 healR 內受傷的一般怪補 healPct 的血（精英與守衛不補）——逼你先處理它
+  mender:   { name: '癒孢',   r: 12, hp: 28,  speed: 70,  dmg: 4,  xp: 3, oil: 2, ai: 'mender', keep: 210, flee: 170, healCd: 2.5, healR: 120, healPct: 0.25 },
+  // 縛光藤：靠近到 range 內停下蓄力（預警線），蓄完角色還在 range×reach 內就纏住 holdT 秒：移速 ×(1−slowK)；打死它、或拉開到 breakD 以外就解開（breakD 一定要大於 range×reach，不然一纏上就斷）
+  // range 從 150 拉到 260：150 時燈銃手在遠處就把牠打死，六個生態系有四個一次都沒被纏住（tools/foe-form.mjs --real）
+  // grace：掙脫後幾秒內不會再被纏（好幾隻輪流接上時，燈術師一局有 135～160 秒被纏住——舒壓的反面）
+  vine:     { name: '縛光藤', r: 13, hp: 34,  speed: 58,  dmg: 6,  xp: 3, oil: 2, ai: 'vine', range: 260, reach: 1.2, windup: 0.6, holdT: 2.5, breakD: 380, slowK: 0.35, cd: 7, grace: 5 },
+  // 盾殼：正面（面向角色那一側、半角 arc）擋下射擊與刀光（受傷 ×taken），範圍攻擊與灼燒不擋；盾慢慢轉向角色（turn 弧度／秒）——繞到側後就打得到
+  aegis:    { name: '盾殼',   r: 15, hp: 50,  speed: 46,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', mass: 3, shield: { arc: 1.05, turn: 1.4, taken: 0.2 } },
   // 燈塔守衛
   boss1:    { name: '噬燈菌母', r: 42, hp: 40000, speed: 44, dmg: 14, xp: 0, oil: 0, ai: 'boss', mass: 50 },
   boss2:    { name: '沼母巨蛭', r: 40, hp: 52000, speed: 50, dmg: 13, xp: 0, oil: 0, ai: 'boss', mass: 50 },
@@ -594,6 +611,14 @@ export const STAGE_LEVERS = [
   { n: 9,  spawn: 1.38, speed: 1.17, cd: 1.27, sig: 2.7, elites: 2, dmg: 1.22, hp: 1.20, main: '全面加壓' },
   { n: 10, spawn: 1.42, speed: 1.20, cd: 1.30, sig: 3.0, elites: 2, dmg: 1.26, hp: 1.25, main: '最終試煉：招牌機制三倍' },
 ];
+// 新怪物（M8 第五輪第四批，擁有者選「甲」：不加生態系，在既有 6 個生態系的第 4～10 關加入）：from＝從第幾關開始、at＝這一局第幾秒開始出現、w＝名單權重；
+// ring＝另外加一次成群事件。每一關比前一關多一種或一樣多（meta-test 檢查只增不減）；第 7～10 關四種都有。
+export const NEW_FOES = [
+  { kind: 'circler', from: 4, at: 60,  w: 2,   ring: { at: 200, n: 10 } },
+  { kind: 'mender',  from: 5, at: 90,  w: 1.2 },
+  { kind: 'vine',    from: 6, at: 75,  w: 1.2 },
+  { kind: 'aegis',   from: 7, at: 100, w: 1.5 },
+];
 // 各生態系的招牌怪（sig 放大它們在名單與成群事件裡的份量）；螢苔原的招牌是精英，所以它的 sig 換成多一隻精英
 export const SIGNATURE = { 1: [], 2: ['bloater'], 3: ['blinker'], 4: ['cinder', 'golem'], 5: ['frostmoth', 'glider'], 6: ['rooter', 'hive'] };
 // 多出來的精英：在菌潮最後幾波附近出現（組建已成形、燈核用得到）；種類用本章最後一隻精英
@@ -603,14 +628,22 @@ export function stageChapter(ch, n) {
   const L = STAGE_LEVERS[n - 1], oil = STAGES.oil ** (n - STAGES.base), sigKinds = SIGNATURE[ch.id] ?? [], r = ch.reward;
   const lastElite = [...ch.events].reverse().find((e) => e.type === 'elite')?.kind;
   const extra = (L.elites + (ch.id === 1 && L.sig >= 2 ? 1 : 0));
+  const foes = NEW_FOES.filter((f) => n >= f.from);
+  // 新怪不稀釋招牌（監督者批准，M8 第五輪第四批）：新怪加進名單時，招牌怪的權重放大 k 倍，讓招牌怪在名單裡的份量和沒有新怪時一樣——
+  // 新怪只分走一般怪的份量。S＝招牌、O＝其他原本的怪、F＝新怪：kS/(kS+O+F) ＝ S/(S+O) → k ＝ 1 + F/O。
+  // 理由：沒做這條時，盾殼從第 7 關加入名單剛好抵消了第 6→7 關「招牌變強」的增量（份量 47→47%），霧沼的脹孢囊少約 27%、晶窟少約 14%——
+  // 下限是防崩潰用的，不是用來慢慢侵蝕的；而「剛好抵消」不會觸發任何警報。
+  const sigW = ch.roster.reduce((a, [, kind, w]) => a + (sigKinds.includes(kind) ? w * L.sig : 0), 0), otherW = ch.roster.reduce((a, [, kind, w]) => a + (sigKinds.includes(kind) ? 0 : w), 0);
+  const sigK = sigW > 0 && otherW > 0 ? 1 + foes.reduce((a, f) => a + f.w, 0) / otherW : 1;
   const events = [
+    ...foes.filter((f) => f.ring).map((f) => ({ at: f.ring.at, type: 'ring', kind: f.kind, n: f.ring.n })),
     ...ch.events.map((e) => ((e.type === 'ring' || e.type === 'rush') && sigKinds.includes(e.kind) ? { ...e, n: Math.round(e.n * L.sig) } : e)),
     ...EXTRA_ELITE_AT.slice(0, extra).map((at) => ({ at, type: 'elite', kind: lastElite })),
   ].sort((a, b) => a.at - b.at);
   return {
     ...ch, stage: n, key: `${ch.id}-${n}`, levers: L, bossHpMul: L.hp, speedMul: L.speed, cdMul: L.cd,
     hpScale: (t) => ch.hpScale(t) * L.hp, dmgScale: (t) => ch.dmgScale(t) * L.dmg, spawnRate: (t) => ch.spawnRate(t) * L.spawn,
-    roster: ch.roster.map(([at, kind, w]) => [at, kind, sigKinds.includes(kind) ? w * L.sig : w]),
+    roster: [...ch.roster.map(([at, kind, w]) => [at, kind, sigKinds.includes(kind) ? w * L.sig * sigK : w]), ...foes.map((f) => [f.at, f.kind, f.w])],
     events,
     ...(ch.roots ? { roots: { ...ch.roots, every: ch.roots.every / Math.sqrt(L.sig) } } : {}),
     reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),

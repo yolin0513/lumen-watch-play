@@ -5,6 +5,9 @@
 import { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS, AFFINITY, affinityMatch } from './content.js';
 import { aggregate, scaled, reduction, CAPS, affinityMul } from './stats.js';
 
+// 測試用：sealEnemies＝每隻怪生出來就 Object.seal——之後任何地方再加欄位都會直接丟例外（ES module 是嚴格模式），
+// 讓所有情境測試都順便檢查「怪物物件只有一種形狀」（只靠實際打幾局的話，很少發生的路徑永遠量不到）。遊戲本身不開。
+export const DEBUG = { sealEnemies: false };
 export const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
 export function makeRng(seed = 1) {
@@ -71,6 +74,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       revives: 0, facing: 1, aimX: 1, aimY: 0, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
       vx: 0, vy: 0, onIce: false, slowT: 0, slowK: 0, // 冰面慣性、霜冰減速
       stillT: 0, hasteT: 0, heat: 0, stopT: 0, // 增幅用：站定多久（靜息準星）、加速（刃風）、熱量與停下多久（焦土步）
+      tetherE: null, tetherT: 0, tetherGrace: 0, // 縛光藤：纏住角色的那一隻、還剩幾秒、掙脫後還有幾秒不會再被纏
     },
     enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
     slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
@@ -270,9 +274,16 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
       flash: 0, frame: rand() * 4, seed: rand() * 100, slowT: 0, slow: 0, orbT: 0, fireT: (t.fireCd || 0) * (0.5 + rand()),
       mode: 'move', modeT: 0, cdT: rand() * 1.5, dirX: 0, dirY: 0, tele: null, fuse: 0, warn: null,
+      // 之後才會用到的欄位也在這裡先給預設值（每個用到的地方都把「沒有」當成 0／false／null，行為不變）：
+      // 讓每一隻怪都是同一個物件形狀。先前這些欄位是邊打邊加，一局下來怪物物件有 78 種形狀，V8 的存取點全部走慢路徑——
+      // 深根城第 10 關在「同一頁打第二局」時每幀中位數 0.42 → 0.97ms、p99 2.56ms（tools/frame-cost.mjs 開頭）。
+      burnT: 0, burnDps: 0, burnAcc: 0, shockT: 0, lensT: 0, lensN: 0, markT: 0, rushT: 0, stunT: 0, trailAcc: 0,
+      ventBurn: null, surge: false, noReward: false, hive: null, face: 0, breakT: 0,
     };
+    e.face = Math.atan2(p.y - e.y, p.x - e.x); // 盾殼的盾一開始就朝著角色
     if (t.ai === 'blink') e.cdT = t.blinkCd * (0.4 + rand() * 0.6);
     if (isBoss(kind)) Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, beamT: 2, rainT: 3, combo: 0 });
+    if (DEBUG.sealEnemies) Object.seal(e);
     s.enemies.push(e);
     return e;
   }
@@ -386,7 +397,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const a = rand() * TAU;
     for (const sgn of [1, -1]) {
       const nx = -Math.cos(a) * sgn, ny = -Math.sin(a) * sgn; // 往中心移動的方向
-      s.roots.push({ x: cx - nx * dist, y: cy - ny * dist, nx, ny, len: R.len, w: R.w, speed: R.speed, left: dist * 2 + 60, dmg: R.dmg });
+      s.roots.push({ x: cx - nx * dist, y: cy - ny * dist, nx, ny, len: R.len, w: R.w, speed: R.speed, left: dist * 2 + 60, dmg: R.dmg, near: false });
     }
     s.events.push({ type: 'roots', x: cx, y: cy });
   }
@@ -397,6 +408,9 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     for (const r of s.roots) {
       const step = r.speed * dt; r.x += r.nx * step; r.y += r.ny * step; r.left -= step;
       const tx = -r.ny, ty = r.nx, rx = p.x - r.x, ry = p.y - r.y, along = rx * tx + ry * ty, perp = rx * r.nx + ry * r.ny;
+      // 招牌計數（M8 第五輪第四批）：牆推進到角色前方 200px 內時，角色還在它的路徑上（牆的長度範圍內）＝這道牆逼近了角色，每道牆算一次。
+      // 200 大於自動玩家開始躲牆的 180：這個數不會因為量尺會不會躲牆而改變。舊的計數「根牆刺傷」量的是玩家沒躲開幾次（量尺看得到牆時少 80～86%）
+      if (!r.near && perp > 0 && perp < 200 && Math.abs(along) < r.len / 2) { r.near = true; count('rootNears'); }
       if (Math.abs(along) < r.len / 2 && Math.abs(perp) < r.w / 2 + 12) { // 被根牆推著走（推到牆的前方）
         const push = r.w / 2 + 12 - perp; p.x += r.nx * push; p.y += r.ny * push; count('rootPushFrames');
         const before = p.hp; hurtPlayer(r.dmg, 'root'); if (p.hp < before) count('rootHits');
@@ -420,12 +434,23 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const fg = ENEMIES[e.kind].farGuard; // 遠處打來：外殼硬化＋衝過來（脹孢囊）
     // 只有「被射中」才算（投射物、光束、狙擊）；範圍攻擊、場、灼燒不算——落星砸到遠處的怪不是在遠處瞄準它（燈術師量過會被這條規則誤傷）
     if (fg && !AREA.has(dmgSrc) && dmgSrc !== 'burn' && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 > fg.dist * fg.dist) { amount *= fg.dmgTaken; if (!(e.rushT > 0)) count('farGuards'); e.rushT = fg.t; }
+    const fb = ENEMIES[e.kind].farBreak; // 遠處射中：外殼裂開、護甲暫時失效（根鬚兵）——同樣只算「被射中」
+    if (fb && !AREA.has(dmgSrc) && dmgSrc !== 'burn' && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 > fb.dist * fb.dist) { if (!(e.breakT > 0)) count('rootBreaks'); e.breakT = fb.t; }
+    let blocked = false;
+    // 盾殼：正面擋下射擊與刀光；範圍攻擊與灼燒不擋。「從哪個方向打來」用這一下實際的方向（子彈、迴光刃、劍氣、螢蜂、光球會傳 kx/ky＝把怪推開的方向），
+    // 沒傳方向的才當成從角色那邊打來——第一版一律用角色的位置，迴光刃從背後飛回來、折光彈反彈、光球繞到背面也照擋，「繞到側後就打得到」只對角色本人成立
+    //（職業差距第 7 關：刃舞者在晶窟晚 2 階，把擋傷關掉後 mid 7/12 → 9/12）
+    const sh = ENEMIES[e.kind].shield;
+    if (sh && !AREA.has(dmgSrc) && dmgSrc !== 'burn') {
+      const ax = kx || ky ? -kx : p.x - e.x, ay = kx || ky ? -ky : p.y - e.y, al = Math.hypot(ax, ay) || 1;
+      if ((ax * Math.cos(e.face) + ay * Math.sin(e.face)) / al > Math.cos(sh.arc)) { amount *= sh.taken; blocked = true; count('shieldBlocks'); }
+    }
     if (forceCrit) { amount *= forceCrit; crit = true; }
     else if (TR.crit && rand() < TR.crit) { amount *= TR.critMul; crit = true; } // 燈銃手：天生暴擊
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
     if (e.markT > 0 && bond('mark')) amount *= BFX('mark').mul; // 標定：被標記的怪受到的所有傷害加重
     if (e.shockT > 0 && dmgSrc !== 'chain') { amount *= FX('conduct').mul; e.shockT = 0; count('conducted'); } // 導電：被雷打過的怪，下一次受傷加重
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (e.breakT > 0 ? 1 : ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) {
       const near = TR.nearR && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < TR.nearR * TR.nearR; // 刃舞者：身邊的命中擊退加倍
@@ -434,7 +459,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     }
     if (TR.areaBurn && AREA.has(dmgSrc)) ignite(e, amount * TR.areaBurn, TR.burnT); // 燈術師：範圍攻擊附帶灼燒
     if (crit) count('crits');
-    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 || crit, crit, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind) });
+    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 || crit, crit, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind), blocked });
   }
   let forceCrit = 0; // 靜息準星：這一槍必定暴擊（倍率）
   function ignite(e, dps, dur) { if (dps > (e.burnDps || 0) || (e.burnT || 0) < dur) { e.burnDps = Math.max(dps, e.burnT > 0 ? e.burnDps : 0); e.burnT = dur; } }
@@ -916,7 +941,36 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     const spd = t.speed * (isBoss(e.kind) ? 1 : s.chapter.speedMul ?? 1) * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1) * (e.rushT > 0 ? t.farGuard.rush : 1);
     let vx = ux, vy = uy;
     e.cdT -= dt; e.modeT -= dt;
+    if (t.shield) { const want = Math.atan2(dy, dx); let da = want - e.face; da = Math.atan2(Math.sin(da), Math.cos(da)); const mx = t.shield.turn * dt; e.face += Math.max(-mx, Math.min(mx, da)); } // 盾殼：盾慢慢轉向角色
     switch (t.ai) {
+      case 'circle': { // 旋孢：繞著角色轉，全場同一個節拍，每拍最後一段一起往內收
+        const ph = (s.t % t.period) / t.period;
+        if (ph > 1 - t.diveT / t.period) { if (e.mode !== 'dive') { e.mode = 'dive'; count('circleDives'); } return [ux * spd * t.diveMul, uy * spd * t.diveMul]; }
+        e.mode = 'move';
+        const side = e.seed > 50 ? 1 : -1, k = Math.max(-1, Math.min(1, (d - t.orbitR) / 60)); // 太遠靠近、太近退開，其餘繞圈
+        vx = -uy * side + ux * k; vy = ux * side + uy * k;
+        break;
+      }
+      case 'mender': { // 癒孢：保持距離、靠太近就躲開；定時替身邊受傷的一般怪補血
+        const dir = d < t.flee ? -1.3 : d > t.keep ? 1 : 0, side = e.seed > 50 ? 1 : -1;
+        vx = ux * dir - uy * side * 0.6; vy = uy * dir + ux * side * 0.6;
+        if (e.cdT <= 0) {
+          e.cdT = ecd(t.healCd); let n = 0;
+          for (const o of s.enemies) if (o !== e && o.hp > 0 && o.hp < o.maxHp && !o.elite && !isBoss(o.kind) && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < t.healR * t.healR) { o.hp = Math.min(o.maxHp, o.hp + o.maxHp * t.healPct); n++; }
+          if (n) { count('heals', n); s.events.push({ type: 'mend', x: e.x, y: e.y, r: t.healR }); }
+        }
+        break;
+      }
+      case 'vine': { // 縛光藤：靠近 → 蓄力（預警線）→ 纏住角色；纏住時停在原地
+        if (e.mode === 'windup') {
+          e.tele = { dx: e.dirX, dy: e.dirY, len: Math.min(d, t.range * t.reach), w: 4 };
+          if (e.modeT <= 0) { e.tele = null; e.mode = 'move'; e.cdT = ecd(t.cd); if (d < t.range * t.reach && !p.tetherE && !(p.tetherGrace > 0)) { p.tetherE = e; p.tetherT = t.holdT; count('tethers'); s.events.push({ type: 'tether', x: e.x, y: e.y }); } }
+          return [0, 0];
+        }
+        if (p.tetherE === e) return [0, 0];
+        if (d < t.range && e.cdT <= 0 && !p.tetherE) { e.mode = 'windup'; e.modeT = t.windup; e.dirX = ux; e.dirY = uy; return [0, 0]; }
+        break;
+      }
       case 'weave': { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; break; }
       case 'spit': {
         const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
@@ -1137,7 +1191,13 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
     p.inPool = inPool(p.x, p.y);
     p.slowT = Math.max(0, p.slowT - dt);
     p.hasteT = Math.max(0, p.hasteT - dt);
-    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1) * (p.slowT > 0 ? 1 - p.slowK : 1) * (p.hasteT > 0 ? FX('gale').mul : 1);
+    if (p.tetherGrace > 0) p.tetherGrace -= dt;
+    if (p.tetherE) { // 縛光藤：打死它、拉開到 breakD 以外、或時間到就解開
+      const v = p.tetherE; p.tetherT -= dt;
+      if (v.hp <= 0 || p.tetherT <= 0 || (v.x - p.x) ** 2 + (v.y - p.y) ** 2 > ENEMIES.vine.breakD ** 2) { p.tetherE = null; p.tetherT = 0; p.tetherGrace = ENEMIES.vine.grace; }
+      else count('tetherTime', dt);
+    }
+    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1) * (p.slowT > 0 ? 1 - p.slowK : 1) * (p.hasteT > 0 ? FX('gale').mul : 1) * (p.tetherE ? 1 - ENEMIES.vine.slowK : 1);
     p.onIce = !!cellFeature('ice', p.x, p.y);
     if (p.onIce) { // 冰面：速度只慢慢靠近操作方向（慣性），轉向與煞車都會滑
       const k = 1 - Math.exp(-TERRAIN.ice.grip * dt);
@@ -1186,7 +1246,7 @@ export function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], s
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
       if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
-      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt; if (e.rushT > 0) e.rushT -= dt;
+      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt; if (e.rushT > 0) e.rushT -= dt; if (e.breakT > 0) e.breakT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
         e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;

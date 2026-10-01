@@ -816,7 +816,24 @@ const ENEMIES = {
   glider:   { name: '冰滑蟲', r: 12, hp: 30,  speed: 66,  dmg: 10, xp: 3, oil: 2, ai: 'lunge', lungeSpeed: 430, windup: 0.5, lungeT: 0.45, lungeCd: 2.2, range: 200 },
   // 第六章：深根城
   hive:     { name: '菌巢',   r: 24, hp: 240, speed: 0,   dmg: 8,  xp: 10, oil: 6, ai: 'hive', mass: 99, spawnCd: 3.2, spawn: { kind: 'mite', n: 2, max: 8 } },
-  rooter:   { name: '根鬚兵', r: 16, hp: 64,  speed: 44,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', armor: 0.7, mass: 3 },
+  // farBreak（M8 第五輪第四批）：被遠處（> dist）「射中」時外殼裂開 t 秒，期間護甲失效（範圍攻擊、灼燒不算，和脹孢囊同一套判定）。
+  // 理由：職業差距第 7 關燈銃手在深根城晚 2 階——一開場就被根鬚兵磨死（受傷 44～45% 來自根鬚兵），燈術師只死在守衛戰。
+  // 給遠距的打法一個互動方式（破綻），不是降護甲把怪變弱：在 dist 以內打牠照樣有護甲（刃舞者的劍氣、迴光刃從 dist 外射中也算，燈術師的雷蕊也算）。
+  // 掃描（深根城第 7 關、燈銃手、36 局）：沒有破綻 late 15／asc1 19；160px 16／29；200px 12／30；200px＋破綻期間減速一半 18／25——
+  //   asc1 從 53% 到 83%（越過門檻），late 都在 33～50% 的雜訊內；減速沒有更好，不加。12 局的掃描方向不一致（200px＋減速一半的 late 有 1/12 也有 7/12），所以用 36 局判。
+  //   根鬚兵仍佔燈銃手受傷的 35～36%（沒有破綻時 44～48%），沒有變得沒威脅。
+  rooter:   { name: '根鬚兵', r: 16, hp: 64,  speed: 44,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', armor: 0.7, mass: 3, farBreak: { dist: 200, t: 2.5 } },
+  // M8 第五輪第四批：新怪物（只在第 4～10 關出現、六個生態系共用；見 NEW_FOES）。槓桿是「行為」，血量和既有小怪同級（北極星：不要無腦加血量）
+  // 旋孢：在角色周圍 orbitR 繞圈，全場共用一個節拍（period 秒），每拍最後 diveT 秒一起往內收（速度 ×diveMul）
+  circler:  { name: '旋孢',   r: 10, hp: 14,  speed: 95,  dmg: 6,  xp: 2, oil: 1, ai: 'circle', orbitR: 150, period: 4.5, diveT: 0.9, diveMul: 2.6 },
+  // 癒孢：和角色保持距離、靠太近就躲開；每 healCd 秒替 healR 內受傷的一般怪補 healPct 的血（精英與守衛不補）——逼你先處理它
+  mender:   { name: '癒孢',   r: 12, hp: 28,  speed: 70,  dmg: 4,  xp: 3, oil: 2, ai: 'mender', keep: 210, flee: 170, healCd: 2.5, healR: 120, healPct: 0.25 },
+  // 縛光藤：靠近到 range 內停下蓄力（預警線），蓄完角色還在 range×reach 內就纏住 holdT 秒：移速 ×(1−slowK)；打死它、或拉開到 breakD 以外就解開（breakD 一定要大於 range×reach，不然一纏上就斷）
+  // range 從 150 拉到 260：150 時燈銃手在遠處就把牠打死，六個生態系有四個一次都沒被纏住（tools/foe-form.mjs --real）
+  // grace：掙脫後幾秒內不會再被纏（好幾隻輪流接上時，燈術師一局有 135～160 秒被纏住——舒壓的反面）
+  vine:     { name: '縛光藤', r: 13, hp: 34,  speed: 58,  dmg: 6,  xp: 3, oil: 2, ai: 'vine', range: 260, reach: 1.2, windup: 0.6, holdT: 2.5, breakD: 380, slowK: 0.35, cd: 7, grace: 5 },
+  // 盾殼：正面（面向角色那一側、半角 arc）擋下射擊與刀光（受傷 ×taken），範圍攻擊與灼燒不擋；盾慢慢轉向角色（turn 弧度／秒）——繞到側後就打得到
+  aegis:    { name: '盾殼',   r: 15, hp: 50,  speed: 46,  dmg: 9,  xp: 4, oil: 3, ai: 'chase', mass: 3, shield: { arc: 1.05, turn: 1.4, taken: 0.2 } },
   // 燈塔守衛
   boss1:    { name: '噬燈菌母', r: 42, hp: 40000, speed: 44, dmg: 14, xp: 0, oil: 0, ai: 'boss', mass: 50 },
   boss2:    { name: '沼母巨蛭', r: 40, hp: 52000, speed: 50, dmg: 13, xp: 0, oil: 0, ai: 'boss', mass: 50 },
@@ -996,6 +1013,14 @@ const STAGE_LEVERS = [
   { n: 9,  spawn: 1.38, speed: 1.17, cd: 1.27, sig: 2.7, elites: 2, dmg: 1.22, hp: 1.20, main: '全面加壓' },
   { n: 10, spawn: 1.42, speed: 1.20, cd: 1.30, sig: 3.0, elites: 2, dmg: 1.26, hp: 1.25, main: '最終試煉：招牌機制三倍' },
 ];
+// 新怪物（M8 第五輪第四批，擁有者選「甲」：不加生態系，在既有 6 個生態系的第 4～10 關加入）：from＝從第幾關開始、at＝這一局第幾秒開始出現、w＝名單權重；
+// ring＝另外加一次成群事件。每一關比前一關多一種或一樣多（meta-test 檢查只增不減）；第 7～10 關四種都有。
+const NEW_FOES = [
+  { kind: 'circler', from: 4, at: 60,  w: 2,   ring: { at: 200, n: 10 } },
+  { kind: 'mender',  from: 5, at: 90,  w: 1.2 },
+  { kind: 'vine',    from: 6, at: 75,  w: 1.2 },
+  { kind: 'aegis',   from: 7, at: 100, w: 1.5 },
+];
 // 各生態系的招牌怪（sig 放大它們在名單與成群事件裡的份量）；螢苔原的招牌是精英，所以它的 sig 換成多一隻精英
 const SIGNATURE = { 1: [], 2: ['bloater'], 3: ['blinker'], 4: ['cinder', 'golem'], 5: ['frostmoth', 'glider'], 6: ['rooter', 'hive'] };
 // 多出來的精英：在菌潮最後幾波附近出現（組建已成形、燈核用得到）；種類用本章最後一隻精英
@@ -1005,14 +1030,22 @@ function stageChapter(ch, n) {
   const L = STAGE_LEVERS[n - 1], oil = STAGES.oil ** (n - STAGES.base), sigKinds = SIGNATURE[ch.id] ?? [], r = ch.reward;
   const lastElite = [...ch.events].reverse().find((e) => e.type === 'elite')?.kind;
   const extra = (L.elites + (ch.id === 1 && L.sig >= 2 ? 1 : 0));
+  const foes = NEW_FOES.filter((f) => n >= f.from);
+  // 新怪不稀釋招牌（監督者批准，M8 第五輪第四批）：新怪加進名單時，招牌怪的權重放大 k 倍，讓招牌怪在名單裡的份量和沒有新怪時一樣——
+  // 新怪只分走一般怪的份量。S＝招牌、O＝其他原本的怪、F＝新怪：kS/(kS+O+F) ＝ S/(S+O) → k ＝ 1 + F/O。
+  // 理由：沒做這條時，盾殼從第 7 關加入名單剛好抵消了第 6→7 關「招牌變強」的增量（份量 47→47%），霧沼的脹孢囊少約 27%、晶窟少約 14%——
+  // 下限是防崩潰用的，不是用來慢慢侵蝕的；而「剛好抵消」不會觸發任何警報。
+  const sigW = ch.roster.reduce((a, [, kind, w]) => a + (sigKinds.includes(kind) ? w * L.sig : 0), 0), otherW = ch.roster.reduce((a, [, kind, w]) => a + (sigKinds.includes(kind) ? 0 : w), 0);
+  const sigK = sigW > 0 && otherW > 0 ? 1 + foes.reduce((a, f) => a + f.w, 0) / otherW : 1;
   const events = [
+    ...foes.filter((f) => f.ring).map((f) => ({ at: f.ring.at, type: 'ring', kind: f.kind, n: f.ring.n })),
     ...ch.events.map((e) => ((e.type === 'ring' || e.type === 'rush') && sigKinds.includes(e.kind) ? { ...e, n: Math.round(e.n * L.sig) } : e)),
     ...EXTRA_ELITE_AT.slice(0, extra).map((at) => ({ at, type: 'elite', kind: lastElite })),
   ].sort((a, b) => a.at - b.at);
   return {
     ...ch, stage: n, key: `${ch.id}-${n}`, levers: L, bossHpMul: L.hp, speedMul: L.speed, cdMul: L.cd,
     hpScale: (t) => ch.hpScale(t) * L.hp, dmgScale: (t) => ch.dmgScale(t) * L.dmg, spawnRate: (t) => ch.spawnRate(t) * L.spawn,
-    roster: ch.roster.map(([at, kind, w]) => [at, kind, sigKinds.includes(kind) ? w * L.sig : w]),
+    roster: [...ch.roster.map(([at, kind, w]) => [at, kind, sigKinds.includes(kind) ? w * L.sig * sigK : w]), ...foes.map((f) => [f.at, f.kind, f.w])],
     events,
     ...(ch.roots ? { roots: { ...ch.roots, every: ch.roots.every / Math.sqrt(L.sig) } } : {}),
     reward: { ...r, clear: Math.round(r.clear * oil), firstClear: Math.round(r.firstClear * oil),
@@ -1164,7 +1197,7 @@ const WEAPON_GACHA = {
   cost: { single: { stardust: 30, tickets: 1 }, ten: { stardust: 270, tickets: 10 } },
 };
 
-return { WEAPONS, START_WEAPON, PASSIVES, CLASSES, DEFAULT_CLASS, BONDS, BOND_ALIAS, AFFINITIES, AFFINITY, affinityMatch, AREA_SRC, classOf, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, CHOICE, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
+return { WEAPONS, START_WEAPON, PASSIVES, CLASSES, DEFAULT_CLASS, BONDS, BOND_ALIAS, AFFINITIES, AFFINITY, affinityMatch, AREA_SRC, classOf, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTERS, CHAPTER1, STAGES, STAGE_LEVERS, NEW_FOES, SIGNATURE, stageChapter, RESO_CHEST, SURGE, OIL, TALENTS, RARITIES, AUTO_SALVAGE_MAX, GEAR_SLOTS, GEAR_AFFIXES, GEAR_MAX_LV, gearUpgradeCost, CRYSTALS, GEAR_ASCEND, WEAPON_ASCEND, STAT_NAMES, XP_CURVE, SLOTS, CHOICE, MAX_LV, DAILY, SHOP, GACHA, WEAPON_GACHA };
 })();
 
 // ---- stats.js
@@ -1210,6 +1243,9 @@ const __m_sim_js = (() => {
 // 局外加成（天賦、裝備）以 modifier 陣列 meta 傳入，和局內被動一起走 stats.js 的同一套疊加規則。
 const { WEAPONS, PASSIVES, RESONANCES, ENEMIES, ELITE, ELITE_AFFIXES, CHAPTER1, XP_CURVE, SLOTS, MAX_LV, START_WEAPON, SURGE, RESO_CHEST, CHOICE, CLASSES, DEFAULT_CLASS, AREA_SRC, classOf, BONDS, BOND_ALIAS, AFFINITY, affinityMatch } = __m_content_js;
 const { aggregate, scaled, reduction, CAPS, affinityMul } = __m_stats_js;
+// 測試用：sealEnemies＝每隻怪生出來就 Object.seal——之後任何地方再加欄位都會直接丟例外（ES module 是嚴格模式），
+// 讓所有情境測試都順便檢查「怪物物件只有一種形狀」（只靠實際打幾局的話，很少發生的路徑永遠量不到）。遊戲本身不開。
+const DEBUG = { sealEnemies: false };
 const VW = 400; // 邏輯視野寬度（世界單位），高度依螢幕比例
 
 function makeRng(seed = 1) {
@@ -1276,6 +1312,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       revives: 0, facing: 1, aimX: 1, aimY: 0, hurtT: 0, level: 1, xp: 0, xpNext: XP_CURVE(1), weapons: [], passives: {}, inPool: false,
       vx: 0, vy: 0, onIce: false, slowT: 0, slowK: 0, // 冰面慣性、霜冰減速
       stillT: 0, hasteT: 0, heat: 0, stopT: 0, // 增幅用：站定多久（靜息準星）、加速（刃風）、熱量與停下多久（焦土步）
+      tetherE: null, tetherT: 0, tetherGrace: 0, // 縛光藤：纏住角色的那一隻、還剩幾秒、掙脫後還有幾秒不會再被纏
     },
     enemies: [], bullets: [], ebullets: [], gems: [], pickups: [], hazards: [], strikes: [], mines: [], sentries: [],
     slashes: [], vortices: [], walls: [], patches: [], // M8 第四輪新武器：劍氣、光井、光牆、燼痕
@@ -1475,9 +1512,16 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       r: t.r * (elite ? ELITE.rMul : 1), hp: t.hp * hpMul, maxHp: t.hp * hpMul, mass: (t.mass || 1) * (elite ? 6 : 1),
       flash: 0, frame: rand() * 4, seed: rand() * 100, slowT: 0, slow: 0, orbT: 0, fireT: (t.fireCd || 0) * (0.5 + rand()),
       mode: 'move', modeT: 0, cdT: rand() * 1.5, dirX: 0, dirY: 0, tele: null, fuse: 0, warn: null,
+      // 之後才會用到的欄位也在這裡先給預設值（每個用到的地方都把「沒有」當成 0／false／null，行為不變）：
+      // 讓每一隻怪都是同一個物件形狀。先前這些欄位是邊打邊加，一局下來怪物物件有 78 種形狀，V8 的存取點全部走慢路徑——
+      // 深根城第 10 關在「同一頁打第二局」時每幀中位數 0.42 → 0.97ms、p99 2.56ms（tools/frame-cost.mjs 開頭）。
+      burnT: 0, burnDps: 0, burnAcc: 0, shockT: 0, lensT: 0, lensN: 0, markT: 0, rushT: 0, stunT: 0, trailAcc: 0,
+      ventBurn: null, surge: false, noReward: false, hive: null, face: 0, breakT: 0,
     };
+    e.face = Math.atan2(p.y - e.y, p.x - e.x); // 盾殼的盾一開始就朝著角色
     if (t.ai === 'blink') e.cdT = t.blinkCd * (0.4 + rand() * 0.6);
     if (isBoss(kind)) Object.assign(e, { bphase: 1, burstT: 2, dashT: 4, summonT: 0, beamT: 2, rainT: 3, combo: 0 });
+    if (DEBUG.sealEnemies) Object.seal(e);
     s.enemies.push(e);
     return e;
   }
@@ -1591,7 +1635,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const a = rand() * TAU;
     for (const sgn of [1, -1]) {
       const nx = -Math.cos(a) * sgn, ny = -Math.sin(a) * sgn; // 往中心移動的方向
-      s.roots.push({ x: cx - nx * dist, y: cy - ny * dist, nx, ny, len: R.len, w: R.w, speed: R.speed, left: dist * 2 + 60, dmg: R.dmg });
+      s.roots.push({ x: cx - nx * dist, y: cy - ny * dist, nx, ny, len: R.len, w: R.w, speed: R.speed, left: dist * 2 + 60, dmg: R.dmg, near: false });
     }
     s.events.push({ type: 'roots', x: cx, y: cy });
   }
@@ -1602,6 +1646,9 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     for (const r of s.roots) {
       const step = r.speed * dt; r.x += r.nx * step; r.y += r.ny * step; r.left -= step;
       const tx = -r.ny, ty = r.nx, rx = p.x - r.x, ry = p.y - r.y, along = rx * tx + ry * ty, perp = rx * r.nx + ry * r.ny;
+      // 招牌計數（M8 第五輪第四批）：牆推進到角色前方 200px 內時，角色還在它的路徑上（牆的長度範圍內）＝這道牆逼近了角色，每道牆算一次。
+      // 200 大於自動玩家開始躲牆的 180：這個數不會因為量尺會不會躲牆而改變。舊的計數「根牆刺傷」量的是玩家沒躲開幾次（量尺看得到牆時少 80～86%）
+      if (!r.near && perp > 0 && perp < 200 && Math.abs(along) < r.len / 2) { r.near = true; count('rootNears'); }
       if (Math.abs(along) < r.len / 2 && Math.abs(perp) < r.w / 2 + 12) { // 被根牆推著走（推到牆的前方）
         const push = r.w / 2 + 12 - perp; p.x += r.nx * push; p.y += r.ny * push; count('rootPushFrames');
         const before = p.hp; hurtPlayer(r.dmg, 'root'); if (p.hp < before) count('rootHits');
@@ -1625,12 +1672,23 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const fg = ENEMIES[e.kind].farGuard; // 遠處打來：外殼硬化＋衝過來（脹孢囊）
     // 只有「被射中」才算（投射物、光束、狙擊）；範圍攻擊、場、灼燒不算——落星砸到遠處的怪不是在遠處瞄準它（燈術師量過會被這條規則誤傷）
     if (fg && !AREA.has(dmgSrc) && dmgSrc !== 'burn' && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 > fg.dist * fg.dist) { amount *= fg.dmgTaken; if (!(e.rushT > 0)) count('farGuards'); e.rushT = fg.t; }
+    const fb = ENEMIES[e.kind].farBreak; // 遠處射中：外殼裂開、護甲暫時失效（根鬚兵）——同樣只算「被射中」
+    if (fb && !AREA.has(dmgSrc) && dmgSrc !== 'burn' && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 > fb.dist * fb.dist) { if (!(e.breakT > 0)) count('rootBreaks'); e.breakT = fb.t; }
+    let blocked = false;
+    // 盾殼：正面擋下射擊與刀光；範圍攻擊與灼燒不擋。「從哪個方向打來」用這一下實際的方向（子彈、迴光刃、劍氣、螢蜂、光球會傳 kx/ky＝把怪推開的方向），
+    // 沒傳方向的才當成從角色那邊打來——第一版一律用角色的位置，迴光刃從背後飛回來、折光彈反彈、光球繞到背面也照擋，「繞到側後就打得到」只對角色本人成立
+    //（職業差距第 7 關：刃舞者在晶窟晚 2 階，把擋傷關掉後 mid 7/12 → 9/12）
+    const sh = ENEMIES[e.kind].shield;
+    if (sh && !AREA.has(dmgSrc) && dmgSrc !== 'burn') {
+      const ax = kx || ky ? -kx : p.x - e.x, ay = kx || ky ? -ky : p.y - e.y, al = Math.hypot(ax, ay) || 1;
+      if ((ax * Math.cos(e.face) + ay * Math.sin(e.face)) / al > Math.cos(sh.arc)) { amount *= sh.taken; blocked = true; count('shieldBlocks'); }
+    }
     if (forceCrit) { amount *= forceCrit; crit = true; }
     else if (TR.crit && rand() < TR.crit) { amount *= TR.critMul; crit = true; } // 燈銃手：天生暴擊
     if (TR.heavyMul && (e.elite || isBoss(e.kind))) amount *= TR.heavyMul; // 刃舞者：推不動的目標砍得更重
     if (e.markT > 0 && bond('mark')) amount *= BFX('mark').mul; // 標定：被標記的怪受到的所有傷害加重
     if (e.shockT > 0 && dmgSrc !== 'chain') { amount *= FX('conduct').mul; e.shockT = 0; count('conducted'); } // 導電：被雷打過的怪，下一次受傷加重
-    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (ENEMIES[e.kind].armor ?? 1)));
+    const dmg = Math.max(1, Math.round(amount * p.dmgMul * affinityMul(s.affinity && s.affinityOn, AFFINITY.dmgMul) * (aff?.dmgTaken ?? 1) * (e.breakT > 0 ? 1 : ENEMIES[e.kind].armor ?? 1)));
     e.hp -= dmg; e.flash = 0.08;
     if (!isBoss(e.kind)) {
       const near = TR.nearR && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < TR.nearR * TR.nearR; // 刃舞者：身邊的命中擊退加倍
@@ -1639,7 +1697,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     }
     if (TR.areaBurn && AREA.has(dmgSrc)) ignite(e, amount * TR.areaBurn, TR.burnT); // 燈術師：範圍攻擊附帶灼燒
     if (crit) count('crits');
-    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 || crit, crit, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind) });
+    s.events.push({ type: 'hit', x: e.x, y: e.y - e.r, v: dmg, big: dmg >= 30 || crit, crit, src: dmgSrc, elite: !!e.elite, boss: isBoss(e.kind), blocked });
   }
   let forceCrit = 0; // 靜息準星：這一槍必定暴擊（倍率）
   function ignite(e, dps, dur) { if (dps > (e.burnDps || 0) || (e.burnT || 0) < dur) { e.burnDps = Math.max(dps, e.burnT > 0 ? e.burnDps : 0); e.burnT = dur; } }
@@ -2121,7 +2179,36 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     const spd = t.speed * (isBoss(e.kind) ? 1 : s.chapter.speedMul ?? 1) * (e.affix === 'swift' ? ELITE_AFFIXES.swift.speedMul : 1) * (e.slowT > 0 ? 1 - e.slow : 1) * (e.rushT > 0 ? t.farGuard.rush : 1);
     let vx = ux, vy = uy;
     e.cdT -= dt; e.modeT -= dt;
+    if (t.shield) { const want = Math.atan2(dy, dx); let da = want - e.face; da = Math.atan2(Math.sin(da), Math.cos(da)); const mx = t.shield.turn * dt; e.face += Math.max(-mx, Math.min(mx, da)); } // 盾殼：盾慢慢轉向角色
     switch (t.ai) {
+      case 'circle': { // 旋孢：繞著角色轉，全場同一個節拍，每拍最後一段一起往內收
+        const ph = (s.t % t.period) / t.period;
+        if (ph > 1 - t.diveT / t.period) { if (e.mode !== 'dive') { e.mode = 'dive'; count('circleDives'); } return [ux * spd * t.diveMul, uy * spd * t.diveMul]; }
+        e.mode = 'move';
+        const side = e.seed > 50 ? 1 : -1, k = Math.max(-1, Math.min(1, (d - t.orbitR) / 60)); // 太遠靠近、太近退開，其餘繞圈
+        vx = -uy * side + ux * k; vy = ux * side + uy * k;
+        break;
+      }
+      case 'mender': { // 癒孢：保持距離、靠太近就躲開；定時替身邊受傷的一般怪補血
+        const dir = d < t.flee ? -1.3 : d > t.keep ? 1 : 0, side = e.seed > 50 ? 1 : -1;
+        vx = ux * dir - uy * side * 0.6; vy = uy * dir + ux * side * 0.6;
+        if (e.cdT <= 0) {
+          e.cdT = ecd(t.healCd); let n = 0;
+          for (const o of s.enemies) if (o !== e && o.hp > 0 && o.hp < o.maxHp && !o.elite && !isBoss(o.kind) && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < t.healR * t.healR) { o.hp = Math.min(o.maxHp, o.hp + o.maxHp * t.healPct); n++; }
+          if (n) { count('heals', n); s.events.push({ type: 'mend', x: e.x, y: e.y, r: t.healR }); }
+        }
+        break;
+      }
+      case 'vine': { // 縛光藤：靠近 → 蓄力（預警線）→ 纏住角色；纏住時停在原地
+        if (e.mode === 'windup') {
+          e.tele = { dx: e.dirX, dy: e.dirY, len: Math.min(d, t.range * t.reach), w: 4 };
+          if (e.modeT <= 0) { e.tele = null; e.mode = 'move'; e.cdT = ecd(t.cd); if (d < t.range * t.reach && !p.tetherE && !(p.tetherGrace > 0)) { p.tetherE = e; p.tetherT = t.holdT; count('tethers'); s.events.push({ type: 'tether', x: e.x, y: e.y }); } }
+          return [0, 0];
+        }
+        if (p.tetherE === e) return [0, 0];
+        if (d < t.range && e.cdT <= 0 && !p.tetherE) { e.mode = 'windup'; e.modeT = t.windup; e.dirX = ux; e.dirY = uy; return [0, 0]; }
+        break;
+      }
       case 'weave': { const w = Math.sin(s.t * 4 + e.seed) * 0.7; vx = ux - uy * w; vy = uy + ux * w; break; }
       case 'spit': {
         const dir = d > t.keep + 20 ? 1 : d < t.keep - 20 ? -0.8 : 0;
@@ -2342,7 +2429,13 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
     p.inPool = inPool(p.x, p.y);
     p.slowT = Math.max(0, p.slowT - dt);
     p.hasteT = Math.max(0, p.hasteT - dt);
-    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1) * (p.slowT > 0 ? 1 - p.slowK : 1) * (p.hasteT > 0 ? FX('gale').mul : 1);
+    if (p.tetherGrace > 0) p.tetherGrace -= dt;
+    if (p.tetherE) { // 縛光藤：打死它、拉開到 breakD 以外、或時間到就解開
+      const v = p.tetherE; p.tetherT -= dt;
+      if (v.hp <= 0 || p.tetherT <= 0 || (v.x - p.x) ** 2 + (v.y - p.y) ** 2 > ENEMIES.vine.breakD ** 2) { p.tetherE = null; p.tetherT = 0; p.tetherGrace = ENEMIES.vine.grace; }
+      else count('tetherTime', dt);
+    }
+    const spd = p.speed * (p.inPool ? TERRAIN.pools.slow : 1) * (p.slowT > 0 ? 1 - p.slowK : 1) * (p.hasteT > 0 ? FX('gale').mul : 1) * (p.tetherE ? 1 - ENEMIES.vine.slowK : 1);
     p.onIce = !!cellFeature('ice', p.x, p.y);
     if (p.onIce) { // 冰面：速度只慢慢靠近操作方向（慣性），轉向與煞車都會滑
       const k = 1 - Math.exp(-TERRAIN.ice.grip * dt);
@@ -2391,7 +2484,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
       e.x += (vx + sx * 4) * dt; e.y += (vy + sy * 4) * dt;
       if (!isBoss(e.kind)) pushOutOfPillars(e, e.r);
       if (s.arena) clampArena(e, e.r);
-      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt; if (e.rushT > 0) e.rushT -= dt;
+      e.frame += dt * 6; e.flash = Math.max(0, e.flash - dt); e.orbT -= dt; e.slowT -= dt; if (e.rushT > 0) e.rushT -= dt; if (e.breakT > 0) e.breakT -= dt;
       if (e.affix === 'regen') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE_AFFIXES.regen.regen * dt);
       if (e.burnT > 0) { // 燃燒：每 0.5 秒結算一次（吃玩家的傷害加成）
         e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + dt;
@@ -2576,7 +2669,7 @@ function createSim({ seed = 1, vh = 700, chapter = CHAPTER1, meta = [], startWea
   return { state: s, update, choose, closeChest, spawnEnemy, addWeapon, openChest, gainXp, recalc, options, describe, rollChoices };
 }
 
-return { VW, makeRng, TERRAIN, ventState, terrainCell, terrainIn, createSim };
+return { DEBUG, VW, makeRng, TERRAIN, ventState, terrainCell, terrainIn, createSim };
 })();
 
 // ---- art.js
@@ -3029,6 +3122,10 @@ const CREATURE_ART = {
   glider:   { seed: 88, radius: 12, hue: 180, eyes: 1, spikes: 3 },
   hive:     { seed: 52, radius: 24, hue: 80,  eyes: 5, spikes: 14 },
   rooter:   { seed: 61, radius: 16, hue: 45,  eyes: 2, spikes: 8 },
+  circler:  { seed: 44, radius: 10, hue: 340, eyes: 1, spikes: 3, shared: true }, // 新怪物（第 4～10 關、六個生態系共用）：跟著生態系換色
+  mender:   { seed: 66, radius: 12, hue: 130, eyes: 2, shared: true },
+  vine:     { seed: 31, radius: 13, hue: 160, eyes: 1, spikes: 6, shared: true },
+  aegis:    { seed: 72, radius: 15, hue: 40,  eyes: 2, spikes: 5, shared: true },
   boss4:    { seed: 95, radius: 46, hue: 15,  eyes: 3, spikes: 14 },
   boss5:    { seed: 26, radius: 46, hue: 200, eyes: 2, spikes: 18 },
   boss6:    { seed: 14, radius: 50, hue: 90,  eyes: 6, spikes: 20 },
@@ -3124,6 +3221,7 @@ function createRenderer(chapter = CHAPTER1) {
         case 'bondBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 12, G.ember, 200, 0.4, 11); break;
         case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
+        case 'mend': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'mend' }); break; // 癒孢補血
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
         case 'heal': burst(e.x, e.y, 16, G.heal, 120); break;
@@ -3403,6 +3501,8 @@ function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (ENEMIES[e.kind].shield) { g.strokeStyle = 'rgba(255,220,140,0.9)'; g.lineWidth = 3; g.beginPath(); g.arc(e.x, e.y, e.r + 5, e.face - ENEMIES[e.kind].shield.arc, e.face + ENEMIES[e.kind].shield.arc); g.stroke(); } // 盾殼：盾的方向與範圍
+      if (e.kind === 'circler') { const C = ENEMIES.circler, left = C.period - (s.t % C.period) - C.diveT; if (left > 0 && left < 0.5) { g.strokeStyle = `rgba(255,80,120,${0.9 - left})`; g.lineWidth = 2; g.beginPath(); g.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2); g.stroke(); } } // 旋孢：快要一起往內收的預警
       if (e.rushT > 0) { g.strokeStyle = 'rgba(255,190,120,0.9)'; g.lineWidth = 2.5; g.beginPath(); g.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); g.stroke(); } // 脹孢囊被遠處射中：外殼硬化、衝過來
       if (e.stunT > 0) { g.strokeStyle = 'rgba(255,235,150,0.85)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(e.x, e.y - e.r - 6, e.r * 0.8, 3, 0, 0, Math.PI * 2); g.stroke(); } // 震心：頭上一圈暈眩
       if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
@@ -3525,11 +3625,15 @@ function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : r.color === 'mend' ? `rgba(120,255,150,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    if (p.tetherE) { // 縛光藤纏住角色：一條抖動的藤線（一般疊加、不加亮），打死牠或拉開就斷
+      const v = p.tetherE, mx = (v.x + p.x) / 2 + Math.sin(T * 9) * 6, my = (v.y + p.y) / 2 + Math.cos(T * 7) * 6;
+      g.strokeStyle = 'rgba(120,230,170,0.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(v.x, v.y); g.quadraticCurveTo(mx, my, p.x, p.y); g.stroke();
+    }
     // 角色永遠畫在所有特效之上（M8）：先壓一圈柔和的暗底再畫角色，特效再多角色都看得見
     g.drawImage(G.shade, p.x - 28, p.y - 26, 56, 56);
     drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); prof?.mark?.('player', p.x, p.y);

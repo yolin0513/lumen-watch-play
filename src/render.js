@@ -26,6 +26,10 @@ const CREATURE_ART = {
   glider:   { seed: 88, radius: 12, hue: 180, eyes: 1, spikes: 3 },
   hive:     { seed: 52, radius: 24, hue: 80,  eyes: 5, spikes: 14 },
   rooter:   { seed: 61, radius: 16, hue: 45,  eyes: 2, spikes: 8 },
+  circler:  { seed: 44, radius: 10, hue: 340, eyes: 1, spikes: 3, shared: true }, // 新怪物（第 4～10 關、六個生態系共用）：跟著生態系換色
+  mender:   { seed: 66, radius: 12, hue: 130, eyes: 2, shared: true },
+  vine:     { seed: 31, radius: 13, hue: 160, eyes: 1, spikes: 6, shared: true },
+  aegis:    { seed: 72, radius: 15, hue: 40,  eyes: 2, spikes: 5, shared: true },
   boss4:    { seed: 95, radius: 46, hue: 15,  eyes: 3, spikes: 14 },
   boss5:    { seed: 26, radius: 46, hue: 200, eyes: 2, spikes: 18 },
   boss6:    { seed: 14, radius: 50, hue: 90,  eyes: 6, spikes: 20 },
@@ -121,6 +125,7 @@ export function createRenderer(chapter = CHAPTER1) {
         case 'bondBurst': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'blast' }); burst(e.x, e.y, 12, G.ember, 200, 0.4, 11); break;
         case 'bounce': burst(e.x, e.y, 3, e.evo ? G.evo : G.rico, 90, 0.25, 8); break;
         case 'pulse': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: e.evo ? 'pulseEvo' : 'pulse' }); if (e.evo) { fx.rings.push({ x: e.x, y: e.y, r: e.r * 0.7, life: 0.35, color: 'pulseEvo' }); burst(e.x, e.y, 10, G.evo, 220, 0.4, 10); } break;
+        case 'mend': fx.rings.push({ x: e.x, y: e.y, r: e.r, life: 0.35, color: 'mend' }); break; // 癒孢補血
         case 'burst': fx.rings.push({ x: e.x, y: e.y, r: e.small ? 30 : 70, life: 0.35, color: 'spore' }); break;
         case 'chest': fx.whiteFlash = 0.5; burst(e.x, e.y, 40, G.gold, 260, 0.8, 14); break;
         case 'heal': burst(e.x, e.y, 16, G.heal, 120); break;
@@ -400,6 +405,8 @@ export function createRenderer(chapter = CHAPTER1) {
       if (e.slowT > 0 && !OFF.has('filter')) g.filter = 'hue-rotate(40deg)';
       g.drawImage(img, e.x - size / 2, e.y - size / 2, size, size);
       g.filter = 'none';
+      if (ENEMIES[e.kind].shield) { g.strokeStyle = 'rgba(255,220,140,0.9)'; g.lineWidth = 3; g.beginPath(); g.arc(e.x, e.y, e.r + 5, e.face - ENEMIES[e.kind].shield.arc, e.face + ENEMIES[e.kind].shield.arc); g.stroke(); } // 盾殼：盾的方向與範圍
+      if (e.kind === 'circler') { const C = ENEMIES.circler, left = C.period - (s.t % C.period) - C.diveT; if (left > 0 && left < 0.5) { g.strokeStyle = `rgba(255,80,120,${0.9 - left})`; g.lineWidth = 2; g.beginPath(); g.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2); g.stroke(); } } // 旋孢：快要一起往內收的預警
       if (e.rushT > 0) { g.strokeStyle = 'rgba(255,190,120,0.9)'; g.lineWidth = 2.5; g.beginPath(); g.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); g.stroke(); } // 脹孢囊被遠處射中：外殼硬化、衝過來
       if (e.stunT > 0) { g.strokeStyle = 'rgba(255,235,150,0.85)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(e.x, e.y - e.r - 6, e.r * 0.8, 3, 0, 0, Math.PI * 2); g.stroke(); } // 震心：頭上一圈暈眩
       if (e.burnT > 0) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 + Math.sin(T * 20 + e.seed) * 0.3; g.drawImage(G.ember, e.x - 7, e.y - e.r - 12, 14, 14); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
@@ -522,11 +529,15 @@ export function createRenderer(chapter = CHAPTER1) {
     g.globalCompositeOperation = 'lighter';
     for (const r of fx.rings) {
       const t = 1 - r.life / (r.color === 'magnet' ? 0.5 : 0.35);
-      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
+      g.strokeStyle = r.color === 'gold' || r.color === 'pulseEvo' || r.color === 'sun' ? `rgba(255,220,130,${r.life * 2.5})` : r.color === 'pulse' ? `rgba(255,235,160,${r.life * 2.2})` : r.color === 'strike' ? `rgba(255,170,245,${r.life * 2.5})` : r.color === 'blast' ? `rgba(255,170,80,${r.life * 2.5})` : r.color === 'spore' ? `rgba(255,90,200,${r.life * 2})` : r.color === 'magnet' ? `rgba(120,200,255,${r.life * 2})` : r.color === 'void' ? `rgba(190,150,255,${r.life * 2.5})` : r.color === 'mend' ? `rgba(120,255,150,${r.life * 2.5})` : `rgba(255,190,110,${r.life})`;
       g.lineWidth = 3; g.beginPath(); g.arc(r.x, r.y, r.color ? r.r * t : r.r, 0, Math.PI * 2); g.stroke();
     }
     if (!OFF.has('particles')) for (const q of fx.parts) { g.globalAlpha = Math.min(1, q.life / 0.3) * (q.img === G.evo ? kE : kP); g.drawImage(q.img, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    if (p.tetherE) { // 縛光藤纏住角色：一條抖動的藤線（一般疊加、不加亮），打死牠或拉開就斷
+      const v = p.tetherE, mx = (v.x + p.x) / 2 + Math.sin(T * 9) * 6, my = (v.y + p.y) / 2 + Math.cos(T * 7) * 6;
+      g.strokeStyle = 'rgba(120,230,170,0.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(v.x, v.y); g.quadraticCurveTo(mx, my, p.x, p.y); g.stroke();
+    }
     // 角色永遠畫在所有特效之上（M8）：先壓一圈柔和的暗底再畫角色，特效再多角色都看得見
     g.drawImage(G.shade, p.x - 28, p.y - 26, 56, 56);
     drawPlayer(g, p.x, p.y, T, p.facing, p.hurtT > 0.4); prof?.mark?.('player', p.x, p.y);
